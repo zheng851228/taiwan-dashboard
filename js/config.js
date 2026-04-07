@@ -1,94 +1,26 @@
-/**
-
-- config.js — 全域設定與 API Keys
-- 
-- 這是你最常需要修改的檔案：
-- - 填入 CWA_KEY 啟用真實天氣
-- - 調整 ROUTE_RADIUS_KM 控制路線過濾半徑
-- - 修改地圖初始中心點與縮放等級
-    */
-
-‘use strict’;
-
-// ══════════════════════════════════════
-// API Keys（填入你的真實 Key）
-// ══════════════════════════════════════
-
-/** 中央氣象署 Open Data API Key
-
-- 申請：https://opendata.cwa.gov.tw/userLogin
-- 格式：CWA-XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
-  */
-  const CWA_KEY = ‘CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB’;
-
-// ══════════════════════════════════════
-// 地圖設定
-// ══════════════════════════════════════
+'use strict';
+const CWA_KEY = 'CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB';
 const C = {
-
-MAP: {
-center:   [23.8, 121.0],  // 台灣地圖初始中心點 [緯度, 經度]
-zoom:     7,               // 全台預設縮放等級
-cityZoom: 13,              // 點擊縣市後飛入的縮放等級
-flyDur:   1.2,             // 飛入動畫時間（秒）
-},
-
-// 地圖底圖 URL（CartoDB）
-TILES: {
-dark:  ‘https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png’,
-light: ‘https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png’,
-},
-
-// ══════════════════════════════════════
-// 路線感知設定
-// ══════════════════════════════════════
-
-/** 路線過濾半徑（公里）
-
-- 攝影機到路線線段的最短距離若 ≤ 此值，即標記為「沿途」
-- 手機發燙時可縮小此值（如 0.5），減少計算量
-- 路線較短時可加大（如 2.0），找到更多攝影機
-  */
+  MAP: { center: [23.8, 121.0], zoom: 7, cityZoom: 13, flyDur: 1.2 },
+  TILES: {
+    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  },
   ROUTE_RADIUS_KM: 1.0,
-
-/** 座標抽稀間距
-
-- Leaflet Routing Machine 回傳的路徑可能有數百個座標點
-- 每隔 N 個點取一個來計算距離，大幅降低長途路徑的運算量
-- 設為 1 = 不抽稀（最精確）；設為 5 = 每 5 點取 1（效能最佳）
-  */
   ROUTE_THIN_STEP: 3,
-
-// ══════════════════════════════════════
-// 路況顏色（深色/亮色主題各一組）
-// ══════════════════════════════════════
-COLS: {
-dark:  { free: ‘#22c55e’, slow: ‘#f59e0b’, bad: ‘#ef4444’ },
-light: { free: ‘#16a34a’, slow: ‘#d97706’, bad: ‘#dc2626’ },
-},
-
-// ══════════════════════════════════════
-// CCTV 資料來源標籤
-// ══════════════════════════════════════
-SRC: {
-tdx:  { lbl: ‘TDX平台’,  col: ‘#3b82f6’ },
-city: { lbl: ‘縣市政府’, col: ‘#8b5cf6’ },
-yt:   { lbl: ‘YouTube’,  col: ‘#ff0000’ },
-},
-
-// ══════════════════════════════════════
-// 路況狀態標籤與 CSS class
-// ══════════════════════════════════════
-ST: {
-free: { lbl: ‘順暢’, p: ‘bg-free’, c: ‘c-free’ },
-slow: { lbl: ‘緩慢’, p: ‘bg-slow’, c: ‘c-slow’ },
-bad:  { lbl: ‘壅塞’, p: ‘bg-bad’,  c: ‘c-bad’  },
-},
-
-// 統計列標籤
-STAT_LBL: {
-free: ‘順暢路段’,
-slow: ‘緩慢路段’,
-bad:  ‘壅塞路段’,
-},
+  COLS: {
+    dark: { free: '#22c55e', slow: '#f59e0b', bad: '#ef4444' },
+    light: { free: '#16a34a', slow: '#d97706', bad: '#dc2626' }
+  },
+  SRC: {
+    tdx: { lbl: 'TDX平台', col: '#3b82f6' },
+    city: { lbl: '縣市政府', col: '#8b5cf6' },
+    yt: { lbl: 'YouTube', col: '#ff0000' }
+  },
+  ST: {
+    free: { lbl: '順暢', p: 'bg-free', c: 'c-free' },
+    slow: { lbl: '緩慢', p: 'bg-slow', c: 'c-slow' },
+    bad: { lbl: '壅塞', p: 'bg-bad', c: 'c-bad' }
+  },
+  STAT_LBL: { free: '順暢路段', slow: '緩慢路段', bad: '壅塞路段' }
 };
