@@ -1,141 +1,130 @@
-/**
- * data.js — 縣市資料庫、CCTV 標記與 CWA 氣象串接模組
- */
+(function() {
+‘use strict’;
 
-'use strict';
+// 全台縣市中心座標
+window.COUNTY_CENTERS = {
+‘台北市’:   [25.0330, 121.5654],
+‘新北市’:   [25.0120, 121.4653],
+‘基隆市’:   [25.1283, 121.7419],
+‘桃園市’:   [24.9937, 121.3010],
+‘新竹市’:   [24.8138, 120.9675],
+‘新竹縣’:   [24.6877, 121.1565],
+‘苗栗縣’:   [24.2603, 120.7986],
+‘台中市’:   [24.1477, 120.6736],
+‘彰化縣’:   [23.9916, 120.6158],
+‘南投縣’:   [23.9609, 120.9718],
+‘雲林縣’:   [23.7092, 120.4313],
+‘嘉義市’:   [23.4801, 120.4491],
+‘嘉義縣’:   [23.4518, 120.2554],
+‘台南市’:   [22.9999, 120.2270],
+‘高雄市’:   [22.6273, 120.3014],
+‘屏東縣’:   [22.5519, 120.5487],
+‘宜蘭縣’:   [24.6941, 121.7378],
+‘花蓮縣’:   [23.9871, 121.6015],
+‘台東縣’:   [22.7972, 121.0713],
+‘澎湖縣’:   [23.5711, 119.5793],
+‘金門縣’:   [24.4493, 118.3765],
+‘連江縣’:   [26.1971, 119.9395]
+};
 
-const Data = (() => {
-  // 1. 內部資料庫 (範例包含北中東代表，其餘縣市可依格式新增)
-  // rn: north, central, south, east, island
-  const _cities = [
-    {
-      id: 'taipei', name: '台北市', lat: 25.0330, lng: 121.5654, rn: 'north',
-      w: { t: '--', d: '載入中', h: '--', rain: '--', wind: '--', i: '⏳' },
-      roads: [
-        { n: '國道 1 號 (台北段)', s: 'free', nt: '全線順暢' },
-        { n: '市民大道高架', s: 'slow', nt: '東向車多' }
-      ],
-      cams: [
-        { id: 'tp-01', n: '忠孝基隆路口', lat: 25.0413, lng: 121.5652, src: 'yt', ytId: '2M_H-7Wp_7Y' },
-        { id: 'tp-02', n: '承德市民路口', lat: 25.0487, lng: 121.5173, src: 'city', img: 'https://images.unsplash.com/photo-1545147418-403428905c14?auto=format&fit=crop&w=400' }
-      ],
-      _ms: 'free', _cnt: { free: 15, slow: 2, bad: 0 }
-    },
-    {
-      id: 'taichung', name: '台中市', lat: 24.1477, lng: 120.6736, rn: 'central',
-      w: { t: '--', d: '載入中', h: '--', rain: '--', wind: '--', i: '⏳' },
-      roads: [
-        { n: '台 74 線 (快官霧峰)', s: 'free', nt: '路況良好' },
-        { n: '台灣大道二段', s: 'slow', nt: '接近百貨區車多' }
-      ],
-      cams: [
-        { id: 'tc-01', n: '五權西路路口', lat: 24.1400, lng: 120.6500, src: 'yt', ytId: 'S-7p_p7L298' }
-      ],
-      _ms: 'free', _cnt: { free: 22, slow: 5, bad: 0 }
-    },
-    {
-      id: 'hualien', name: '花蓮縣', lat: 23.9772, lng: 121.6044, rn: 'east',
-      w: { t: '--', d: '載入中', h: '--', rain: '--', wind: '--', i: '⏳' },
-      roads: [
-        { n: '台 9 線 (蘇花改)', s: 'bad', nt: '特定路段施工管制' },
-        { n: '台 11 線 (花東海岸)', s: 'free', nt: '一路順暢' }
-      ],
-      cams: [
-        { id: 'hl-01', n: '蘇花改仁水隧道', lat: 24.2000, lng: 121.7000, src: 'tdx', img: 'https://images.unsplash.com/photo-1449156001934-03700499e1bc?auto=format&fit=crop&w=400' }
-      ],
-      _ms: 'slow', _cnt: { free: 8, slow: 12, bad: 3 }
-    }
-  ];
+// 靜態 CCTV 資料（主要路段範例，可自行擴充）
+var STATIC_CAMS = [
+// 北部
+{ id: ‘s001’, name: ‘國道1號-基隆端’, county: ‘基隆市’, lat: 25.1190, lng: 121.7218, url: ‘https://cctv.thb.gov.tw/001.jpg’, status: ‘smooth’ },
+{ id: ‘s002’, name: ‘台北交流道’, county: ‘台北市’, lat: 25.0500, lng: 121.5200, url: ‘https://cctv.thb.gov.tw/002.jpg’, status: ‘smooth’ },
+{ id: ‘s003’, name: ‘新北板橋’, county: ‘新北市’, lat: 25.0138, lng: 121.4635, url: ‘https://cctv.thb.gov.tw/003.jpg’, status: ‘slow’ },
+{ id: ‘s004’, name: ‘桃園南崁’, county: ‘桃園市’, lat: 25.0610, lng: 121.2993, url: ‘https://cctv.thb.gov.tw/004.jpg’, status: ‘smooth’ },
+{ id: ‘s005’, name: ‘新竹關西’, county: ‘新竹縣’, lat: 24.7946, lng: 121.1740, url: ‘https://cctv.thb.gov.tw/005.jpg’, status: ‘smooth’ },
+// 中部
+{ id: ‘s006’, name: ‘苗栗三義’, county: ‘苗栗縣’, lat: 24.3997, lng: 120.7576, url: ‘https://cctv.thb.gov.tw/006.jpg’, status: ‘smooth’ },
+{ id: ‘s007’, name: ‘台中清水’, county: ‘台中市’, lat: 24.3601, lng: 120.5678, url: ‘https://cctv.thb.gov.tw/007.jpg’, status: ‘jam’ },
+{ id: ‘s008’, name: ‘彰化交流道’, county: ‘彰化縣’, lat: 24.0739, lng: 120.5372, url: ‘https://cctv.thb.gov.tw/008.jpg’, status: ‘slow’ },
+{ id: ‘s009’, name: ‘雲林斗南’, county: ‘雲林縣’, lat: 23.6787, lng: 120.4785, url: ‘https://cctv.thb.gov.tw/009.jpg’, status: ‘smooth’ },
+// 南部
+{ id: ‘s010’, name: ‘嘉義水上’, county: ‘嘉義縣’, lat: 23.4589, lng: 120.3912, url: ‘https://cctv.thb.gov.tw/010.jpg’, status: ‘smooth’ },
+{ id: ‘s011’, name: ‘台南新市’, county: ‘台南市’, lat: 23.0740, lng: 120.3123, url: ‘https://cctv.thb.gov.tw/011.jpg’, status: ‘smooth’ },
+{ id: ‘s012’, name: ‘高雄岡山’, county: ‘高雄市’, lat: 22.7965, lng: 120.2956, url: ‘https://cctv.thb.gov.tw/012.jpg’, status: ‘slow’ },
+{ id: ‘s013’, name: ‘屏東九如’, county: ‘屏東縣’, lat: 22.7263, lng: 120.4817, url: ‘https://cctv.thb.gov.tw/013.jpg’, status: ‘smooth’ },
+// 東部
+{ id: ‘s014’, name: ‘宜蘭頭城’, county: ‘宜蘭縣’, lat: 24.8622, lng: 121.8192, url: ‘https://cctv.thb.gov.tw/014.jpg’, status: ‘smooth’ },
+{ id: ‘s015’, name: ‘花蓮北埔’, county: ‘花蓮縣’, lat: 24.1326, lng: 121.6298, url: ‘https://cctv.thb.gov.tw/015.jpg’, status: ‘smooth’ },
+{ id: ‘s016’, name: ‘台東卑南’, county: ‘台東縣’, lat: 22.7423, lng: 121.1416, url: ‘https://cctv.thb.gov.tw/016.jpg’, status: ‘smooth’ },
+// 交通部 CCTV (外部 API 示範補充)
+{ id: ‘s017’, name: ‘雪山隧道北口’, county: ‘新北市’, lat: 25.0234, lng: 121.7609, url: ‘https://tisvcloud.freeway.gov.tw/cctv/01.jpg’, status: ‘unknown’ },
+{ id: ‘s018’, name: ‘國道3號木柵’, county: ‘台北市’, lat: 24.9941, lng: 121.5729, url: ‘https://tisvcloud.freeway.gov.tw/cctv/02.jpg’, status: ‘unknown’ },
+{ id: ‘s019’, name: ‘台9線南迴’, county: ‘台東縣’, lat: 22.3219, lng: 120.8784, url: ‘https://cctv.thb.gov.tw/019.jpg’, status: ‘smooth’ },
+{ id: ‘s020’, name: ‘蘇花公路’, county: ‘花蓮縣’, lat: 24.0890, lng: 121.7012, url: ‘https://cctv.thb.gov.tw/020.jpg’, status: ‘smooth’ }
+];
 
-  // 2. 氣象狀態圖示對照表 (CWA Wx 數值)
-  const WX_MAP = {
-    '1': '☀️', '2': '⛅', '3': '⛅', '4': '☁️', '7': '☁️',
-    '8': '🌧️', '10': '🌧️', '15': '⛈️', '22': '⛈️'
-  };
+// 交通部高速公路 CCTV API (動態)
+var THB_CCTV_API = ‘https://tisvcloud.freeway.gov.tw/history/TDCS_M04A/latest.xml’;
 
-  return {
-    /**
-     * 初始化：串接中央氣象署 API
-     */
-    async init() {
-      try {
-        // CWA_KEY 來自 config.js
-        const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_KEY}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        
-        if (data.success === 'true') {
-          this.parseWeather(data.records.location);
-          Bus.emit('weather:updated'); // 通知 main.js 重繪 UI
-        } else {
-          throw new Error('CWA API 回傳失敗');
-        }
-      } catch (e) {
-        console.error('[Data] 氣象載入失敗，使用預設值', e);
-        Bus.emit('weather:error');
-      }
-    },
+// 取得所有攝影機 (靜態 + 快取動態)
+var _dynamicCams = [];
+var _loaded = false;
 
-    /**
-     * 解析 API 回傳資料並更新到 _cities 陣列
-     */
-    parseWeather(locations) {
-      locations.forEach(loc => {
-        const standardName = normName(loc.locationName); // 處理 臺/台 補丁
-        const target = _cities.find(c => c.name === standardName);
-        if (target) {
-          const elements = loc.weatherElement;
-          const wx = elements.find(e => e.elementName === 'Wx').time[0].parameter;
-          const minT = elements.find(e => e.elementName === 'MinT').time[0].parameter.parameterName;
-          const pop = elements.find(e => e.elementName === 'PoP').time[0].parameter.parameterName;
+window.Data = {
+getCams: function() {
+return STATIC_CAMS.concat(_dynamicCams);
+},
+allCams: function() {
+return STATIC_CAMS.concat(_dynamicCams);
+},
+loadDynamic: function() {
+// 嘗試載入交通部動態資料（HTTPS OK）
+fetch(‘https://ptx.transportdata.tw/MOTC/v2/Road/Traffic/Live?%24top=50&%24format=JSON’)
+.then(function(r) { return r.json(); })
+.then(function(arr) {
+if (!Array.isArray(arr)) return;
+arr.forEach(function(item) {
+if (item.PositionLat && item.PositionLon) {
+*dynamicCams.push({
+id: ’dyn*’ + item.CCTVId,
+name: item.CCTVName || item.CCTVId,
+county: item.County || ‘未知’,
+lat: parseFloat(item.PositionLat),
+lng: parseFloat(item.PositionLon),
+url: item.VideoStreamURL || ‘’,
+status: ‘unknown’
+});
+}
+});
+_loaded = true;
+Bus.emit(‘cams:updated’);
+})
+.catch(function() {
+_loaded = true;
+Bus.emit(‘cams:updated’);
+});
+},
+// 氣象資料
+weather: {},
+fetchWeather: function() {
+var url = ‘https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=’ +
+Config.CWA_KEY + ‘&format=JSON&limit=50’;
+fetch(url)
+.then(function(r) { return r.json(); })
+.then(function(json) {
+var stations = json && json.records && json.records.Station;
+if (!Array.isArray(stations)) return;
+stations.forEach(function(s) {
+var county = s.GeoInfo && s.GeoInfo.CountyName;
+if (!county) return;
+var obs = s.WeatherElement;
+if (!Data.weather[county]) {
+Data.weather[county] = {
+temp: obs && obs.AirTemperature,
+weather: obs && obs.Weather,
+rain: obs && obs.Now && obs.Now.Precipitation
+};
+}
+});
+Bus.emit(‘weather:updated’);
+})
+.catch(function() {});
+}
+};
 
-          target.w = {
-            t: minT,
-            d: wx.parameterName,
-            h: '70', // F-C0032-001 未提供濕度，設為常態值
-            rain: pop,
-            wind: '2.0',
-            i: WX_MAP[wx.parameterValue] || '🌡️'
-          };
-        }
-      });
-    },
-
-    // 取得所有縣市
-    all() { return _cities; },
-
-    // 取得特定縣市 (透過索引)
-    byIdx(i) { return _cities[i]; },
-
-    /**
-     * 靈魂函式：將所有 CCTV 攤平為單一陣列
-     * 供 RouteMod 進行高效率的經緯度線段距離運算
-     */
-    allCams() {
-      return _cities.flatMap(city => 
-        city.cams.map(cam => ({ 
-          ...cam, 
-          cityId: city.id, 
-          cityName: city.name 
-        }))
-      );
-    },
-
-    /**
-     * 綜合過濾器：處理 分區切換 + 搜尋關鍵字 + 路線感知
-     */
-    filter(region, search, routeFilter) {
-      return _cities.filter(c => {
-        const matchRegion = region === 'all' || c.rn === region;
-        const matchSearch = c.name.includes(search);
-        // routeFilter 是一個包含 cityId 的 Set
-        const matchRoute  = !routeFilter || routeFilter.has(c.id);
-        
-        return matchRegion && matchSearch && matchRoute;
-      });
-    },
-
-    // 手動觸發刷新
-    refresh() { this.init(); }
-  };
+window.Data.loadDynamic();
+window.Data.fetchWeather();
 })();
