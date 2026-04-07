@@ -458,7 +458,7 @@ ACCESSIBILITY
 'use strict';
 
 // ── API Keys（填入你的真實 Key）──
-const CWA_KEY = 'CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB';
+const CWA_KEY = 'YOUR_CWA_API_KEY';
 
 // ── 工具函式 ──
 const $   = id  => document.getElementById(id);
@@ -1062,12 +1062,17 @@ const R = (() => {
   const cam = (cv, ci, vi, onRoute) => {
     const isYt   = cv.src === 'yt';
     const srcInf = isYt ? src.yt : src[cv.src];
-    return `<div class="thumb${onRoute?' on-route':''}" onclick="Modal.open(${ci},${vi})">
+    // ── 用 data-ci / data-vi 屬性傳遞 index，避免 inline onclick 字串拼接出錯 ──
+    // ── YouTube 縮圖加 onerror fallback，圖片 403 時不會擋住點擊事件 ──
+    const ytThumb = isYt
+      ? `<img src="https://img.youtube.com/vi/${cv.ytId}/mqdefault.jpg"
+             alt="${cv.n}" class="in"
+             onerror="this.style.display='none'">`
+      : `<img data-src="${cv.img}" alt="${cv.n}" loading="lazy">`;
+
+    return `<div class="thumb${onRoute?' on-route':''}" data-ci="${ci}" data-vi="${vi}">
       <div class="th-img">
-        ${isYt
-          ? `<img src="https://img.youtube.com/vi/${cv.ytId}/mqdefault.jpg" alt="${cv.n}" class="in">`
-          : `<img data-src="${cv.img}" alt="${cv.n}" loading="lazy">`
-        }
+        ${ytThumb}
         <div class="src-pip" style="background:${srcInf.col}">${srcInf.lbl}</div>
         ${isYt ? '<div class="yt-pip">▶ LIVE</div>' : ''}
       </div>
@@ -1173,6 +1178,16 @@ const List = (() => {
     render();
   });
 
+  // ── CCTV 縮圖點擊事件委派 ──
+  // 改用 data-ci / data-vi 屬性，解決 YouTube 縮圖圖片錯誤擋住 onclick 的問題
+  $('js-list').addEventListener('click', e => {
+    const thumb = e.target.closest('.thumb');
+    if(!thumb) return;
+    const ci = parseInt(thumb.dataset.ci);
+    const vi = parseInt(thumb.dataset.vi);
+    if(!isNaN(ci) && !isNaN(vi)) Modal.open(ci, vi);
+  });
+
   // Search debounce
   $('js-srch').addEventListener('input', e=>{
     search=e.target.value.trim();
@@ -1207,6 +1222,8 @@ const Modal = (() => {
   return {
     open(ci, vi) {
       const city=Data.byIdx(ci), cam=city.cams[vi];
+      if(!city || !cam){ console.error('[Modal] 找不到資料', ci, vi); return; }
+
       const s=C.ST[cam.s];
       const isYt = cam.src === 'yt';
       const srcInf = isYt ? C.SRC.yt : C.SRC[cam.src];
@@ -1223,17 +1240,23 @@ const Modal = (() => {
 
       const $med = $('m-med');
       if(isYt) {
-        // YouTube 直播嵌入（autoplay + mute 確保自動播放）
+        // ── YouTube iframe ──
+        // playsinline=1：iOS Safari 不全螢幕播放
+        // enablejsapi=0：不需要 JS API，減少被 CSP 擋的機率
+        // origin 參數：對應目前網域，避免 YouTube 拒絕嵌入
+        const origin = encodeURIComponent(location.origin);
         $med.innerHTML = `
           <iframe
-            src="https://www.youtube.com/embed/${cam.ytId}?autoplay=1&mute=1&playsinline=1&rel=0"
-            allow="autoplay; encrypted-media"
+            src="https://www.youtube.com/embed/${cam.ytId}?autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=0&origin=${origin}"
+            allow="autoplay; encrypted-media; picture-in-picture"
             allowfullscreen
+            loading="lazy"
             title="${cam.n}">
           </iframe>
           <div class="m-live">● LIVE</div>`;
       } else {
-        // 靜態圖片 / TDX MJPEG（真實 streamUrl 替換 img 即可）
+        // ── 靜態圖 / TDX MJPEG ──
+        // 真實 TDX streamUrl 可直接替換 cam.img
         $med.innerHTML = `
           <img src="${cam.img}" alt="${cam.n}" style="opacity:1">
           <div class="m-live">● LIVE</div>
