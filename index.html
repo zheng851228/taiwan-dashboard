@@ -2,186 +2,298 @@
 
 <html lang="zh-TW" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" id="meta-theme" content="#060d1f">
-<title>環島路況指揮中心</title>
-
-<!-- 地圖套件 -->
-
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.css">
-
-<!-- 字型（非阻塞載入） -->
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
-  media="print" onload="this.media='all'">
-
-<!-- 專案樣式 -->
-
-<link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>環島路況指揮中心</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+    :root { --primary: #f97316; --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
+    body { font-family: 'Inter','Noto Sans TC',sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden; background: #060d1f; }
+    .pg { display: none; height: 100%; width: 100%; animation: fadeIn 0.3s ease-out; }
+    .pg.active { display: flex; flex-direction: column; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .glass { background: rgba(15,23,42,0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+    #map { height: 100%; width: 100%; z-index: 1; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(249,115,22,0.5); border-radius: 10px; }
+    .nav-it.active { color: var(--primary); }
+    .nav-it.active i { transform: translateY(-4px); transition: transform 0.2s; }
+    .rtab.active { background: var(--primary); color: #fff; }
+    .dot-smooth  { background: #3fb950; }
+    .dot-slow    { background: #d29922; }
+    .dot-jam     { background: #da3633; }
+    .dot-unknown { background: #8b949e; }
+    .cam-card { transition: border-color 0.2s; }
+    .cam-card:hover { border-color: rgba(249,115,22,0.5) !important; }
+    body.light { background: #f1f5f9; color: #1e293b; }
+    body.light .glass { background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); }
+    body.light #pg-list { background: #f1f5f9; }
+    body.light #pg-tools { background: #f1f5f9; }
+    body.light input { background: rgba(0,0,0,0.05) !important; color: #1e293b; }
+    body.light .text-slate-100 { color: #1e293b; }
+    body.light .text-slate-400 { color: #64748b; }
+  </style>
 </head>
-<body>
-<div id="app">
+<body class="text-slate-100">
+<div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
 
-  <!-- ── Header ── -->
+  <!-- Top Bar -->
 
-  <header class="hdr">
-    <div class="hdr-brand">
-      <div class="hdr-logo">🏍️</div>
-      <div>
-        <div class="hdr-name">環島路況指揮中心</div>
-        <div class="hdr-sub" id="js-date"></div>
+  <header class="fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.5rem)] pb-3 glass rounded-b-3xl shadow-2xl">
+    <div class="flex justify-between items-center max-w-5xl mx-auto">
+      <div class="flex items-center gap-2">
+        <div class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+          <i class="fa-solid fa-motorcycle text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-black tracking-tighter leading-none">環島路況指揮中心</h1>
+          <p class="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Taiwan Road Command Center</p>
+        </div>
       </div>
-    </div>
-    <div class="hdr-right">
-      <div class="live-clk">
-        <div class="live-dot"></div>
-        <div class="clk-dig" id="js-clk">--:--</div>
+      <div class="flex items-center gap-3">
+        <div class="text-right hidden sm:block">
+          <div id="js-clk" class="text-sm font-mono font-bold leading-none">--:--:--</div>
+          <div id="js-date" class="text-[10px] text-slate-400">----/--/--</div>
+        </div>
+        <button id="js-theme" class="w-10 h-10 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-xl">🌙</button>
       </div>
-      <button class="ico-btn" id="js-theme" aria-label="切換主題">🌙</button>
     </div>
   </header>
 
-  <!-- ── Pages ── -->
+  <!-- Main -->
 
-  <main class="pg-wrap">
+  <main class="flex-1 relative mt-0">
 
 ```
-<!-- 地圖頁 -->
-<section class="pg active" id="pg-map" aria-label="地圖">
-  <div id="map" role="application" aria-label="台灣地圖"></div>
-  <div class="map-ui" aria-hidden="true">
+<!-- Page: 地圖 -->
+<section id="pg-map" class="pg active">
+  <div id="map"></div>
 
-    <!-- 路線輸入列 -->
-    <div class="route-bar">
-      <div class="route-bar-title">📍 貼上 Google Maps 長網址，自動找出沿途攝影機</div>
-      <div class="route-input-row">
-        <input class="route-input" id="js-route-input" type="url"
-          placeholder="https://www.google.com/maps/dir/..." autocomplete="off">
-        <button class="route-btn" id="js-route-btn">分析路線</button>
-      </div>
-      <div class="route-status" id="js-route-status"></div>
+  <!-- 路徑解析 -->
+  <div class="absolute top-[calc(var(--safe-top)+5rem)] left-4 right-4 z-[500] max-w-lg">
+    <div class="glass p-3 rounded-2xl shadow-xl flex gap-2">
+      <input type="text" id="js-route-input"
+        class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+        placeholder="貼上 Google Maps 路徑長網址..." />
+      <button id="js-route-btn"
+        class="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-95">
+        解析
+      </button>
     </div>
+    <div id="js-route-status" class="mt-2 text-[11px] px-2 font-bold text-orange-400 drop-shadow-md"></div>
+  </div>
 
-    <!-- 城市資訊卡 -->
-    <div class="map-card" id="mc">
-      <div class="mc-ico" id="mc-ico">🗺️</div>
-      <div class="mc-body">
-        <div class="mc-city" id="mc-city">全台灣</div>
-        <div class="mc-meta" id="mc-meta">點縣市標記查看路況</div>
-        <div class="mc-pills" id="mc-pills"></div>
-      </div>
-    </div>
+  <!-- 定位按鈕 -->
+  <div class="absolute bottom-6 right-4 z-[500] flex flex-col gap-3">
+    <button id="js-loc"
+      class="w-14 h-14 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 hover:scale-110 active:scale-90 transition-all">
+      <i class="fa-solid fa-location-crosshairs text-2xl"></i>
+    </button>
+  </div>
 
-    <!-- 路況圖例 -->
-    <div class="legend">
-      <div class="leg-ttl">路況</div>
-      <div class="leg-row"><div class="leg-pip" id="lp-free"></div><span>順暢</span></div>
-      <div class="leg-row"><div class="leg-pip" id="lp-slow"></div><span>緩慢</span></div>
-      <div class="leg-row"><div class="leg-pip" id="lp-bad"></div><span>壅塞</span></div>
-    </div>
+  <!-- 路線過濾 Banner -->
+  <div id="js-route-banner"
+    class="hidden absolute bottom-24 left-1/2 -translate-x-1/2 z-[500] glass px-6 py-2 rounded-full border border-orange-500/50 shadow-2xl items-center gap-3">
+    <span class="text-xs font-bold text-orange-400 flex items-center gap-2">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+      </span>
+      已過濾沿途路況攝影機
+    </span>
+    <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
+  </div>
 
-    <!-- 定位 FAB -->
-    <button class="fab" id="js-loc" aria-label="定位我的位置">📍</button>
+  <!-- 圖例 -->
+  <div class="absolute bottom-24 left-4 z-[500] glass px-4 py-3 rounded-2xl text-xs space-y-1.5">
+    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-smooth inline-block"></span>順暢</div>
+    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-slow   inline-block"></span>緩慢</div>
+    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-jam    inline-block"></span>壅塞</div>
+    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>未知</div>
   </div>
 </section>
 
-<!-- 縣市列表頁 -->
-<section class="pg" id="pg-list" aria-label="縣市列表">
-  <div class="list-hdr">
-    <div class="srch-wrap" role="search">
-      <span class="srch-ico" aria-hidden="true">🔍</span>
-      <input class="srch-in" id="js-srch" type="search"
-        placeholder="搜尋縣市…" autocomplete="off" aria-label="搜尋縣市">
-      <button class="srch-clr" id="js-clr" aria-label="清除搜尋">✕</button>
+<!-- Page: 路況列表 -->
+<section id="pg-list" class="pg bg-slate-900 pt-24 pb-20 px-4 overflow-y-auto">
+  <div class="max-w-xl mx-auto space-y-4">
+
+    <!-- 分區 Tabs -->
+    <div id="js-tabs" class="flex gap-1 p-1 glass rounded-2xl sticky top-0 z-10">
+      <button data-r="all"     class="rtab active flex-1 py-2 text-xs font-bold rounded-xl transition-all">全部</button>
+      <button data-r="north"   class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">北部</button>
+      <button data-r="central" class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">中部</button>
+      <button data-r="south"   class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">南部</button>
+      <button data-r="east"    class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">東部</button>
+      <button data-r="island"  class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">離島</button>
     </div>
-    <div class="rtabs" id="js-tabs" role="tablist" aria-label="地區篩選">
-      <button class="rtab active" data-r="all"     role="tab" aria-selected="true">全部</button>
-      <button class="rtab"        data-r="north"   role="tab" aria-selected="false">北部</button>
-      <button class="rtab"        data-r="central" role="tab" aria-selected="false">中部</button>
-      <button class="rtab"        data-r="south"   role="tab" aria-selected="false">南部</button>
-      <button class="rtab"        data-r="east"    role="tab" aria-selected="false">東部</button>
-      <button class="rtab"        data-r="island"  role="tab" aria-selected="false">離島</button>
+
+    <!-- 搜尋 -->
+    <div class="relative">
+      <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+      <input type="text" id="js-search"
+        placeholder="搜尋攝影機名稱或縣市..."
+        class="w-full bg-slate-800/50 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
     </div>
+
+    <!-- 路線過濾提示 -->
+    <div id="js-list-route-info" class="hidden text-xs font-bold text-orange-400 px-1 flex items-center gap-2">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+      </span>
+      <span id="js-list-route-count"></span>
+    </div>
+
+    <!-- 攝影機卡片 -->
+    <div id="js-list-inner" class="space-y-3"></div>
   </div>
+</section>
 
-  <!-- 沿途過濾提示橫條 -->
-  <div class="route-banner" id="js-route-banner" role="status">
-    <div class="rb-text" id="js-rb-text">🛣️ 顯示沿途縣市</div>
-    <button class="rb-clear" id="js-rb-clear">清除路線</button>
-  </div>
+<!-- Page: 環島助手 -->
+<section id="pg-tools" class="pg bg-slate-900 pt-24 pb-20 px-4 overflow-y-auto">
+  <div class="max-w-xl mx-auto space-y-6">
 
-  <!-- 路況統計列 -->
-  <div class="stats-bar" id="js-stats" aria-label="路況統計"></div>
+    <div class="glass p-6 rounded-3xl space-y-3">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
+          <i class="fa-solid fa-route text-orange-500"></i>
+        </div>
+        <h2 class="font-black text-base">路線解析工具</h2>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        將 Google Maps 規劃好的路線網址貼入地圖頁面的輸入框，系統會自動解析座標並過濾出沿途 1km 內的 CCTV 攝影機。
+      </p>
+      <div class="bg-slate-800/60 rounded-2xl p-4 text-xs text-slate-300 space-y-2 mt-2">
+        <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">1</span><span>前往 Google Maps 規劃路線</span></div>
+        <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">2</span><span>點選「分享」→ 複製連結</span></div>
+        <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">3</span><span>回到地圖頁面貼入並按「解析」</span></div>
+      </div>
+    </div>
 
-  <!-- 縣市卡片捲動容器 -->
-  <div class="vscroll" id="js-list" role="list" aria-label="縣市列表">
-    <div id="js-list-inner"></div>
+    <div class="glass p-6 rounded-3xl space-y-3">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+          <i class="fa-solid fa-circle-info text-blue-400"></i>
+        </div>
+        <h2 class="font-black text-base">關於本系統</h2>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        整合全台 CCTV 路況攝影機與 CWA 氣象資料，提供環島騎士即時路況參考。影像若無畫面，可能為 HTTP 混合內容遭瀏覽器攔截。
+      </p>
+      <div class="grid grid-cols-2 gap-3 mt-2">
+        <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
+          <div class="text-orange-500 font-black text-2xl" id="js-stat-cams">0</div>
+          <div class="text-[10px] text-slate-400 mt-1">攝影機數量</div>
+        </div>
+        <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
+          <div class="text-blue-400 font-black text-2xl">22</div>
+          <div class="text-[10px] text-slate-400 mt-1">涵蓋縣市</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </section>
 ```
 
   </main>
 
-  <!-- ── 底部導覽列 ── -->
+  <!-- Bottom Nav -->
 
-  <nav class="nav" aria-label="主導覽">
-    <button class="nav-it active" data-page="map"  id="nav-map"  aria-label="地圖" aria-current="page">
-      <div class="nav-ico" aria-hidden="true">🗺️</div>地圖
-    </button>
-    <button class="nav-it"        data-page="list" id="nav-list" aria-label="縣市列表">
-      <div class="nav-ico" aria-hidden="true">📋</div>縣市列表
-    </button>
+  <nav class="fixed bottom-0 left-0 right-0 z-[1000] px-6 pb-[calc(var(--safe-bottom)+0.5rem)] pt-3 glass rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+    <div class="flex justify-around items-center max-w-lg mx-auto">
+      <button id="nav-map" class="nav-it active flex flex-col items-center gap-1">
+        <div class="w-12 h-8 flex items-center justify-center">
+          <i class="fa-solid fa-map-location-dot text-xl"></i>
+        </div>
+        <span class="text-[10px] font-black uppercase tracking-widest">地圖指揮</span>
+      </button>
+      <button id="nav-list" class="nav-it flex flex-col items-center gap-1 text-slate-500">
+        <div class="w-12 h-8 flex items-center justify-center">
+          <i class="fa-solid fa-list-check text-xl"></i>
+        </div>
+        <span class="text-[10px] font-black uppercase tracking-widest">路況列表</span>
+      </button>
+      <button id="nav-tools" class="nav-it flex flex-col items-center gap-1 text-slate-500">
+        <div class="w-12 h-8 flex items-center justify-center">
+          <i class="fa-solid fa-toolbox text-xl"></i>
+        </div>
+        <span class="text-[10px] font-black uppercase tracking-widest">環島助手</span>
+      </button>
+    </div>
   </nav>
 
-</div><!-- end #app -->
+  <!-- CCTV Modal -->
 
-<!-- ── CCTV Modal ── -->
-
-<div class="modal-bg" id="modal" role="dialog" aria-modal="true" aria-label="CCTV影像">
-  <div class="modal-sh">
-    <div class="m-hnd" aria-hidden="true"></div>
-    <div class="m-top">
-      <div>
-        <div class="m-tag"  id="m-tag"></div>
-        <div class="m-ttl"  id="m-ttl"></div>
+  <div id="modal" class="fixed inset-0 z-[2000] hidden items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/90 backdrop-blur-md" id="modal-overlay"></div>
+    <div id="modal-sh" class="relative w-full max-w-3xl glass rounded-3xl overflow-hidden shadow-2xl flex flex-col scale-95 opacity-0 transition-all duration-300">
+      <div class="p-4 flex justify-between items-center border-b border-white/10">
+        <div>
+          <h3 id="m-ttl" class="font-black text-lg text-orange-500">影像載入中...</h3>
+          <p id="m-org" class="text-xs text-slate-400"></p>
+        </div>
+        <button id="modal-close-btn" class="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
-      <div class="m-src" id="m-src"></div>
+      <div id="m-med" class="aspect-video bg-black flex items-center justify-center relative min-h-[180px]"></div>
+      <div class="p-4 bg-slate-900/50 text-[10px] text-slate-500 flex justify-between items-center">
+        <span>⚠️ 影像若無畫面，可能為 HTTP 混合內容攔截。</span>
+        <span class="text-orange-500 font-bold animate-pulse">● LIVE</span>
+      </div>
     </div>
-    <div class="m-med" id="m-med"></div>
-    <div class="m-meta">
-      <div class="m-cell"><div class="m-cl">來源</div><div class="m-cv" id="m-org"></div></div>
-      <div class="m-cell"><div class="m-cl">路況</div><div class="m-cv" id="m-st"></div></div>
-      <div class="m-cell"><div class="m-cl">時間</div><div class="m-cv" id="m-tm"></div></div>
-    </div>
-    <button class="btn-cl" id="modal-close-btn">關閉影像</button>
   </div>
+
+  <!-- Toast -->
+
+  <div id="toast"
+    class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[3000] glass px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-2xl opacity-0 pointer-events-none transition-all duration-300 whitespace-nowrap">
+  </div>
+
 </div>
 
-<!-- Toast 通知 -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+<script src="js/config.js"></script>
 
-<!-- ── 外部 JS 套件 ── -->
+<script src="js/utils.js"></script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="js/data.js"></script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.js"></script>
+<script src="js/main.js"></script>
 
-<!-- ── 專案 JS（順序不可調換）── -->
-
-<script src="js/config.js"></script>  <!-- 常數與 API Keys -->
-
-<script src="js/utils.js"></script>   <!-- 工具函式與計算 -->
-
-<script src="js/data.js"></script>    <!-- 縣市與 CCTV 資料 -->
-
-<script src="js/main.js"></script>    <!-- 模組邏輯與啟動 -->
+<script>
+  var modal   = document.getElementById('modal');
+  var modalSh = document.getElementById('modal-sh');
+  window.ModalEffect = {
+    open: function() {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(function() {
+        modalSh.classList.remove('scale-95','opacity-0');
+        modalSh.classList.add('scale-100','opacity-100');
+      }, 10);
+    },
+    close: function() {
+      modalSh.classList.remove('scale-100','opacity-100');
+      modalSh.classList.add('scale-95','opacity-0');
+      var med = document.getElementById('m-med');
+      if (med) med.innerHTML = '';
+      setTimeout(function() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }, 300);
+    }
+  };
+  document.getElementById('modal-overlay').addEventListener('click', function() { window.ModalEffect.close(); });
+  document.getElementById('modal-close-btn').addEventListener('click', function() { window.ModalEffect.close(); });
+</script>
 
 </body>
 </html>
