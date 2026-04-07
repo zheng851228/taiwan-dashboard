@@ -1,0 +1,445 @@
+/* ══════════════════════════════════════════════════════
+   style.css — 環島路況指揮中心 UI 樣式
+   結構：
+     1. Design Tokens (CSS 變數)
+     2. Reset & Base
+     3. App Shell
+     4. Header
+     5. Navigation
+     6. Page System
+     7. Map Page
+     8. List Page
+     9. City Card
+    10. Skeleton Loader
+    11. CCTV Modal
+    12. Toast
+    13. Empty State
+    14. Leaflet 覆寫
+    15. Accessibility
+══════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   1. DESIGN TOKENS
+══════════════════════════════════════ */
+:root {
+  --safe-t: env(safe-area-inset-top,    0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  /* 圓角 */
+  --r1: 10px; --r2: 14px; --r3: 20px; --r4: 24px;
+  /* 字型 */
+  --font: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* 動畫曲線 */
+  --ease:   cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* 暗色主題 */
+[data-theme="dark"] {
+  --bg:    #060d1f;  --card:  #0c1628;
+  --inset: #13202f;  --hover: #1a2c3e;
+  --b1: rgba(255,255,255,0.08); --b2: rgba(255,255,255,0.04);
+  --t1: #f0f4ff; --t2: #7a90aa; --t3: #3a4f63;
+  --glass: rgba(6,13,31,0.88);  --gb: rgba(255,255,255,0.07);
+  --sh1: 0 1px 3px rgba(0,0,0,.4);
+  --sh2: 0 4px 20px rgba(0,0,0,.5);
+  --sh3: 0 20px 60px rgba(0,0,0,.7);
+  --free: #22c55e;  --free-s: rgba(34,197,94,.12);
+  --slow: #f59e0b;  --slow-s: rgba(245,158,11,.12);
+  --bad:  #ef4444;  --bad-s:  rgba(239,68,68,.12);
+  --acc:  #38bdf8;  --acc-s:  rgba(56,189,248,.12);
+  --acc-g: rgba(56,189,248,.32);
+  --route: #f97316; --route-s: rgba(249,115,22,.15);
+  --route-g: rgba(249,115,22,.4);
+}
+
+/* 亮色主題 */
+[data-theme="light"] {
+  --bg:    #eef2f7;  --card:  #ffffff;
+  --inset: #eef2f7;  --hover: #e2e8f0;
+  --b1: rgba(0,0,0,.08); --b2: rgba(0,0,0,.04);
+  --t1: #0f172a; --t2: #64748b; --t3: #94a3b8;
+  --glass: rgba(255,255,255,.9); --gb: rgba(0,0,0,.06);
+  --sh1: 0 1px 3px rgba(0,0,0,.06);
+  --sh2: 0 4px 20px rgba(0,0,0,.09);
+  --sh3: 0 20px 60px rgba(0,0,0,.14);
+  --free: #16a34a;  --free-s: #dcfce7;
+  --slow: #d97706;  --slow-s: #fef3c7;
+  --bad:  #dc2626;  --bad-s:  #fee2e2;
+  --acc:  #0ea5e9;  --acc-s:  #e0f2fe;
+  --acc-g: rgba(14,165,233,.3);
+  --route: #ea580c; --route-s: #fff7ed;
+  --route-g: rgba(234,88,12,.3);
+}
+
+/* ══════════════════════════════════════
+   2. RESET & BASE
+══════════════════════════════════════ */
+*,*::before,*::after {
+  margin: 0; padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+html, body {
+  height: 100%;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--t1);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeSpeed;
+}
+button { font-family: var(--font); cursor: pointer; border: none; background: none; color: inherit; }
+img    { display: block; max-width: 100%; }
+
+/* 狀態工具類 */
+.c-free { color: var(--free); } .c-slow { color: var(--slow); } .c-bad { color: var(--bad); }
+.bg-free { background: var(--free-s); color: var(--free); }
+.bg-slow { background: var(--slow-s); color: var(--slow); }
+.bg-bad  { background: var(--bad-s);  color: var(--bad);  }
+
+/* ══════════════════════════════════════
+   3. APP SHELL
+══════════════════════════════════════ */
+#app {
+  display: flex; flex-direction: column;
+  height: 100dvh; max-width: 430px; margin: 0 auto;
+  background: var(--bg); position: relative; overflow: hidden;
+  transition: background .3s var(--ease);
+}
+
+/* ══════════════════════════════════════
+   4. HEADER
+══════════════════════════════════════ */
+.hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; padding-top: calc(10px + var(--safe-t));
+  background: var(--glass); border-bottom: 1px solid var(--gb);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  flex-shrink: 0; z-index: 100; transform: translateZ(0);
+}
+.hdr-brand { display: flex; align-items: center; gap: 8px; }
+.hdr-logo  { font-size: 20px; line-height: 1; }
+.hdr-name  { font-size: 15px; font-weight: 900; letter-spacing: -.03em; }
+.hdr-sub   { font-size: 9px; color: var(--t3); margin-top: 1px; letter-spacing: .04em; }
+.hdr-right { display: flex; align-items: center; gap: 6px; }
+
+.live-clk {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--inset); border: 1px solid var(--b1);
+  border-radius: var(--r1); padding: 5px 9px;
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--free); box-shadow: 0 0 5px var(--free);
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+.clk-dig { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+
+.ico-btn {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: var(--inset); border: 1px solid var(--b1);
+  font-size: 15px; display: flex; align-items: center; justify-content: center;
+  transition: transform .12s; flex-shrink: 0;
+}
+.ico-btn:active { transform: scale(.88); }
+
+/* ══════════════════════════════════════
+   5. NAVIGATION
+══════════════════════════════════════ */
+.nav {
+  display: flex;
+  background: var(--glass); border-top: 1px solid var(--gb);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  padding: 4px 6px; padding-bottom: calc(4px + var(--safe-b));
+  flex-shrink: 0; z-index: 100;
+}
+.nav-it {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 6px 4px; border-radius: var(--r2);
+  color: var(--t3); font-size: 10px; font-weight: 500;
+  transition: color .18s, background .18s; position: relative;
+}
+.nav-it.active { color: var(--acc); background: var(--acc-s); }
+.nav-it.active::after {
+  content: ''; position: absolute; bottom: 3px;
+  width: 4px; height: 4px; border-radius: 50%; background: var(--acc);
+}
+.nav-ico { font-size: 20px; line-height: 1; }
+
+/* ══════════════════════════════════════
+   6. PAGE SYSTEM
+══════════════════════════════════════ */
+.pg-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.pg {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s var(--ease);
+  transform: translateZ(0); will-change: opacity;
+}
+.pg.active { opacity: 1; pointer-events: all; }
+
+/* ══════════════════════════════════════
+   7. MAP PAGE
+══════════════════════════════════════ */
+#map { width: 100%; height: 100%; }
+.map-ui { position: absolute; inset: 0; pointer-events: none; z-index: 500; }
+.map-ui > * { pointer-events: all; }
+
+/* 路線輸入列 */
+.route-bar {
+  position: absolute; top: 10px; left: 10px; right: 10px;
+  background: var(--glass); border: 1px solid var(--gb);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-radius: var(--r3); padding: 10px 14px; box-shadow: var(--sh2);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.route-bar-title { font-size: 10px; font-weight: 700; color: var(--t3); letter-spacing: .1em; text-transform: uppercase; }
+.route-input-row { display: flex; gap: 8px; align-items: center; }
+.route-input {
+  flex: 1; padding: 8px 12px;
+  background: var(--inset); border: 1.5px solid var(--b1);
+  border-radius: var(--r2); font-size: 12px; font-family: var(--font);
+  color: var(--t1); outline: none; -webkit-appearance: none;
+  transition: border-color .18s;
+}
+.route-input:focus { border-color: var(--route); }
+.route-input::placeholder { color: var(--t3); }
+.route-btn {
+  flex-shrink: 0; padding: 8px 14px;
+  background: var(--route); border-radius: var(--r2);
+  color: #fff; font-size: 12px; font-weight: 700;
+  font-family: var(--font); transition: opacity .15s; white-space: nowrap;
+}
+.route-btn:active { opacity: .75; }
+.route-status { font-size: 11px; color: var(--t2); display: none; }
+.route-status.show { display: block; }
+
+/* 城市資訊卡 */
+.map-card {
+  position: absolute; bottom: 70px; left: 10px; right: 66px;
+  background: var(--glass); border: 1px solid var(--gb);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-radius: var(--r2); padding: 10px 12px; box-shadow: var(--sh2);
+  display: flex; align-items: center; gap: 10px;
+}
+.mc-ico  { font-size: 26px; flex-shrink: 0; line-height: 1; }
+.mc-body { flex: 1; min-width: 0; }
+.mc-city { font-size: 14px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-meta { font-size: 10px; color: var(--t2); margin-top: 2px; }
+.mc-pills { display: flex; gap: 3px; margin-top: 5px; flex-wrap: wrap; }
+.mc-pill  { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 5px; }
+
+/* 圖例 */
+.legend {
+  position: absolute; bottom: 70px; right: 10px;
+  background: var(--glass); border: 1px solid var(--gb);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-radius: var(--r2); padding: 7px 10px; box-shadow: var(--sh1);
+}
+.leg-ttl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 5px; }
+.leg-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.leg-row:last-child { margin-bottom: 0; }
+.leg-pip { width: 18px; height: 4px; border-radius: 2px; }
+.leg-row span { font-size: 10px; color: var(--t2); }
+
+/* 定位 FAB */
+.fab {
+  position: absolute; bottom: 126px; right: 10px;
+  width: 46px; height: 46px; border-radius: 14px;
+  background: var(--acc); color: #fff; font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 18px var(--acc-g); transition: transform .12s;
+}
+.fab:active { transform: scale(.88); }
+
+/* 路線 / 定位標記 */
+@keyframes gps-ring { 0%{transform:scale(1);opacity:.6} 70%{transform:scale(3.2);opacity:0} 100%{transform:scale(1);opacity:0} }
+.u-wrap { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; position: relative; }
+.u-ring { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: var(--acc); animation: gps-ring 2s ease-out infinite; }
+.u-core { width: 12px; height: 12px; border-radius: 50%; background: var(--acc); border: 3px solid #fff; box-shadow: 0 2px 8px var(--acc-g); position: relative; z-index: 1; }
+.route-marker { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; color: #fff; }
+
+/* ══════════════════════════════════════
+   8. LIST PAGE
+══════════════════════════════════════ */
+.list-hdr { padding: 10px 14px 0; flex-shrink: 0; background: var(--bg); }
+
+.srch-wrap { position: relative; }
+.srch-in {
+  width: 100%; padding: 10px 36px 10px 38px;
+  background: var(--card); border: 1.5px solid var(--b1);
+  border-radius: var(--r2); font-size: 14px; font-family: var(--font);
+  color: var(--t1); outline: none; -webkit-appearance: none;
+  transition: border-color .18s;
+}
+.srch-in:focus { border-color: var(--acc); }
+.srch-in::placeholder { color: var(--t3); }
+.srch-ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; opacity: .5; }
+.srch-clr { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: var(--t3); color: var(--bg); font-size: 10px; font-weight: 900; display: none; align-items: center; justify-content: center; }
+.srch-clr.on { display: flex; }
+
+.rtabs { display: flex; gap: 5px; overflow-x: auto; padding: 8px 0 2px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.rtabs::-webkit-scrollbar { display: none; }
+.rtab { flex-shrink: 0; padding: 6px 13px; border: 1.5px solid var(--b1); border-radius: 20px; background: var(--card); color: var(--t2); font-size: 12px; font-weight: 500; transition: all .18s; white-space: nowrap; }
+.rtab.active { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 700; }
+
+/* 沿途過濾橫條 */
+.route-banner { display: none; margin: 8px 14px 0; padding: 8px 12px; background: var(--route-s); border: 1px solid var(--route); border-radius: var(--r2); justify-content: space-between; align-items: center; }
+.route-banner.show { display: flex; }
+.rb-text  { font-size: 11px; font-weight: 700; color: var(--route); }
+.rb-clear { font-size: 11px; color: var(--route); text-decoration: underline; cursor: pointer; background: none; border: none; font-family: var(--font); }
+
+/* 統計列 */
+.stats-bar { display: flex; gap: 6px; padding: 8px 14px 0; flex-shrink: 0; }
+.s-chip { flex: 1; border-radius: var(--r1); padding: 7px 4px; text-align: center; }
+.s-num  { font-size: 20px; font-weight: 900; line-height: 1; }
+.s-lbl  { font-size: 9px; color: var(--t2); margin-top: 3px; letter-spacing: .04em; }
+
+/* 捲動容器 */
+.vscroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding: 10px 14px; padding-bottom: calc(16px + var(--safe-b)); contain: strict; }
+.vscroll::-webkit-scrollbar { width: 3px; }
+.vscroll::-webkit-scrollbar-thumb { background: var(--b1); border-radius: 2px; }
+
+/* ══════════════════════════════════════
+   9. CITY CARD
+══════════════════════════════════════ */
+.city-card {
+  background: var(--card); border: 1px solid var(--b1);
+  border-radius: var(--r4); margin-bottom: 12px; overflow: hidden;
+  box-shadow: var(--sh1); contain: content;
+  animation: slide-up .28s var(--ease) both;
+}
+/* 沿途縣市高亮 */
+.city-card.on-route { border-color: var(--route); box-shadow: 0 0 0 2px var(--route-s), var(--sh2); }
+.on-route-badge { display: none; background: var(--route); color: #fff; font-size: 9px; font-weight: 700; padding: 2px 8px; letter-spacing: .06em; }
+.city-card.on-route .on-route-badge { display: block; }
+@keyframes slide-up { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+.c-top    { padding: 14px 16px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+.c-name   { font-size: 19px; font-weight: 900; letter-spacing: -.03em; }
+.c-rgn    { font-size: 10px; color: var(--t3); margin-top: 2px; letter-spacing: .05em; }
+.c-summary{ display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.cpill    { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 7px; }
+
+.wx       { display: flex; align-items: center; gap: 12px; padding: 10px 16px 12px; border-bottom: 1px solid var(--b2); }
+.wx-ico   { font-size: 34px; line-height: 1; flex-shrink: 0; }
+.wx-t     { font-size: 30px; font-weight: 900; letter-spacing: -.04em; line-height: 1; }
+.wx-u     { font-size: 13px; color: var(--t2); }
+.wx-d     { font-size: 12px; color: var(--t2); margin-top: 2px; }
+.wx-m     { display: flex; gap: 9px; margin-top: 4px; flex-wrap: wrap; }
+.wx-c     { font-size: 11px; color: var(--t2); }
+
+.roads    { padding: 10px 16px 12px; }
+.sec-lbl  { font-size: 9px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .12em; margin-bottom: 7px; }
+.road-r   { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; background: var(--inset); border-radius: var(--r1); border: 1px solid var(--b2); margin-bottom: 5px; }
+.road-r:last-child { margin-bottom: 0; }
+.road-n   { font-size: 13px; font-weight: 600; }
+.road-d   { font-size: 11px; color: var(--t2); margin-top: 1px; }
+.st-pill  { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 7px; flex-shrink: 0; margin-left: 8px; }
+
+.cctv-s   { border-top: 1px solid var(--b2); padding: 10px 0 14px; }
+.sp       { padding-left: 16px; }
+.reel     { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.reel::-webkit-scrollbar { display: none; }
+
+.thumb    { flex-shrink: 0; width: 148px; border-radius: var(--r2); overflow: hidden; border: 1px solid var(--b1); background: var(--inset); cursor: pointer; transition: transform .12s var(--ease); }
+.thumb:active { transform: scale(.94); }
+.thumb.on-route { border-color: var(--route); box-shadow: 0 0 0 2px var(--route-s); }
+.th-img   { position: relative; height: 83px; background: var(--hover); overflow: hidden; }
+.th-img img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s; }
+.th-img img.in { opacity: 1; }
+.src-pip  { position: absolute; top: 5px; left: 5px; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; color: #fff; letter-spacing: .04em; }
+.yt-pip   { position: absolute; top: 5px; right: 5px; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(255,0,0,.85); color: #fff; }
+.th-lbl   { padding: 5px 8px 7px; font-size: 11px; font-weight: 600; line-height: 1.3; }
+
+/* ══════════════════════════════════════
+   10. SKELETON LOADER
+══════════════════════════════════════ */
+@keyframes shim { 0%{background-position:-300px 0} 100%{background-position:300px 0} }
+.sk { background: linear-gradient(90deg, var(--inset) 25%, var(--hover) 50%, var(--inset) 75%); background-size: 600px 100%; animation: shim 1.4s infinite; border-radius: var(--r1); }
+.sk-card { background: var(--card); border: 1px solid var(--b1); border-radius: var(--r4); margin-bottom: 12px; padding: 16px; }
+.sk-h12  { height: 12px; margin-bottom: 8px; }
+.sk-h20  { height: 20px; margin-bottom: 8px; }
+.sk-h84  { height: 84px; margin-top: 10px; border-radius: var(--r2); }
+.sk-30   { width: 30%; } .sk-50 { width: 50%; } .sk-70 { width: 70%; } .sk-90 { width: 90%; }
+
+/* ══════════════════════════════════════
+   11. CCTV MODAL
+══════════════════════════════════════ */
+.modal-bg {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0,0,0,.8);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  display: flex; align-items: flex-end;
+  opacity: 0; pointer-events: none; transition: opacity .22s var(--ease);
+}
+.modal-bg.open { opacity: 1; pointer-events: all; }
+.modal-sh {
+  width: 100%; max-width: 430px; margin: 0 auto;
+  background: var(--card);
+  border-radius: var(--r4) var(--r4) 0 0;
+  border: 1px solid var(--b1); border-bottom: none;
+  padding: 16px 18px; padding-bottom: calc(20px + var(--safe-b));
+  box-shadow: var(--sh3);
+  transform: translateY(50px);
+  transition: transform .32s var(--spring);
+}
+.modal-bg.open .modal-sh { transform: translateY(0); }
+.m-hnd { width: 36px; height: 4px; background: var(--b1); border-radius: 2px; margin: 0 auto 14px; }
+.m-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.m-tag { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .1em; }
+.m-ttl { font-size: 17px; font-weight: 900; letter-spacing: -.02em; margin-top: 3px; }
+.m-src { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 8px; color: #fff; flex-shrink: 0; }
+.m-med { border-radius: var(--r3); overflow: hidden; aspect-ratio: 16/9; background: var(--hover); position: relative; margin-bottom: 12px; }
+.m-med img, .m-med iframe { width: 100%; height: 100%; object-fit: cover; border: none; display: block; }
+.m-live { position: absolute; top: 8px; left: 8px; background: rgba(220,38,38,.9); color: #fff; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 4px; letter-spacing: .05em; }
+.m-ts   { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,.62); color: #fff; font-size: 9px; padding: 2px 8px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.m-meta { display: flex; gap: 7px; margin-bottom: 14px; }
+.m-cell { flex: 1; background: var(--inset); border: 1px solid var(--b1); border-radius: var(--r1); padding: 8px 10px; }
+.m-cl   { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; }
+.m-cv   { font-size: 12px; font-weight: 700; margin-top: 3px; }
+.btn-cl { width: 100%; background: var(--inset); border: 1px solid var(--b1); border-radius: var(--r2); color: var(--t1); padding: 14px; font-size: 15px; font-weight: 700; transition: opacity .15s; }
+.btn-cl:active { opacity: .65; }
+
+/* ══════════════════════════════════════
+   12. TOAST
+══════════════════════════════════════ */
+.toast {
+  position: fixed; bottom: calc(78px + var(--safe-b)); left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--t1); color: var(--bg);
+  padding: 10px 18px; border-radius: 20px;
+  font-size: 13px; font-weight: 600;
+  box-shadow: var(--sh2); z-index: 9999;
+  opacity: 0; transition: opacity .22s var(--ease), transform .22s var(--ease);
+  pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ══════════════════════════════════════
+   13. EMPTY STATE
+══════════════════════════════════════ */
+.empty   { text-align: center; padding: 48px 24px; color: var(--t3); animation: slide-up .3s var(--ease); }
+.empty-e { font-size: 42px; margin-bottom: 10px; }
+.empty-t { font-size: 14px; line-height: 1.7; }
+
+/* ══════════════════════════════════════
+   14. LEAFLET 覆寫
+══════════════════════════════════════ */
+.leaflet-container { background: var(--bg) !important; }
+.leaflet-popup-content-wrapper { background: var(--card) !important; color: var(--t1) !important; border: 1px solid var(--b1) !important; border-radius: var(--r2) !important; box-shadow: var(--sh3) !important; }
+.leaflet-popup-tip { background: var(--card) !important; }
+.leaflet-popup-content { font-family: var(--font) !important; font-size: 13px !important; }
+.leaflet-control-zoom a { background: var(--card) !important; color: var(--t1) !important; border-color: var(--b1) !important; }
+.leaflet-control-attribution { display: none !important; }
+.leaflet-routing-container { display: none !important; }
+
+/* ══════════════════════════════════════
+   15. ACCESSIBILITY
+══════════════════════════════════════ */
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
