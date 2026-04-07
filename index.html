@@ -8,322 +8,27 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" id="meta-theme" content="#060d1f">
 <title>環島路況指揮中心</title>
+
+<!-- 地圖套件 -->
+
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.css">
+
+<!-- 字型（非阻塞載入） -->
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" media="print" onload="this.media='all'">
-<style>
-/* ══════════════════════════════════════
-   DESIGN TOKENS
-══════════════════════════════════════ */
-:root {
-  --safe-t: env(safe-area-inset-top, 0px);
-  --safe-b: env(safe-area-inset-bottom, 0px);
-  --r1:10px; --r2:14px; --r3:20px; --r4:24px;
-  --font:'Noto Sans TC',-apple-system,BlinkMacSystemFont,sans-serif;
-  --ease:cubic-bezier(0.4,0,0.2,1);
-  --spring:cubic-bezier(0.34,1.4,0.64,1);
-}
-[data-theme="dark"] {
-  --bg:#060d1f; --card:#0c1628; --inset:#13202f; --hover:#1a2c3e;
-  --b1:rgba(255,255,255,0.08); --b2:rgba(255,255,255,0.04);
-  --t1:#f0f4ff; --t2:#7a90aa; --t3:#3a4f63;
-  --glass:rgba(6,13,31,0.88); --gb:rgba(255,255,255,0.07);
-  --sh1:0 1px 3px rgba(0,0,0,.4); --sh2:0 4px 20px rgba(0,0,0,.5); --sh3:0 20px 60px rgba(0,0,0,.7);
-  --free:#22c55e; --free-s:rgba(34,197,94,.12);
-  --slow:#f59e0b; --slow-s:rgba(245,158,11,.12);
-  --bad:#ef4444;  --bad-s:rgba(239,68,68,.12);
-  --acc:#38bdf8;  --acc-s:rgba(56,189,248,.12); --acc-g:rgba(56,189,248,.32);
-  --route:#f97316; --route-s:rgba(249,115,22,.15); --route-g:rgba(249,115,22,.4);
-}
-[data-theme="light"] {
-  --bg:#eef2f7; --card:#fff; --inset:#eef2f7; --hover:#e2e8f0;
-  --b1:rgba(0,0,0,.08); --b2:rgba(0,0,0,.04);
-  --t1:#0f172a; --t2:#64748b; --t3:#94a3b8;
-  --glass:rgba(255,255,255,.9); --gb:rgba(0,0,0,.06);
-  --sh1:0 1px 3px rgba(0,0,0,.06); --sh2:0 4px 20px rgba(0,0,0,.09); --sh3:0 20px 60px rgba(0,0,0,.14);
-  --free:#16a34a; --free-s:#dcfce7;
-  --slow:#d97706; --slow-s:#fef3c7;
-  --bad:#dc2626;  --bad-s:#fee2e2;
-  --acc:#0ea5e9;  --acc-s:#e0f2fe; --acc-g:rgba(14,165,233,.3);
-  --route:#ea580c; --route-s:#fff7ed; --route-g:rgba(234,88,12,.3);
-}
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
+  media="print" onload="this.media='all'">
 
-/* ══════════════════════════════════════
-RESET
-══════════════════════════════════════ */
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;font-family:var(–font);background:var(–bg);color:var(–t1);overflow:hidden;-webkit-font-smoothing:antialiased;}
-button{font-family:var(–font);cursor:pointer;border:none;background:none;color:inherit;}
-img{display:block;max-width:100%;}
+<!-- 專案樣式 -->
 
-/* ══════════════════════════════════════
-APP SHELL
-══════════════════════════════════════ */
-#app{display:flex;flex-direction:column;height:100dvh;max-width:430px;margin:0 auto;background:var(–bg);position:relative;overflow:hidden;transition:background .3s var(–ease);}
-
-/* ══════════════════════════════════════
-HEADER
-══════════════════════════════════════ */
-.hdr{
-display:flex;justify-content:space-between;align-items:center;
-padding:10px 14px;padding-top:calc(10px + var(–safe-t));
-background:var(–glass);border-bottom:1px solid var(–gb);
-backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
-flex-shrink:0;z-index:100;transform:translateZ(0);
-}
-.hdr-brand{display:flex;align-items:center;gap:8px;}
-.hdr-logo{font-size:20px;line-height:1;}
-.hdr-name{font-size:15px;font-weight:900;letter-spacing:-.03em;}
-.hdr-sub{font-size:9px;color:var(–t3);margin-top:1px;letter-spacing:.04em;}
-.hdr-right{display:flex;align-items:center;gap:6px;}
-.live-clk{display:flex;align-items:center;gap:5px;background:var(–inset);border:1px solid var(–b1);border-radius:var(–r1);padding:5px 9px;}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(–free);box-shadow:0 0 5px var(–free);animation:blink 2s ease-in-out infinite;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.clk-dig{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.04em;}
-.ico-btn{width:32px;height:32px;border-radius:9px;background:var(–inset);border:1px solid var(–b1);font-size:15px;display:flex;align-items:center;justify-content:center;transition:transform .12s;flex-shrink:0;}
-.ico-btn:active{transform:scale(.88);}
-
-/* ══════════════════════════════════════
-NAV
-══════════════════════════════════════ */
-.nav{display:flex;background:var(–glass);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid var(–gb);padding:4px 6px;padding-bottom:calc(4px + var(–safe-b));flex-shrink:0;z-index:100;}
-.nav-it{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;border-radius:var(–r2);color:var(–t3);font-size:10px;font-weight:500;transition:color .18s,background .18s;position:relative;}
-.nav-it.active{color:var(–acc);background:var(–acc-s);}
-.nav-it.active::after{content:’’;position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(–acc);}
-.nav-ico{font-size:20px;line-height:1;}
-
-/* ══════════════════════════════════════
-PAGES
-══════════════════════════════════════ */
-.pg-wrap{flex:1;min-height:0;position:relative;overflow:hidden;}
-.pg{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .2s var(–ease);transform:translateZ(0);will-change:opacity;}
-.pg.active{opacity:1;pointer-events:all;}
-
-/* ══════════════════════════════════════
-MAP PAGE
-══════════════════════════════════════ */
-#map{width:100%;height:100%;}
-.map-ui{position:absolute;inset:0;pointer-events:none;z-index:500;}
-.map-ui>*{pointer-events:all;}
-
-/* 路線輸入條 */
-.route-bar{
-position:absolute;top:10px;left:10px;right:10px;
-background:var(–glass);border:1px solid var(–gb);
-backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-border-radius:var(–r3);padding:10px 14px;box-shadow:var(–sh2);
-display:flex;flex-direction:column;gap:8px;
-}
-.route-bar-title{font-size:10px;font-weight:700;color:var(–t3);letter-spacing:.1em;text-transform:uppercase;}
-.route-input-row{display:flex;gap:8px;align-items:center;}
-.route-input{
-flex:1;padding:8px 12px;background:var(–inset);border:1.5px solid var(–b1);
-border-radius:var(–r2);font-size:12px;font-family:var(–font);color:var(–t1);
-outline:none;-webkit-appearance:none;transition:border-color .18s;
-}
-.route-input:focus{border-color:var(–route);}
-.route-input::placeholder{color:var(–t3);}
-.route-btn{
-flex-shrink:0;padding:8px 14px;background:var(–route);border-radius:var(–r2);
-color:#fff;font-size:12px;font-weight:700;font-family:var(–font);
-transition:opacity .15s;white-space:nowrap;
-}
-.route-btn:active{opacity:.75;}
-.route-clear-btn{flex-shrink:0;padding:8px 10px;background:var(–bad-s);border-radius:var(–r2);color:var(–bad);font-size:12px;font-weight:700;font-family:var(–font);}
-.route-status{font-size:11px;color:var(–t2);display:none;}
-.route-status.show{display:block;}
-
-/* 地圖資訊卡 */
-.map-card{
-position:absolute;bottom:70px;left:10px;right:66px;
-background:var(–glass);border:1px solid var(–gb);
-backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-border-radius:var(–r2);padding:10px 12px;box-shadow:var(–sh2);
-display:flex;align-items:center;gap:10px;
-}
-.mc-ico{font-size:26px;flex-shrink:0;line-height:1;}
-.mc-body{flex:1;min-width:0;}
-.mc-city{font-size:14px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mc-meta{font-size:10px;color:var(–t2);margin-top:2px;}
-.mc-pills{display:flex;gap:3px;margin-top:5px;flex-wrap:wrap;}
-.mc-pill{font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;}
-
-/* 圖例 */
-.legend{position:absolute;bottom:70px;right:10px;background:var(–glass);border:1px solid var(–gb);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:var(–r2);padding:7px 10px;box-shadow:var(–sh1);}
-.leg-ttl{font-size:9px;color:var(–t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;}
-.leg-row{display:flex;align-items:center;gap:5px;margin-bottom:3px;}
-.leg-row:last-child{margin-bottom:0;}
-.leg-pip{width:18px;height:4px;border-radius:2px;}
-.leg-row span{font-size:10px;color:var(–t2);}
-
-/* FAB */
-.fab{position:absolute;bottom:126px;right:10px;width:46px;height:46px;border-radius:14px;background:var(–acc);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px var(–acc-g);transition:transform .12s;}
-.fab:active{transform:scale(.88);}
-
-/* 定位點 */
-@keyframes gps-ring{0%{transform:scale(1);opacity:.6}70%{transform:scale(3.2);opacity:0}100%{transform:scale(1);opacity:0}}
-.u-wrap{width:34px;height:34px;display:flex;align-items:center;justify-content:center;position:relative;}
-.u-ring{position:absolute;width:16px;height:16px;border-radius:50%;background:var(–acc);animation:gps-ring 2s ease-out infinite;}
-.u-core{width:12px;height:12px;border-radius:50%;background:var(–acc);border:3px solid #fff;box-shadow:0 2px 8px var(–acc-g);position:relative;z-index:1;}
-
-/* 路線途中標記 */
-.route-marker{width:28px;height:28px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;}
-
-/* ══════════════════════════════════════
-LIST PAGE
-══════════════════════════════════════ */
-.list-hdr{padding:10px 14px 0;flex-shrink:0;background:var(–bg);}
-.srch-wrap{position:relative;}
-.srch-in{width:100%;padding:10px 36px 10px 38px;background:var(–card);border:1.5px solid var(–b1);border-radius:var(–r2);font-size:14px;font-family:var(–font);color:var(–t1);outline:none;-webkit-appearance:none;transition:border-color .18s;}
-.srch-in:focus{border-color:var(–acc);}
-.srch-in::placeholder{color:var(–t3);}
-.srch-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;opacity:.5;}
-.srch-clr{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:50%;background:var(–t3);color:var(–bg);font-size:10px;font-weight:900;display:none;align-items:center;justify-content:center;}
-.srch-clr.on{display:flex;}
-.rtabs{display:flex;gap:5px;overflow-x:auto;padding:8px 0 2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.rtabs::-webkit-scrollbar{display:none;}
-.rtab{flex-shrink:0;padding:6px 13px;border:1.5px solid var(–b1);border-radius:20px;background:var(–card);color:var(–t2);font-size:12px;font-weight:500;transition:all .18s;white-space:nowrap;}
-.rtab.active{background:var(–acc);border-color:var(–acc);color:#fff;font-weight:700;}
-
-/* Route filter banner */
-.route-banner{
-display:none;margin:8px 14px 0;padding:8px 12px;
-background:var(–route-s);border:1px solid var(–route);
-border-radius:var(–r2);
-justify-content:space-between;align-items:center;
-}
-.route-banner.show{display:flex;}
-.rb-text{font-size:11px;font-weight:700;color:var(–route);}
-.rb-clear{font-size:11px;color:var(–route);text-decoration:underline;cursor:pointer;}
-
-.stats-bar{display:flex;gap:6px;padding:8px 14px 0;flex-shrink:0;}
-.s-chip{flex:1;border-radius:var(–r1);padding:7px 4px;text-align:center;}
-.s-num{font-size:20px;font-weight:900;line-height:1;}
-.s-lbl{font-size:9px;color:var(–t2);margin-top:3px;letter-spacing:.04em;}
-
-.vscroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:10px 14px;padding-bottom:calc(16px + var(–safe-b));contain:strict;}
-.vscroll::-webkit-scrollbar{width:3px;}
-.vscroll::-webkit-scrollbar-thumb{background:var(–b1);border-radius:2px;}
-
-/* ══════════════════════════════════════
-CITY CARD
-══════════════════════════════════════ */
-.city-card{background:var(–card);border:1px solid var(–b1);border-radius:var(–r4);margin-bottom:12px;overflow:hidden;box-shadow:var(–sh1);contain:content;animation:slide-up .28s var(–ease) both;}
-/* 沿途標記 */
-.city-card.on-route{border-color:var(–route);box-shadow:0 0 0 2px var(–route-s),var(–sh2);}
-.on-route-badge{display:none;background:var(–route);color:#fff;font-size:9px;font-weight:700;padding:2px 8px;letter-spacing:.06em;}
-.city-card.on-route .on-route-badge{display:block;}
-@keyframes slide-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.c-top{padding:14px 16px 0;display:flex;justify-content:space-between;align-items:flex-start;}
-.c-name{font-size:19px;font-weight:900;letter-spacing:-.03em;}
-.c-rgn{font-size:10px;color:var(–t3);margin-top:2px;letter-spacing:.05em;}
-.c-summary{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
-.cpill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:7px;}
-.wx{display:flex;align-items:center;gap:12px;padding:10px 16px 12px;border-bottom:1px solid var(–b2);}
-.wx-ico{font-size:34px;line-height:1;flex-shrink:0;}
-.wx-t{font-size:30px;font-weight:900;letter-spacing:-.04em;line-height:1;}
-.wx-u{font-size:13px;color:var(–t2);}
-.wx-d{font-size:12px;color:var(–t2);margin-top:2px;}
-.wx-m{display:flex;gap:9px;margin-top:4px;flex-wrap:wrap;}
-.wx-c{font-size:11px;color:var(–t2);}
-.roads{padding:10px 16px 12px;}
-.sec-lbl{font-size:9px;font-weight:700;color:var(–t3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:7px;}
-.road-r{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(–inset);border-radius:var(–r1);border:1px solid var(–b2);margin-bottom:5px;}
-.road-r:last-child{margin-bottom:0;}
-.road-n{font-size:13px;font-weight:600;}
-.road-d{font-size:11px;color:var(–t2);margin-top:1px;}
-.st-pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:7px;flex-shrink:0;margin-left:8px;}
-.cctv-s{border-top:1px solid var(–b2);padding:10px 0 14px;}
-.sp{padding-left:16px;}
-.reel{display:flex;gap:8px;overflow-x:auto;padding:0 16px 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.reel::-webkit-scrollbar{display:none;}
-.thumb{flex-shrink:0;width:148px;border-radius:var(–r2);overflow:hidden;border:1px solid var(–b1);background:var(–inset);cursor:pointer;transition:transform .12s var(–ease);}
-.thumb:active{transform:scale(.94);}
-/* 沿途 CCTV 高亮 */
-.thumb.on-route{border-color:var(–route);box-shadow:0 0 0 2px var(–route-s);}
-.th-img{position:relative;height:83px;background:var(–hover);overflow:hidden;}
-.th-img img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s;}
-.th-img img.in{opacity:1;}
-.src-pip{position:absolute;top:5px;left:5px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;color:#fff;letter-spacing:.04em;}
-/* YouTube 標記 */
-.yt-pip{position:absolute;top:5px;right:5px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(255,0,0,.85);color:#fff;}
-.th-lbl{padding:5px 8px 7px;font-size:11px;font-weight:600;line-height:1.3;}
-
-/* ══════════════════════════════════════
-SKELETON
-══════════════════════════════════════ */
-@keyframes shim{0%{background-position:-300px 0}100%{background-position:300px 0}}
-.sk{background:linear-gradient(90deg,var(–inset) 25%,var(–hover) 50%,var(–inset) 75%);background-size:600px 100%;animation:shim 1.4s infinite;border-radius:var(–r1);}
-.sk-card{background:var(–card);border:1px solid var(–b1);border-radius:var(–r4);margin-bottom:12px;padding:16px;}
-.sk-h12{height:12px;margin-bottom:8px;} .sk-h20{height:20px;margin-bottom:8px;} .sk-h84{height:84px;margin-top:10px;border-radius:var(–r2);}
-.sk-30{width:30%;} .sk-50{width:50%;} .sk-70{width:70%;} .sk-90{width:90%;}
-
-/* ══════════════════════════════════════
-MODAL (CCTV Viewer)
-══════════════════════════════════════ */
-.modal-bg{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .22s var(–ease);}
-.modal-bg.open{opacity:1;pointer-events:all;}
-.modal-sh{width:100%;max-width:430px;margin:0 auto;background:var(–card);border-radius:var(–r4) var(–r4) 0 0;border:1px solid var(–b1);border-bottom:none;padding:16px 18px;padding-bottom:calc(20px + var(–safe-b));box-shadow:var(–sh3);transform:translateY(50px);transition:transform .32s var(–spring);}
-.modal-bg.open .modal-sh{transform:translateY(0);}
-.m-hnd{width:36px;height:4px;background:var(–b1);border-radius:2px;margin:0 auto 14px;}
-.m-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;}
-.m-tag{font-size:10px;color:var(–t3);text-transform:uppercase;letter-spacing:.1em;}
-.m-ttl{font-size:17px;font-weight:900;letter-spacing:-.02em;margin-top:3px;}
-.m-src{font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;color:#fff;flex-shrink:0;}
-.m-med{border-radius:var(–r3);overflow:hidden;aspect-ratio:16/9;background:var(–hover);position:relative;margin-bottom:12px;}
-.m-med img,.m-med iframe{width:100%;height:100%;object-fit:cover;border:none;display:block;}
-.m-live{position:absolute;top:8px;left:8px;background:rgba(220,38,38,.9);color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.05em;}
-.m-ts{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.62);color:#fff;font-size:9px;padding:2px 8px;border-radius:4px;font-variant-numeric:tabular-nums;}
-.m-meta{display:flex;gap:7px;margin-bottom:14px;}
-.m-cell{flex:1;background:var(–inset);border:1px solid var(–b1);border-radius:var(–r1);padding:8px 10px;}
-.m-cl{font-size:9px;color:var(–t3);text-transform:uppercase;letter-spacing:.08em;}
-.m-cv{font-size:12px;font-weight:700;margin-top:3px;}
-.btn-cl{width:100%;background:var(–inset);border:1px solid var(–b1);border-radius:var(–r2);color:var(–t1);padding:14px;font-size:15px;font-weight:700;transition:opacity .15s;}
-.btn-cl:active{opacity:.65;}
-
-/* ══════════════════════════════════════
-STATUS UTILITIES
-══════════════════════════════════════ */
-.c-free{color:var(–free)} .c-slow{color:var(–slow)} .c-bad{color:var(–bad)} .c-acc{color:var(–acc)}
-.bg-free{background:var(–free-s);color:var(–free)} .bg-slow{background:var(–slow-s);color:var(–slow)} .bg-bad{background:var(–bad-s);color:var(–bad)}
-
-/* ══════════════════════════════════════
-TOAST
-══════════════════════════════════════ */
-.toast{position:fixed;bottom:calc(78px + var(–safe-b));left:50%;transform:translateX(-50%) translateY(8px);background:var(–t1);color:var(–bg);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;box-shadow:var(–sh2);z-index:9999;opacity:0;transition:opacity .22s var(–ease),transform .22s var(–ease);pointer-events:none;white-space:nowrap;}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-
-/* ══════════════════════════════════════
-EMPTY STATE
-══════════════════════════════════════ */
-.empty{text-align:center;padding:48px 24px;color:var(–t3);animation:slide-up .3s var(–ease);}
-.empty-e{font-size:42px;margin-bottom:10px;}
-.empty-t{font-size:14px;line-height:1.7;}
-
-/* ══════════════════════════════════════
-LEAFLET OVERRIDES
-══════════════════════════════════════ */
-.leaflet-container{background:var(–bg)!important;}
-.leaflet-popup-content-wrapper{background:var(–card)!important;color:var(–t1)!important;border:1px solid var(–b1)!important;border-radius:var(–r2)!important;box-shadow:var(–sh3)!important;}
-.leaflet-popup-tip{background:var(–card)!important;}
-.leaflet-popup-content{font-family:var(–font)!important;font-size:13px!important;}
-.leaflet-control-zoom a{background:var(–card)!important;color:var(–t1)!important;border-color:var(–b1)!important;}
-.leaflet-control-attribution{display:none!important;}
-.leaflet-routing-container{display:none!important;}
-
-/* ══════════════════════════════════════
-ACCESSIBILITY
-══════════════════════════════════════ */
-:focus-visible{outline:2px solid var(–acc);outline-offset:2px;border-radius:4px;}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
-</style>
-
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div id="app">
 
-  <!-- Header -->
+  <!-- ── Header ── -->
 
   <header class="hdr">
     <div class="hdr-brand">
@@ -338,26 +43,27 @@ ACCESSIBILITY
         <div class="live-dot"></div>
         <div class="clk-dig" id="js-clk">--:--</div>
       </div>
-      <button class="ico-btn" id="js-theme">🌙</button>
+      <button class="ico-btn" id="js-theme" aria-label="切換主題">🌙</button>
     </div>
   </header>
 
-  <!-- Pages -->
+  <!-- ── Pages ── -->
 
   <main class="pg-wrap">
 
 ```
-<!-- MAP -->
-<section class="pg active" id="pg-map">
-  <div id="map"></div>
-  <div class="map-ui">
+<!-- 地圖頁 -->
+<section class="pg active" id="pg-map" aria-label="地圖">
+  <div id="map" role="application" aria-label="台灣地圖"></div>
+  <div class="map-ui" aria-hidden="true">
 
-    <!-- 路線輸入 -->
+    <!-- 路線輸入列 -->
     <div class="route-bar">
       <div class="route-bar-title">📍 貼上 Google Maps 長網址，自動找出沿途攝影機</div>
       <div class="route-input-row">
-        <input class="route-input" id="js-route-input" type="url" placeholder="https://www.google.com/maps/dir/..." autocomplete="off">
-        <button class="route-btn" onclick="RouteMod.parse()">分析路線</button>
+        <input class="route-input" id="js-route-input" type="url"
+          placeholder="https://www.google.com/maps/dir/..." autocomplete="off">
+        <button class="route-btn" id="js-route-btn">分析路線</button>
       </div>
       <div class="route-status" id="js-route-status"></div>
     </div>
@@ -372,7 +78,7 @@ ACCESSIBILITY
       </div>
     </div>
 
-    <!-- 圖例 -->
+    <!-- 路況圖例 -->
     <div class="legend">
       <div class="leg-ttl">路況</div>
       <div class="leg-row"><div class="leg-pip" id="lp-free"></div><span>順暢</span></div>
@@ -381,36 +87,40 @@ ACCESSIBILITY
     </div>
 
     <!-- 定位 FAB -->
-    <button class="fab" id="js-loc">📍</button>
+    <button class="fab" id="js-loc" aria-label="定位我的位置">📍</button>
   </div>
 </section>
 
-<!-- LIST -->
-<section class="pg" id="pg-list">
+<!-- 縣市列表頁 -->
+<section class="pg" id="pg-list" aria-label="縣市列表">
   <div class="list-hdr">
-    <div class="srch-wrap">
-      <span class="srch-ico">🔍</span>
-      <input class="srch-in" id="js-srch" type="search" placeholder="搜尋縣市…" autocomplete="off">
-      <button class="srch-clr" id="js-clr">✕</button>
+    <div class="srch-wrap" role="search">
+      <span class="srch-ico" aria-hidden="true">🔍</span>
+      <input class="srch-in" id="js-srch" type="search"
+        placeholder="搜尋縣市…" autocomplete="off" aria-label="搜尋縣市">
+      <button class="srch-clr" id="js-clr" aria-label="清除搜尋">✕</button>
     </div>
-    <div class="rtabs" id="js-tabs">
-      <button class="rtab active" data-r="all">全部</button>
-      <button class="rtab" data-r="north">北部</button>
-      <button class="rtab" data-r="central">中部</button>
-      <button class="rtab" data-r="south">南部</button>
-      <button class="rtab" data-r="east">東部</button>
-      <button class="rtab" data-r="island">離島</button>
+    <div class="rtabs" id="js-tabs" role="tablist" aria-label="地區篩選">
+      <button class="rtab active" data-r="all"     role="tab" aria-selected="true">全部</button>
+      <button class="rtab"        data-r="north"   role="tab" aria-selected="false">北部</button>
+      <button class="rtab"        data-r="central" role="tab" aria-selected="false">中部</button>
+      <button class="rtab"        data-r="south"   role="tab" aria-selected="false">南部</button>
+      <button class="rtab"        data-r="east"    role="tab" aria-selected="false">東部</button>
+      <button class="rtab"        data-r="island"  role="tab" aria-selected="false">離島</button>
     </div>
   </div>
 
-  <!-- 沿途過濾提示 -->
-  <div class="route-banner" id="js-route-banner">
+  <!-- 沿途過濾提示橫條 -->
+  <div class="route-banner" id="js-route-banner" role="status">
     <div class="rb-text" id="js-rb-text">🛣️ 顯示沿途縣市</div>
-    <div class="rb-clear" onclick="RouteMod.clear()">清除路線</div>
+    <button class="rb-clear" id="js-rb-clear">清除路線</button>
   </div>
 
-  <div class="stats-bar" id="js-stats"></div>
-  <div class="vscroll" id="js-list">
+  <!-- 路況統計列 -->
+  <div class="stats-bar" id="js-stats" aria-label="路況統計"></div>
+
+  <!-- 縣市卡片捲動容器 -->
+  <div class="vscroll" id="js-list" role="list" aria-label="縣市列表">
     <div id="js-list-inner"></div>
   </div>
 </section>
@@ -418,23 +128,28 @@ ACCESSIBILITY
 
   </main>
 
-  <!-- Nav -->
+  <!-- ── 底部導覽列 ── -->
 
-  <nav class="nav">
-    <button class="nav-it active" onclick="App.go('map',this)"><div class="nav-ico">🗺️</div>地圖</button>
-    <button class="nav-it"        onclick="App.go('list',this)"><div class="nav-ico">📋</div>縣市列表</button>
+  <nav class="nav" aria-label="主導覽">
+    <button class="nav-it active" data-page="map"  id="nav-map"  aria-label="地圖" aria-current="page">
+      <div class="nav-ico" aria-hidden="true">🗺️</div>地圖
+    </button>
+    <button class="nav-it"        data-page="list" id="nav-list" aria-label="縣市列表">
+      <div class="nav-ico" aria-hidden="true">📋</div>縣市列表
+    </button>
   </nav>
-</div>
 
-<!-- CCTV Modal -->
+</div><!-- end #app -->
 
-<div class="modal-bg" id="modal" onclick="Modal.close()">
-  <div class="modal-sh" onclick="event.stopPropagation()">
-    <div class="m-hnd"></div>
+<!-- ── CCTV Modal ── -->
+
+<div class="modal-bg" id="modal" role="dialog" aria-modal="true" aria-label="CCTV影像">
+  <div class="modal-sh">
+    <div class="m-hnd" aria-hidden="true"></div>
     <div class="m-top">
       <div>
-        <div class="m-tag" id="m-tag"></div>
-        <div class="m-ttl" id="m-ttl"></div>
+        <div class="m-tag"  id="m-tag"></div>
+        <div class="m-ttl"  id="m-ttl"></div>
       </div>
       <div class="m-src" id="m-src"></div>
     </div>
@@ -444,890 +159,29 @@ ACCESSIBILITY
       <div class="m-cell"><div class="m-cl">路況</div><div class="m-cv" id="m-st"></div></div>
       <div class="m-cell"><div class="m-cl">時間</div><div class="m-cv" id="m-tm"></div></div>
     </div>
-    <button class="btn-cl" onclick="Modal.close()">關閉影像</button>
+    <button class="btn-cl" id="modal-close-btn">關閉影像</button>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- Toast 通知 -->
+
+<div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+
+<!-- ── 外部 JS 套件 ── -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.js"></script>
 
-<script>
-'use strict';
+<!-- ── 專案 JS（順序不可調換）── -->
 
-// ── API Keys（填入你的真實 Key）──
-const CWA_KEY = 'YOUR_CWA_API_KEY';
+<script src="js/config.js"></script>  <!-- 常數與 API Keys -->
 
-// ── 工具函式 ──
-const $   = id  => document.getElementById(id);
-const now = ()  => new Date().toLocaleTimeString('zh-TW', { hour12:false });
-const rad = deg => deg * Math.PI / 180;
+<script src="js/utils.js"></script>   <!-- 工具函式與計算 -->
 
-// ── Haversine 距離（公里）──
-function distKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
+<script src="js/data.js"></script>    <!-- 縣市與 CCTV 資料 -->
 
-// ── 點到線段的最短距離（公里）──
-function distToSegKm(px, py, ax, ay, bx, by) {
-  const dx = bx-ax, dy = by-ay;
-  const lenSq = dx*dx + dy*dy;
-  if(lenSq === 0) return distKm(px, py, ax, ay);
-  const t = Math.max(0, Math.min(1, ((px-ax)*dx + (py-ay)*dy) / lenSq));
-  return distKm(px, py, ax + t*dx, ay + t*dy);
-}
-
-/* ══════════════════════════════════════
-   EVENT BUS
-══════════════════════════════════════ */
-const Bus = (() => {
-  const h = {};
-  return {
-    on(e,fn)  { (h[e]=h[e]||[]).push(fn); },
-    emit(e,d) { (h[e]||[]).forEach(fn=>fn(d)); },
-  };
-})();
-
-/* ══════════════════════════════════════
-   CONFIG
-══════════════════════════════════════ */
-const C = {
-  MAP:  { center:[23.8,121.0], zoom:7, cityZoom:13, flyDur:1.2 },
-  TILES:{ dark:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-          light:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' },
-  COLS: { dark: {free:'#22c55e',slow:'#f59e0b',bad:'#ef4444'},
-          light:{free:'#16a34a',slow:'#d97706',bad:'#dc2626'} },
-  SRC:  { tdx:{lbl:'TDX平台',col:'#3b82f6'}, city:{lbl:'縣市政府',col:'#8b5cf6'}, yt:{lbl:'YouTube',col:'#ff0000'} },
-  ST:   { free:{lbl:'順暢',p:'bg-free',c:'c-free'}, slow:{lbl:'緩慢',p:'bg-slow',c:'c-slow'}, bad:{lbl:'壅塞',p:'bg-bad',c:'c-bad'} },
-  STAT_LBL:{ free:'順暢路段', slow:'緩慢路段', bad:'壅塞路段' },
-  ROUTE_RADIUS_KM: 1.0,   // 路線過濾半徑（公里）
-};
-
-/* ══════════════════════════════════════
-   DATA MODULE
-══════════════════════════════════════ */
-const Data = (() => {
-  // 天氣代碼 → emoji
-  const WX_ICON = {
-    '晴':'☀️','晴時多雲':'🌤️','多雲時晴':'⛅','多雲':'⛅','陰':'☁️',
-    '陰時多雲':'☁️','多雲時陰':'☁️','短暫雨':'🌦️','短暫陣雨':'🌦️',
-    '有雨':'🌧️','陰有雨':'🌧️','多雲有雨':'🌧️','短暫大雨':'🌧️',
-    '大雨':'🌧️','雷陣雨':'⛈️','短暫雷陣雨':'⛈️','有霧':'🌫️','起霧':'🌫️',
-  };
-  function wxToIcon(d) {
-    if(!d) return '🌡️';
-    if(WX_ICON[d]) return WX_ICON[d];
-    for(const [k,v] of Object.entries(WX_ICON)) if(d.includes(k)) return v;
-    return '🌡️';
-  }
-  const NAME_PATCH = {'臺北市':'台北市','臺中市':'台中市','臺南市':'台南市','臺東縣':'台東縣'};
-  const normName = n => (NAME_PATCH[n]??n).replace(/臺/g,'台');
-
-  // ── CCTV 欄位說明 ──
-  // src: 'tdx' | 'city' | 'yt'
-  // img: 靜態圖網址（src=tdx/city 使用）
-  // ytId: YouTube 直播影片 ID（src=yt 使用）
-  const RAW = [
-    { id:'taipei', name:'台北市', r:'north',  rn:'北部', lat:25.033, lng:121.565,
-      w:{i:'⛅',t:28,d:'多雲時晴',h:68,rain:20,wind:3.1},
-      roads:[{n:'中山北路',s:'slow',nt:'車流緩慢'},{n:'忠孝東路',s:'bad',nt:'壅塞，建議改道'},{n:'信義路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'TP_YT1', n:'台北市即時路況直播', src:'yt', s:'slow', lat:25.033, lng:121.565,
-          ytId:'m_6uHz9H_U8' },   // ← 台北市交通局 YouTube 直播 ID（可替換）
-        { id:'TP001',  n:'忠孝復興路口',        src:'tdx',s:'bad', lat:25.041, lng:121.543,
-          img:'https://picsum.photos/seed/tp1/400/225' },
-        { id:'TP002',  n:'信義計畫區',          src:'city',s:'free',lat:25.033, lng:121.565,
-          img:'https://picsum.photos/seed/tp2/400/225' },
-      ]},
-    { id:'ntpc', name:'新北市', r:'north', rn:'北部', lat:25.017, lng:121.463,
-      w:{i:'🌤️',t:27,d:'晴時多雲',h:72,rain:15,wind:2.8},
-      roads:[{n:'新台五路',s:'slow',nt:'車流緩慢'},{n:'中正路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'NTC01', n:'板橋府中路口', src:'city', s:'slow', lat:25.014, lng:121.462,
-          img:'https://picsum.photos/seed/ntc1/400/225' },
-        { id:'NTC02', n:'三重重新路',   src:'tdx',  s:'free', lat:25.065, lng:121.488,
-          img:'https://picsum.photos/seed/ntc2/400/225' },
-      ]},
-    { id:'keelung', name:'基隆市', r:'north', rn:'北部', lat:25.128, lng:121.739,
-      w:{i:'🌧️',t:24,d:'陰時有雨',h:88,rain:70,wind:4.5},
-      roads:[{n:'中正路',s:'bad',nt:'積水緩慢'},{n:'義一路',s:'slow',nt:'車流稍慢'}],
-      cams:[{ id:'KL001', n:'基隆港附近', src:'city', s:'bad', lat:25.128, lng:121.739,
-              img:'https://picsum.photos/seed/kl1/400/225' }]},
-    { id:'taoyuan', name:'桃園市', r:'north', rn:'北部', lat:24.994, lng:121.301,
-      w:{i:'⛅',t:29,d:'多雲',h:65,rain:20,wind:2.5},
-      roads:[{n:'中正路',s:'free',nt:'路況順暢'},{n:'桃鶯路',s:'slow',nt:'車流緩慢'}],
-      cams:[
-        { id:'TY001', n:'桃園火車站前', src:'tdx',  s:'slow', lat:24.994, lng:121.301,
-          img:'https://picsum.photos/seed/ty1/400/225' },
-        { id:'TY002', n:'中壢中正路',   src:'city', s:'free', lat:24.960, lng:121.225,
-          img:'https://picsum.photos/seed/ty2/400/225' },
-      ]},
-    { id:'hsinchu',   name:'新竹市', r:'north',  rn:'北部', lat:24.807, lng:120.969,
-      w:{i:'☀️',t:31,d:'晴',h:58,rain:5,wind:3.8},
-      roads:[{n:'中華路',s:'free',nt:'路況順暢'},{n:'經國路',s:'slow',nt:'車流稍慢'}],
-      cams:[{ id:'HC001', n:'新竹火車站', src:'city', s:'slow', lat:24.807, lng:120.969,
-              img:'https://picsum.photos/seed/hc1/400/225' }]},
-    { id:'hsinchuCo', name:'新竹縣', r:'north',  rn:'北部', lat:24.839, lng:121.018,
-      w:{i:'☀️',t:30,d:'晴時多雲',h:60,rain:10,wind:3.2},
-      roads:[{n:'縣道122',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'HCC01', n:'竹北光明路', src:'tdx', s:'free', lat:24.839, lng:121.018,
-              img:'https://picsum.photos/seed/hcc1/400/225' }]},
-    { id:'miaoli', name:'苗栗縣', r:'central', rn:'中部', lat:24.560, lng:120.821,
-      w:{i:'⛅',t:29,d:'多雲時晴',h:67,rain:15,wind:2.2},
-      roads:[{n:'中正路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'ML001', n:'苗栗市中正路', src:'city', s:'free', lat:24.560, lng:120.821,
-              img:'https://picsum.photos/seed/ml1/400/225' }]},
-    { id:'taichung', name:'台中市', r:'central', rn:'中部', lat:24.148, lng:120.674,
-      w:{i:'⛅',t:30,d:'多雲時晴',h:70,rain:20,wind:2.9},
-      roads:[{n:'台中港路',s:'bad',nt:'壅塞，回堵2公里'},{n:'文心路',s:'slow',nt:'車流緩慢'},{n:'中清路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'TC_YT1', n:'台中市交通直播',     src:'yt',   s:'slow', lat:24.148, lng:120.674,
-          ytId:'1-9v_W5O99U' },    // ← 台中市交通直播 ID（可替換）
-        { id:'TC001',  n:'台中港路文心路口',    src:'tdx',  s:'bad',  lat:24.163, lng:120.647,
-          img:'https://picsum.photos/seed/tc1/400/225' },
-        { id:'TC002',  n:'中清路進化路口',      src:'city', s:'slow', lat:24.182, lng:120.663,
-          img:'https://picsum.photos/seed/tc2/400/225' },
-      ]},
-    { id:'changhua', name:'彰化縣', r:'central', rn:'中部', lat:24.052, lng:120.516,
-      w:{i:'🌤️',t:31,d:'晴時多雲',h:63,rain:10,wind:2.6},
-      roads:[{n:'中山路',s:'slow',nt:'市區車流稍慢'},{n:'彰鹿路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'CH001', n:'彰化市中山路', src:'city', s:'slow', lat:24.052, lng:120.516,
-              img:'https://picsum.photos/seed/ch1/400/225' }]},
-    { id:'nantou', name:'南投縣', r:'central', rn:'中部', lat:23.961, lng:120.972,
-      w:{i:'⛅',t:27,d:'多雲',h:75,rain:30,wind:1.8},
-      roads:[{n:'中興路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'NT_YT1', n:'合歡山武嶺即時直播', src:'yt',   s:'free', lat:24.133, lng:121.272,
-          ytId:'KSmhpAGHZM4' },    // ← 武嶺直播 ID（可替換）
-        { id:'NT001',  n:'南投市中興路',        src:'tdx',  s:'free', lat:23.961, lng:120.972,
-          img:'https://picsum.photos/seed/nt1/400/225' },
-      ]},
-    { id:'yunlin',   name:'雲林縣', r:'central', rn:'中部', lat:23.709, lng:120.431,
-      w:{i:'☀️',t:33,d:'晴',h:55,rain:5,wind:3.1},
-      roads:[{n:'中山路',s:'free',nt:'路況順暢'},{n:'文化路',s:'slow',nt:'車流稍慢'}],
-      cams:[{ id:'YL001', n:'斗六市中山路', src:'city', s:'free', lat:23.709, lng:120.431,
-              img:'https://picsum.photos/seed/yl1/400/225' }]},
-    { id:'chiayiC',  name:'嘉義市', r:'south', rn:'南部', lat:23.480, lng:120.449,
-      w:{i:'☀️',t:34,d:'晴熱',h:52,rain:5,wind:2.7},
-      roads:[{n:'中山路',s:'slow',nt:'市區壅塞'},{n:'垂楊路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'CY001', n:'嘉義市中山路', src:'tdx', s:'slow', lat:23.480, lng:120.449,
-              img:'https://picsum.photos/seed/cy1/400/225' }]},
-    { id:'chiayiCo', name:'嘉義縣', r:'south', rn:'南部', lat:23.452, lng:120.256,
-      w:{i:'☀️',t:33,d:'晴',h:55,rain:8,wind:2.9},
-      roads:[{n:'縣道159',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'CYC01', n:'朴子市區', src:'city', s:'free', lat:23.452, lng:120.256,
-              img:'https://picsum.photos/seed/cyc1/400/225' }]},
-    { id:'tainan', name:'台南市', r:'south', rn:'南部', lat:23.000, lng:120.227,
-      w:{i:'☀️',t:35,d:'晴熱',h:50,rain:5,wind:3.0},
-      roads:[{n:'中山路',s:'bad',nt:'壅塞，建議改道'},{n:'永華路',s:'slow',nt:'車流緩慢'},{n:'東門路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'TN001', n:'台南火車站前',   src:'tdx',  s:'bad',  lat:23.000, lng:120.213,
-          img:'https://picsum.photos/seed/tn1/400/225' },
-        { id:'TN002', n:'永華路市政府前', src:'city', s:'slow', lat:22.992, lng:120.204,
-          img:'https://picsum.photos/seed/tn2/400/225' },
-      ]},
-    { id:'kaohsiung', name:'高雄市', r:'south', rn:'南部', lat:22.627, lng:120.301,
-      w:{i:'☀️',t:36,d:'晴熱',h:48,rain:5,wind:3.5},
-      roads:[{n:'中山一路',s:'slow',nt:'車流緩慢'},{n:'博愛路',s:'bad',nt:'壅塞'},{n:'中正路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'KH001', n:'高雄車站前博愛路',  src:'tdx',  s:'bad',  lat:22.639, lng:120.302,
-          img:'https://picsum.photos/seed/kh1/400/225' },
-        { id:'KH002', n:'中山一路五福路口',  src:'city', s:'slow', lat:22.627, lng:120.301,
-          img:'https://picsum.photos/seed/kh2/400/225' },
-        { id:'KH003', n:'三多路商圈',        src:'tdx',  s:'free', lat:22.612, lng:120.309,
-          img:'https://picsum.photos/seed/kh3/400/225' },
-      ]},
-    { id:'pingtung', name:'屏東縣', r:'south', rn:'南部', lat:22.671, lng:120.487,
-      w:{i:'☀️',t:35,d:'晴熱',h:52,rain:8,wind:2.8},
-      roads:[{n:'中山路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'PT001', n:'屏東市中山路', src:'city', s:'free', lat:22.671, lng:120.487,
-              img:'https://picsum.photos/seed/pt1/400/225' }]},
-    { id:'yilan', name:'宜蘭縣', r:'east', rn:'東部', lat:24.702, lng:121.738,
-      w:{i:'🌧️',t:25,d:'有雨',h:85,rain:65,wind:4.2},
-      roads:[{n:'中山路',s:'slow',nt:'雨天車流稍慢'}],
-      cams:[{ id:'YI001', n:'宜蘭市中山路', src:'tdx', s:'slow', lat:24.702, lng:121.738,
-              img:'https://picsum.photos/seed/yi1/400/225' }]},
-    { id:'hualien', name:'花蓮縣', r:'east', rn:'東部', lat:23.987, lng:121.602,
-      w:{i:'⛅',t:26,d:'多雲',h:78,rain:35,wind:3.8},
-      roads:[{n:'中正路',s:'free',nt:'路況順暢'},{n:'中山路',s:'slow',nt:'車流稍慢'}],
-      cams:[
-        { id:'HL_YT1', n:'花蓮市區即時直播', src:'yt',  s:'free', lat:23.987, lng:121.602,
-          ytId:'yNMaj_VvmEI' },    // ← 花蓮直播 ID（可替換）
-        { id:'HL001',  n:'花蓮市中正路',      src:'city',s:'free', lat:23.987, lng:121.601,
-          img:'https://picsum.photos/seed/hl1/400/225' },
-      ]},
-    { id:'taitung', name:'台東縣', r:'east', rn:'東部', lat:22.758, lng:121.144,
-      w:{i:'🌤️',t:28,d:'晴時多雲',h:72,rain:20,wind:3.2},
-      roads:[{n:'中正路',s:'free',nt:'路況順暢'}],
-      cams:[
-        { id:'TT_YT1', n:'台東市區即時直播', src:'yt',  s:'free', lat:22.758, lng:121.144,
-          ytId:'5qap5aO4i9A' },    // ← 台東直播 ID（可替換）
-        { id:'TT001',  n:'台東市中正路',      src:'tdx', s:'free', lat:22.758, lng:121.143,
-          img:'https://picsum.photos/seed/tt1/400/225' },
-      ]},
-    { id:'penghu',   name:'澎湖縣', r:'island', rn:'離島', lat:23.565, lng:119.580,
-      w:{i:'💨',t:29,d:'多風',h:74,rain:15,wind:7.8},
-      roads:[{n:'中正路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'PH001', n:'馬公市中正路', src:'city', s:'free', lat:23.565, lng:119.580,
-              img:'https://picsum.photos/seed/ph1/400/225' }]},
-    { id:'kinmen',   name:'金門縣', r:'island', rn:'離島', lat:24.449, lng:118.377,
-      w:{i:'☀️',t:27,d:'晴',h:65,rain:5,wind:5.2},
-      roads:[{n:'伯玉路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'KM001', n:'金城市區', src:'city', s:'free', lat:24.449, lng:118.377,
-              img:'https://picsum.photos/seed/km1/400/225' }]},
-    { id:'matsu',    name:'連江縣', r:'island', rn:'離島', lat:26.151, lng:119.950,
-      w:{i:'🌫️',t:22,d:'起霧',h:92,rain:40,wind:5.5},
-      roads:[{n:'介壽路',s:'free',nt:'路況順暢'}],
-      cams:[{ id:'LJ001', n:'南竿市區', src:'city', s:'free', lat:26.151, lng:119.950,
-              img:'https://picsum.photos/seed/lj1/400/225' }]},
-  ];
-
-  const nameIdx = Object.fromEntries(RAW.map((c,i) => [c.name, i]));
-  let cities = [], idxMap = {};
-
-  function freeze() {
-    cities = Object.freeze(RAW.map(c => Object.freeze({
-      ...c,
-      _cnt: Object.freeze(c.roads.reduce((a,r)=>{ a[r.s]=(a[r.s]||0)+1; return a; }, {})),
-      _ms:  (() => { const r=c.roads.reduce((a,x)=>{a[x.s]=(a[x.s]||0)+1;return a;},{}); return r.bad?'bad':r.slow?'slow':'free'; })(),
-    })));
-    idxMap = Object.freeze(Object.fromEntries(cities.map((c,i) => [c.id, i])));
-  }
-
-  function applyLocation(loc) {
-    const idx = nameIdx[normName(loc.locationName)];
-    if(idx === undefined) return;
-    const elMap = Object.fromEntries(loc.weatherElement.map(el => [el.elementName, el.time]));
-    const getVal = k => elMap[k]?.[0]?.parameter?.parameterName ?? null;
-    const getNum = k => { const v=parseInt(getVal(k)); return isNaN(v)?null:v; };
-    const wxDesc=getVal('Wx'), pop=getNum('PoP'), maxT=getNum('MaxT'), minT=getNum('MinT');
-    RAW[idx].w = {
-      ...RAW[idx].w,
-      i:    wxToIcon(wxDesc) ?? RAW[idx].w.i,
-      t:    maxT ?? minT     ?? RAW[idx].w.t,
-      d:    wxDesc           ?? RAW[idx].w.d,
-      rain: pop              ?? RAW[idx].w.rain,
-      _src: 'cwa',
-    };
-  }
-
-  return {
-    all:    ()           => cities,
-    byIdx:  i            => cities[i],
-    idxOf:  id           => idxMap[id],
-    filter: (region, search, routeIds) => cities.filter(c => {
-      const regionOk = region==='all' || c.r===region;
-      const searchOk = !search || c.name.includes(search);
-      const routeOk  = !routeIds || routeIds.has(c.id);
-      return regionOk && searchOk && routeOk;
-    }),
-    // 收集所有 CCTV 座標（含 lat/lng）供路線過濾用
-    allCams: () => cities.flatMap(c => c.cams.filter(cv => cv.lat && cv.lng).map(cv => ({ ...cv, cityId:c.id, cityName:c.name }))),
-
-    async init() {
-      freeze();
-      if(!CWA_KEY || CWA_KEY === 'YOUR_CWA_API_KEY') {
-        console.warn('[Data] CWA_KEY 未設定，使用 Mock 資料');
-        return;
-      }
-      try {
-        const res = await fetch(
-          `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_KEY}&elementName=Wx,PoP,MinT,MaxT`,
-          { signal: AbortSignal.timeout(10000) }
-        );
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const locs = json?.records?.location;
-        if(!Array.isArray(locs)||!locs.length) throw new Error('API 格式異常');
-        locs.forEach(applyLocation);
-        freeze();
-        Bus.emit('weather:updated');
-        console.info('[Data] 天氣更新完成');
-      } catch(e) {
-        console.warn('[Data] CWA API 失敗：', e.message);
-        Bus.emit('weather:error', e.message);
-      }
-    },
-    async refresh() { return this.init(); },
-  };
-})();
-
-/* ══════════════════════════════════════
-   CLOCK
-══════════════════════════════════════ */
-const Clock = (() => {
-  const $c=$('js-clk'), $d=$('js-date');
-  const tf={hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false};
-  const df={year:'numeric',month:'long',day:'numeric',weekday:'short'};
-  let last='';
-  function tick(){
-    const n=new Date(), t=n.toLocaleTimeString('zh-TW',tf);
-    if(t!==last){ $c.textContent=t; last=t; $d.textContent=n.toLocaleDateString('zh-TW',df); }
-    requestAnimationFrame(tick);
-  }
-  return { init(){ requestAnimationFrame(tick); } };
-})();
-
-/* ══════════════════════════════════════
-   TOAST
-══════════════════════════════════════ */
-const Toast = (() => {
-  const $t=$('toast'); let tid;
-  return { show(msg, dur=2400){
-    $t.textContent=msg; $t.classList.add('show');
-    clearTimeout(tid); tid=setTimeout(()=>$t.classList.remove('show'), dur);
-  }};
-})();
-
-/* ══════════════════════════════════════
-   THEME
-══════════════════════════════════════ */
-const Theme = (() => {
-  let dark=true;
-  const btn=$('js-theme');
-  function apply(d){
-    dark=d;
-    document.documentElement.setAttribute('data-theme', d?'dark':'light');
-    $('meta-theme').content = d?'#060d1f':'#eef2f7';
-    btn.textContent = d?'🌙':'☀️';
-    const cols = d?C.COLS.dark:C.COLS.light;
-    $('lp-free').style.background=cols.free;
-    $('lp-slow').style.background=cols.slow;
-    $('lp-bad').style.background=cols.bad;
-    Bus.emit('theme', d);
-  }
-  btn.addEventListener('click', ()=>apply(!dark));
-  return { init(){ apply(true); }, isDark(){ return dark; } };
-})();
-
-/* ══════════════════════════════════════
-   LAZY IMG
-══════════════════════════════════════ */
-const Lazy = (() => {
-  const io = new IntersectionObserver(entries=>{
-    entries.forEach(e=>{
-      if(!e.isIntersecting) return;
-      const img=e.target; img.src=img.dataset.src;
-      img.onload=()=>img.classList.add('in');
-      io.unobserve(img);
-    });
-  },{ rootMargin:'120px' });
-  return { watch(root){ root.querySelectorAll('img[data-src]').forEach(img=>io.observe(img)); } };
-})();
-
-/* ══════════════════════════════════════
-   MAP MODULE
-══════════════════════════════════════ */
-const MapMod = (() => {
-  let map, tile, mks=[], uMk, uCi;
-
-  function mkColor(city){ return (Theme.isDark()?C.COLS.dark:C.COLS.light)[city._ms]; }
-
-  function mkIcon(city){
-    const col=mkColor(city);
-    return L.divIcon({
-      className:'',
-      html:`<div style="background:${col};color:#fff;border-radius:18px;padding:4px 9px;font-size:11px;font-weight:900;border:2px solid rgba(255,255,255,.9);box-shadow:0 2px 10px rgba(0,0,0,.4);white-space:nowrap;cursor:pointer;font-family:var(--font)">${city.name}</div>`,
-      iconAnchor:[34,15],
-    });
-  }
-
-  function showCity(city){
-    const w=city.w, cnt=city._cnt;
-    $('mc-ico').textContent  = w.i;
-    $('mc-city').textContent = `${city.name}  ${w.t}°C`;
-    $('mc-meta').textContent = `${w.d} ｜ 💧${w.h}% 🌧️${w.rain}%`;
-    $('mc-pills').innerHTML  = Object.entries(C.ST).map(([k,s])=>
-      `<span class="mc-pill ${s.p}">${cnt[k]||0} ${s.lbl}</span>`
-    ).join('');
-    map.flyTo([city.lat,city.lng], C.MAP.cityZoom, {duration:C.MAP.flyDur, easeLinearity:.5});
-  }
-
-  Bus.on('theme', ()=>{
-    if(!map) return;
-    map.removeLayer(tile);
-    tile=L.tileLayer(Theme.isDark()?C.TILES.dark:C.TILES.light,{maxZoom:19}).addTo(map);
-    refreshMks();
-  });
-
-  function refreshMks(){
-    mks.forEach(m=>map.removeLayer(m)); mks=[];
-    Data.all().forEach(city=>{
-      const m=L.marker([city.lat,city.lng],{icon:mkIcon(city)})
-        .addTo(map).on('click',()=>showCity(city));
-      mks.push(m);
-    });
-  }
-
-  return {
-    init(){
-      map=L.map('map',{zoomControl:true,attributionControl:false}).setView(C.MAP.center,C.MAP.zoom);
-      tile=L.tileLayer(C.TILES.dark,{maxZoom:19}).addTo(map);
-      refreshMks();
-    },
-    getMap(){ return map; },
-    invalidate(){ setTimeout(()=>map?.invalidateSize(),80); },
-    refreshMks,
-    locate(){
-      if(!navigator.geolocation){ Toast.show('瀏覽器不支援定位'); return; }
-      const btn=$('js-loc');
-      btn.textContent='⏳';
-      navigator.geolocation.getCurrentPosition(
-        ({coords:{latitude:lat,longitude:lng,accuracy}})=>{
-          btn.textContent='📍';
-          if(uMk) map.removeLayer(uMk);
-          if(uCi) map.removeLayer(uCi);
-          uCi=L.circle([lat,lng],{radius:Math.min(accuracy,600),color:'#38bdf8',fillColor:'#38bdf8',fillOpacity:.1,weight:1.5,opacity:.4}).addTo(map);
-          uMk=L.marker([lat,lng],{
-            icon:L.divIcon({className:'',html:'<div class="u-wrap"><div class="u-ring"></div><div class="u-core"></div></div>',iconSize:[34,34],iconAnchor:[17,17]}),
-            zIndexOffset:2000,
-          }).addTo(map).bindPopup('<strong>📍 你在這裡</strong>');
-          map.flyTo([lat,lng],14,{duration:1.5});
-          const near=Data.all().reduce((b,c)=>{
-            const d=Math.hypot(c.lat-lat,c.lng-lng);
-            return d<b.d?{c,d}:b;
-          },{c:null,d:Infinity});
-          if(near.c){ showCity(near.c); Toast.show(`📍 最近縣市：${near.c.name}`); }
-        },
-        err=>{ btn.textContent='📍'; Toast.show({1:'請允許位置存取',2:'無法取得位置',3:'定位逾時'}[err.code]||'定位失敗'); },
-        {enableHighAccuracy:true,timeout:15000,maximumAge:0}
-      );
-    },
-  };
-})();
-
-/* ══════════════════════════════════════
-   ROUTE MODULE：Google Maps 路徑感知
-══════════════════════════════════════ */
-const RouteMod = (() => {
-  let routePolyline = null;   // 儲存路徑線段座標 [[lat,lng],...]
-  let routeLayer    = null;   // Leaflet Routing Machine 圖層
-  let onRouteCamIds = new Set(); // 沿途 CCTV id
-  let onRouteCityIds= new Set(); // 沿途縣市 id
-
-  // 解析 Google Maps 長網址，取出起訖座標
-  function parseGoogleMapsUrl(url) {
-    try {
-      // 格式一：/maps/dir/@lat1,lng1,.../@lat2,lng2  或 /maps/@lat,lng,zoom
-      const atMatches = [...url.matchAll(/@(-?\d+\.\d+),(-?\d+\.\d+)/g)];
-      if(atMatches.length >= 2) {
-        return {
-          from: [parseFloat(atMatches[0][1]), parseFloat(atMatches[0][2])],
-          to:   [parseFloat(atMatches[atMatches.length-1][1]), parseFloat(atMatches[atMatches.length-1][2])],
-        };
-      }
-      // 格式二：/maps/dir/起點/終點 的座標形式
-      const dirMatch = url.match(/\/dir\/(-?\d+\.\d+),(-?\d+\.\d+)\/(-?\d+\.\d+),(-?\d+\.\d+)/);
-      if(dirMatch) {
-        return {
-          from: [parseFloat(dirMatch[1]), parseFloat(dirMatch[2])],
-          to:   [parseFloat(dirMatch[3]), parseFloat(dirMatch[4])],
-        };
-      }
-      // 格式三：saddr/daddr 參數
-      const saddr = url.match(/saddr=(-?\d+\.\d+),(-?\d+\.\d+)/);
-      const daddr = url.match(/daddr=(-?\d+\.\d+),(-?\d+\.\d+)/);
-      if(saddr && daddr) {
-        return {
-          from: [parseFloat(saddr[1]), parseFloat(saddr[2])],
-          to:   [parseFloat(daddr[1]), parseFloat(daddr[2])],
-        };
-      }
-      return null;
-    } catch(e) { return null; }
-  }
-
-  // 計算 CCTV 到路徑的最短距離，標記沿途攝影機
-  function filterCamsOnRoute(coords) {
-    onRouteCamIds  = new Set();
-    onRouteCityIds = new Set();
-    const allCams  = Data.allCams();
-    const R = C.ROUTE_RADIUS_KM;
-
-    allCams.forEach(cam => {
-      let minDist = Infinity;
-      for(let i = 0; i < coords.length - 1; i++) {
-        const d = distToSegKm(
-          cam.lat, cam.lng,
-          coords[i].lat, coords[i].lng,
-          coords[i+1].lat, coords[i+1].lng,
-        );
-        if(d < minDist) minDist = d;
-      }
-      if(minDist <= R) {
-        onRouteCamIds.add(cam.id);
-        onRouteCityIds.add(cam.cityId);
-      }
-    });
-    return { camCount: onRouteCamIds.size, cityCount: onRouteCityIds.size };
-  }
-
-  return {
-    parse() {
-      const url = $('js-route-input').value.trim();
-      if(!url) { Toast.show('請貼上 Google Maps 網址'); return; }
-
-      const coords = parseGoogleMapsUrl(url);
-      if(!coords) {
-        Toast.show('⚠️ 無法解析網址，請使用長網址');
-        $('js-route-status').className='route-status show';
-        $('js-route-status').textContent='提示：從 Google Maps 網址列複製完整長網址';
-        return;
-      }
-
-      // 清除舊路線
-      if(routeLayer) { MapMod.getMap().removeLayer(routeLayer); routeLayer=null; }
-
-      // 顯示解析中狀態
-      $('js-route-status').className='route-status show';
-      $('js-route-status').textContent='🔄 路線計算中…';
-
-      // 使用 Leaflet Routing Machine 繪製路徑
-      routeLayer = L.Routing.control({
-        waypoints: [
-          L.latLng(coords.from[0], coords.from[1]),
-          L.latLng(coords.to[0],   coords.to[1]),
-        ],
-        routeWhileDragging: false,
-        addWaypoints:       false,
-        fitSelectedRoutes:  true,
-        lineOptions: {
-          styles: [{ color: '#f97316', opacity: 0.85, weight: 5 }],
-          extendToWaypoints: true,
-          missingRouteTolerance: 0,
-        },
-        createMarker(i, wp) {
-          const labels=['起點','終點'];
-          return L.marker(wp.latLng, {
-            icon: L.divIcon({
-              className:'',
-              html:`<div class="route-marker" style="background:${i===0?'#22c55e':'#ef4444'}">${labels[i]}</div>`,
-              iconSize:[36,36], iconAnchor:[18,18],
-            }),
-          });
-        },
-      }).addTo(MapMod.getMap());
-
-      // 路線計算完成後過濾沿途攝影機
-      routeLayer.on('routesfound', e => {
-        const route    = e.routes[0];
-        routePolyline  = route.coordinates;  // [{lat,lng},...]
-
-        const { camCount, cityCount } = filterCamsOnRoute(routePolyline);
-
-        $('js-route-status').textContent =
-          `✅ 找到 ${cityCount} 個縣市、${camCount} 個沿途攝影機`;
-
-        // 通知 List 模組更新
-        Bus.emit('route:updated', { camIds: onRouteCamIds, cityIds: onRouteCityIds, camCount, cityCount });
-        Toast.show(`🛣️ 沿途共 ${camCount} 個攝影機`, 3000);
-      });
-
-      routeLayer.on('routingerror', () => {
-        $('js-route-status').textContent='❌ 路線計算失敗，請確認起訖點正確';
-        Toast.show('路線計算失敗');
-      });
-    },
-
-    clear() {
-      if(routeLayer){ MapMod.getMap().removeLayer(routeLayer); routeLayer=null; }
-      routePolyline=null;
-      onRouteCamIds=new Set(); onRouteCityIds=new Set();
-      $('js-route-input').value='';
-      $('js-route-status').className='route-status';
-      Bus.emit('route:cleared');
-      Toast.show('已清除路線');
-    },
-
-    getOnRouteCamIds()  { return onRouteCamIds;  },
-    getOnRouteCityIds() { return onRouteCityIds; },
-    isActive() { return routePolyline !== null; },
-  };
-})();
-
-/* ══════════════════════════════════════
-   RENDERER
-══════════════════════════════════════ */
-const R = (() => {
-  const {ST:st, SRC:src} = C;
-
-  const road = ({n,s,nt}) =>
-    `<div class="road-r"><div><div class="road-n">${n}</div><div class="road-d">${nt}</div></div><span class="st-pill ${st[s].p}">${st[s].lbl}</span></div>`;
-
-  const cam = (cv, ci, vi, onRoute) => {
-    const isYt   = cv.src === 'yt';
-    const srcInf = isYt ? src.yt : src[cv.src];
-    // ── 用 data-ci / data-vi 屬性傳遞 index，避免 inline onclick 字串拼接出錯 ──
-    // ── YouTube 縮圖加 onerror fallback，圖片 403 時不會擋住點擊事件 ──
-    const ytThumb = isYt
-      ? `<img src="https://img.youtube.com/vi/${cv.ytId}/mqdefault.jpg"
-             alt="${cv.n}" class="in"
-             onerror="this.style.display='none'">`
-      : `<img data-src="${cv.img}" alt="${cv.n}" loading="lazy">`;
-
-    return `<div class="thumb${onRoute?' on-route':''}" data-ci="${ci}" data-vi="${vi}">
-      <div class="th-img">
-        ${ytThumb}
-        <div class="src-pip" style="background:${srcInf.col}">${srcInf.lbl}</div>
-        ${isYt ? '<div class="yt-pip">▶ LIVE</div>' : ''}
-      </div>
-      <div class="th-lbl">${cv.n}</div>
-    </div>`;
-  };
-
-  const card = (city, gi, delay, onRouteCamIds) => {
-    const isOnRoute = RouteMod.isActive() && RouteMod.getOnRouteCityIds().has(city.id);
-    const cnt = city._cnt;
-    const roads = city.roads.map(road).join('');
-    const cctvs = city.cams.map((cv,j)=>cam(cv, gi, j, onRouteCamIds?.has(cv.id))).join('');
-    return `
-    <div class="city-card${isOnRoute?' on-route':''}" style="animation-delay:${delay}s">
-      ${isOnRoute ? '<div class="on-route-badge">🛣️ 沿途</div>' : ''}
-      <div class="c-top">
-        <div>
-          <div class="c-name">${city.name}</div>
-          <div class="c-rgn">${city.rn}</div>
-          <div class="c-summary">${Object.entries(st).map(([k,s])=>`<span class="cpill ${s.p}">${cnt[k]||0} ${s.lbl}</span>`).join('')}</div>
-        </div>
-      </div>
-      <div class="wx">
-        <div class="wx-ico">${city.w.i}</div>
-        <div style="flex:1">
-          <div style="display:flex;align-items:baseline;gap:4px"><div class="wx-t">${city.w.t}</div><div class="wx-u">°C</div></div>
-          <div class="wx-d">${city.w.d}</div>
-          <div class="wx-m"><span class="wx-c">💧${city.w.h}%</span><span class="wx-c">🌧️${city.w.rain}%</span><span class="wx-c">💨${city.w.wind}m/s</span></div>
-        </div>
-      </div>
-      <div class="roads"><div class="sec-lbl">📍 主要道路</div>${roads}</div>
-      <div class="cctv-s">
-        <div class="sec-lbl sp">📷 CCTV 影像</div>
-        <div class="reel">${cctvs}</div>
-      </div>
-    </div>`;
-  };
-
-  const skeleton = () =>
-    `<div class="sk-card"><div class="sk sk-h20 sk-30"></div><div class="sk sk-h12 sk-70" style="margin-top:6px"></div><div class="sk sk-h84 sk-90"></div></div>`;
-
-  return { card, skeleton };
-})();
-
-/* ══════════════════════════════════════
-   LIST MODULE
-══════════════════════════════════════ */
-const List = (() => {
-  let region='all', search='', timer=null;
-  let routeFilter = null;   // Set<cityId> | null
-  const $inner=$('js-list-inner'), $stats=$('js-stats'), $clr=$('js-clr');
-  const all = Data.all();
-
-  function stats(cities) {
-    const tot={free:0,slow:0,bad:0};
-    cities.forEach(c=>Object.keys(tot).forEach(k=>tot[k]+=c._cnt[k]||0));
-    $stats.innerHTML=Object.entries(C.ST).map(([k,s])=>
-      `<div class="s-chip ${s.p}"><div class="s-num">${tot[k]}</div><div class="s-lbl">${C.STAT_LBL[k]}</div></div>`
-    ).join('');
-  }
-
-  function cards(cities) {
-    if(!cities.length){
-      $inner.innerHTML=`<div class="empty"><div class="empty-e">🔍</div><div class="empty-t">找不到「${search}」<br>試試其他關鍵字</div></div>`;
-      return;
-    }
-    $inner.innerHTML=cities.map(()=>R.skeleton()).join('');
-    requestAnimationFrame(()=>{
-      $inner.innerHTML=cities.map((c,i)=>R.card(c, all.indexOf(c), i*.03, RouteMod.getOnRouteCamIds())).join('');
-      Lazy.watch($inner);
-      $('js-list').scrollTop=0;
-    });
-  }
-
-  function render() {
-    const filtered = Data.filter(region, search, routeFilter);
-    stats(filtered);
-    cards(filtered);
-  }
-
-  // 路線更新事件
-  Bus.on('route:updated', ({cityIds, camCount, cityCount})=>{
-    routeFilter = cityIds;
-    const $b=$('js-route-banner'), $bt=$('js-rb-text');
-    $b.classList.add('show');
-    $bt.textContent = `🛣️ 沿途 ${cityCount} 個縣市・${camCount} 個攝影機`;
-    render();
-    App.go('list', document.querySelectorAll('.nav-it')[1]); // 自動切到列表頁
-  });
-
-  Bus.on('route:cleared', ()=>{
-    routeFilter=null;
-    $('js-route-banner').classList.remove('show');
-    render();
-  });
-
-  // Tab 事件委派
-  $('js-tabs').addEventListener('click', e=>{
-    const btn=e.target.closest('.rtab'); if(!btn) return;
-    document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    region=btn.dataset.r;
-    render();
-  });
-
-  // ── CCTV 縮圖點擊事件委派 ──
-  // 改用 data-ci / data-vi 屬性，解決 YouTube 縮圖圖片錯誤擋住 onclick 的問題
-  $('js-list').addEventListener('click', e => {
-    const thumb = e.target.closest('.thumb');
-    if(!thumb) return;
-    const ci = parseInt(thumb.dataset.ci);
-    const vi = parseInt(thumb.dataset.vi);
-    if(!isNaN(ci) && !isNaN(vi)) Modal.open(ci, vi);
-  });
-
-  // Search debounce
-  $('js-srch').addEventListener('input', e=>{
-    search=e.target.value.trim();
-    $clr.classList.toggle('on', search.length>0);
-    clearTimeout(timer); timer=setTimeout(render, 160);
-  });
-  $clr.addEventListener('click', ()=>{
-    $('js-srch').value=''; search='';
-    $clr.classList.remove('on'); render();
-  });
-
-  return { init: render };
-})();
-
-/* ══════════════════════════════════════
-   MODAL：支援 YouTube 直播 + touch 下滑關閉
-══════════════════════════════════════ */
-const Modal = (() => {
-  const $bg=$('modal'), $sh=$bg.querySelector('.modal-sh');
-  let startY=0, dy=0, isOpen=false;
-
-  $sh.addEventListener('touchstart', e=>{ startY=e.touches[0].clientY; dy=0; },{passive:true});
-  $sh.addEventListener('touchmove',  e=>{
-    dy=e.touches[0].clientY - startY;
-    if(dy>0) $sh.style.transform=`translateY(${dy}px)`;
-  },{passive:true});
-  $sh.addEventListener('touchend', ()=>{
-    if(dy>80) Modal.close(); else $sh.style.transform='';
-    dy=0;
-  });
-
-  return {
-    open(ci, vi) {
-      const city=Data.byIdx(ci), cam=city.cams[vi];
-      if(!city || !cam){ console.error('[Modal] 找不到資料', ci, vi); return; }
-
-      const s=C.ST[cam.s];
-      const isYt = cam.src === 'yt';
-      const srcInf = isYt ? C.SRC.yt : C.SRC[cam.src];
-      const t = now();
-
-      $('m-tag').textContent  = city.name;
-      $('m-ttl').textContent  = cam.n;
-      $('m-org').textContent  = srcInf.lbl;
-      $('m-st').textContent   = s.lbl;
-      $('m-st').className     = `m-cv ${s.c}`;
-      $('m-tm').textContent   = t;
-      $('m-src').textContent  = srcInf.lbl;
-      $('m-src').style.background = srcInf.col;
-
-      const $med = $('m-med');
-      if(isYt) {
-        // ── YouTube iframe ──
-        // playsinline=1：iOS Safari 不全螢幕播放
-        // enablejsapi=0：不需要 JS API，減少被 CSP 擋的機率
-        // origin 參數：對應目前網域，避免 YouTube 拒絕嵌入
-        const origin = encodeURIComponent(location.origin);
-        $med.innerHTML = `
-          <iframe
-            src="https://www.youtube.com/embed/${cam.ytId}?autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=0&origin=${origin}"
-            allow="autoplay; encrypted-media; picture-in-picture"
-            allowfullscreen
-            loading="lazy"
-            title="${cam.n}">
-          </iframe>
-          <div class="m-live">● LIVE</div>`;
-      } else {
-        // ── 靜態圖 / TDX MJPEG ──
-        // 真實 TDX streamUrl 可直接替換 cam.img
-        $med.innerHTML = `
-          <img src="${cam.img}" alt="${cam.n}" style="opacity:1">
-          <div class="m-live">● LIVE</div>
-          <div class="m-ts">${t}</div>`;
-      }
-
-      $sh.style.transform='';
-      $bg.classList.add('open');
-      document.body.style.overflow='hidden';
-      isOpen=true;
-    },
-    close() {
-      if(!isOpen) return;
-      // 關閉時清空 iframe，停止影片串流節省資源
-      $('m-med').innerHTML='';
-      $bg.classList.remove('open');
-      document.body.style.overflow='';
-      $sh.style.transform='';
-      isOpen=false;
-    },
-  };
-})();
-
-/* ══════════════════════════════════════
-   APP：頂層路由
-══════════════════════════════════════ */
-const App = {
-  cur: 'map',
-  go(page, btn) {
-    if(page===this.cur && typeof btn !== 'object') return;
-    document.querySelectorAll('.pg').forEach(p=>p.classList.remove('active'));
-    document.querySelectorAll('.nav-it').forEach(b=>{ b.classList.remove('active'); b.removeAttribute('aria-current'); });
-    $(`pg-${page}`).classList.add('active');
-    if(btn instanceof Element){ btn.classList.add('active'); btn.setAttribute('aria-current','page'); }
-    this.cur=page;
-    if(page==='map') MapMod.invalidate();
-  },
-};
-
-// ESC 關閉 Modal
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') Modal.close(); });
-
-/* ══════════════════════════════════════
-   BOOT
-══════════════════════════════════════ */
-window.addEventListener('load', async () => {
-  Clock.init();
-  Theme.init();
-  MapMod.init();
-  List.init();
-
-  // 等待 CWA API，成功後重繪
-  await Data.init();
-
-  Bus.on('weather:updated', ()=>{
-    List.init();
-    MapMod.refreshMks();
-    Toast.show('🌤️ 天氣資料已更新');
-  });
-  Bus.on('weather:error', ()=>{
-    Toast.show('⚠️ 天氣載入失敗，顯示估計值');
-  });
-
-  $('js-loc').addEventListener('click', ()=>MapMod.locate());
-
-  // Enter 鍵觸發路線解析
-  $('js-route-input').addEventListener('keydown', e=>{ if(e.key==='Enter') RouteMod.parse(); });
-
-  document.fonts.ready.then(()=>document.body.style.visibility='visible');
-});
-</script>
+<script src="js/main.js"></script>    <!-- 模組邏輯與啟動 -->
 
 </body>
 </html>
