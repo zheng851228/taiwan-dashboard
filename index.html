@@ -155,7 +155,7 @@
   </div>
 
   <!-- YouTube 路線搜尋 Panel（路線解析完成後顯示） -->
-  <div id="yt-route-panel" class="hidden absolute top-[calc(var(--safe-top)+3rem)] right-4 z-[600] w-64 glass rounded-2xl p-3 shadow-2xl border border-red-500/30">
+  <div id="yt-route-panel" style="display:none;position:absolute;top:calc(var(--safe-top) + 3rem);right:1rem;z-index:600;width:16rem;" class="glass rounded-2xl p-3 shadow-2xl border border-red-500/30">
     <div class="flex items-center justify-between mb-2">
       <div class="flex items-center gap-1.5">
         <i class="fa-brands fa-youtube text-red-500"></i>
@@ -1838,43 +1838,52 @@ var YoutubeMod = {
 
   // 顯示 YouTube 搜尋 Panel
   showRouteSearch: function(coords) {
-    var cities = YoutubeMod.getRouteCities(coords);
-    if (cities.length === 0) return;
-
     var panel = document.getElementById('yt-route-panel');
-    if (!panel) return;
+    if (!panel) {
+      console.warn('yt-route-panel not found');
+      return;
+    }
+
+    var cities = YoutubeMod.getRouteCities(coords || []);
+    console.log('Route cities:', cities);
+
+    // 就算沒找到縣市也顯示 panel，用通用搜尋
+    if (cities.length === 0) {
+      cities = ['台灣'];
+    }
 
     var keyword = YoutubeMod.getSearchKeyword(cities);
-    var ytUrl   = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(keyword + ' live');
-
-    // 也產生幾個精確搜尋
-    var links = '';
     var searches = [
       keyword + ' live',
       cities.slice(0,2).join('') + ' 國道 路況',
       cities.slice(0,2).join('') + ' 省道 直播'
     ];
+
+    var links = '';
     searches.forEach(function(q) {
       var url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
       links += '<a href="' + url + '" target="_blank" ' +
-        'class="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 hover:bg-red-500/20 transition-colors text-xs">' +
-        '<i class="fa-brands fa-youtube text-red-500 shrink-0"></i>' +
-        '<span class="truncate">' + q + '</span>' +
-        '<i class="fa-solid fa-arrow-up-right-from-square text-slate-500 text-[10px] shrink-0"></i>' +
+        'style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:rgba(30,41,59,0.8);margin-bottom:6px;text-decoration:none;color:inherit;">' +
+        '<i class="fa-brands fa-youtube" style="color:#ef4444;flex-shrink:0;font-size:14px;"></i>' +
+        '<span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + q + '</span>' +
+        '<i class="fa-solid fa-arrow-up-right-from-square" style="color:#64748b;font-size:10px;flex-shrink:0;"></i>' +
         '</a>';
     });
 
-    var cityList = document.getElementById('yt-route-cities');
-    var linkList = document.getElementById('yt-route-links');
-    if (cityList) cityList.textContent = cities.slice(0,5).join(' → ');
-    if (linkList) linkList.innerHTML = links;
+    var cityEl = document.getElementById('yt-route-cities');
+    var linkEl = document.getElementById('yt-route-links');
+    if (cityEl) cityEl.textContent = cities.slice(0,5).join(' → ');
+    if (linkEl) linkEl.innerHTML = links;
 
+    // 強制顯示
+    panel.style.display = 'block';
     panel.classList.remove('hidden');
+    console.log('YouTube panel shown');
   },
 
   hide: function() {
     var panel = document.getElementById('yt-route-panel');
-    if (panel) panel.classList.add('hidden');
+    if (panel) { panel.style.display = 'none'; panel.classList.add('hidden'); }
   }
 };
 
