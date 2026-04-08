@@ -14,8 +14,8 @@
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700;900&display=swap');
     :root { --primary: #f97316; --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
     body { font-family: 'Inter','Noto Sans TC',sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden; background: #060d1f; }
-    .pg { display: none; height: 100%; width: 100%; animation: fadeIn 0.3s ease-out; }
-    .pg.active { display: flex; flex-direction: column; }
+    .pg { display: none; animation: fadeIn 0.3s ease-out; }
+    .pg.active { display: block; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
     .glass { background: rgba(15,23,42,0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
     #map { height: 100%; width: 100%; z-index: 1; }
@@ -65,11 +65,11 @@
 
   <!-- Main -->
 
-  <main class="flex-1 relative mt-0">
+  <main class="flex-1 relative mt-0 overflow-hidden">
 
 ```
 <!-- Page: 地圖 -->
-<section id="pg-map" class="pg active">
+<section id="pg-map" class="pg active" style="position:absolute;inset:0;">
   <div id="map"></div>
 
   <!-- 路徑解析（收合式） -->
@@ -172,7 +172,7 @@
 </section>
 
 <!-- Page: 路況列表 -->
-<section id="pg-list" class="pg bg-slate-900 pb-20 px-4 overflow-y-auto" style="padding-top:4rem;height:100%;-webkit-overflow-scrolling:touch;">
+<section id="pg-list" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-4">
 
     <!-- 分區 Tabs -->
@@ -208,7 +208,7 @@
 </section>
 
 <!-- Page: 環島助手 -->
-<section id="pg-tools" class="pg bg-slate-900 pb-20 px-4 overflow-y-auto" style="padding-top:4rem;height:100%;-webkit-overflow-scrolling:touch;">
+<section id="pg-tools" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-6">
 
     <!-- 天氣總覽 -->
