@@ -44,20 +44,20 @@
     /* yt-route-panel 固定浮層 */
     #yt-route-panel {
       position: fixed;
-      bottom: 90px;
-      left: 16px;
-      right: 16px;
-      max-width: 500px;
-      margin: 0 auto;
-      z-index: 900;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: calc(100% - 32px);
+      max-width: 480px;
+      z-index: 1800;
       display: none;
-      background: rgba(15,23,42,0.92);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(239,68,68,0.35);
+      background: rgba(10,18,38,0.97);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(239,68,68,0.45);
       border-radius: 20px;
-      padding: 14px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      padding: 16px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.8);
     }
     #yt-route-panel.visible {
       display: block;
@@ -132,15 +132,15 @@
   </div>
 
   <!-- 定位按鈕 -->
-  <div class="absolute bottom-6 right-4 z-[500] flex flex-col gap-3">
+  <div class="absolute bottom-[8rem] right-4 z-[500] flex flex-col gap-3">
     <button id="js-loc"
-      class="w-14 h-14 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 hover:scale-110 active:scale-90 transition-all">
-      <i class="fa-solid fa-location-crosshairs text-2xl"></i>
+      class="w-12 h-12 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 hover:scale-110 active:scale-90 transition-all">
+      <i class="fa-solid fa-location-crosshairs text-xl"></i>
     </button>
   </div>
 
   <!-- 附近攝影機 Panel -->
-  <div id="nearby-panel" class="hidden absolute bottom-24 right-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
+  <div id="nearby-panel" class="hidden absolute bottom-[8.5rem] right-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
     <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
       <div class="flex items-center gap-2">
         <span class="text-orange-500 text-sm">&#128205;</span>
@@ -162,21 +162,18 @@
     </div>
   </div>
 
-  <!-- 路線過濾 Banner -->
+  <!-- 路線過濾 Banner（細條版） -->
   <div id="js-route-banner"
-    class="hidden absolute bottom-24 left-1/2 -translate-x-1/2 z-[500] glass px-6 py-2 rounded-full border border-orange-500/50 shadow-2xl items-center gap-3">
-    <span class="text-xs font-bold text-orange-400 flex items-center gap-2">
-      <span class="relative flex h-2 w-2">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-      </span>
-      已過濾沿途路況攝影機
-    </span>
-    <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
+    class="hidden absolute bottom-[5.5rem] left-4 z-[500] items-center gap-2">
+    <div class="glass px-3 py-1.5 rounded-2xl border border-orange-500/30 shadow-lg flex items-center gap-2">
+      <span class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 animate-pulse"></span>
+      <span class="text-[10px] font-bold text-orange-400">已過濾沿途攝影機</span>
+      <button id="js-rb-clear" class="text-[10px] text-slate-400 hover:text-orange-400 font-bold ml-1">清除</button>
+    </div>
   </div>
 
   <!-- 圖例 -->
-  <div class="absolute bottom-24 left-4 z-[500] glass px-2.5 py-2 rounded-xl text-[10px]">
+  <div class="absolute bottom-[8rem] left-4 z-[500] glass px-2.5 py-2 rounded-xl text-[10px]">
     <div class="flex flex-col gap-1">
       <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-smooth inline-block"></span>順暢</div>
       <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-slow   inline-block"></span>緩慢</div>
@@ -1508,13 +1505,25 @@ var YoutubeMod = {
     if (cityEl) cityEl.textContent = cities.slice(0,5).join(' \u2192 ');
     if (linkEl) linkEl.innerHTML = links;
 
-    // 用 class 控制顯示（CSS 已定義 #yt-route-panel.visible { display:block }）
+    // 顯示 panel
     panel.classList.add('visible');
     panel.style.display = 'block';
+    // 加遮罩
+    var ov = document.getElementById('yt-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'yt-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1799;';
+      ov.addEventListener('click', function() { YoutubeMod.hide(); });
+      document.body.appendChild(ov);
+    }
+    ov.style.display = 'block';
   },
   hide: function() {
     var panel = document.getElementById('yt-route-panel');
     if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
+    var ov = document.getElementById('yt-overlay');
+    if (ov) ov.style.display = 'none';
   }
 };
 </script>
