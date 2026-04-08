@@ -556,9 +556,9 @@
     if (text.indexOf('http') === 0) {
       window._workerResult = null;
       expandGoogleUrl(text).then(function(fullUrl) {
-        // 優先使用 Worker 直接解析的起終點
-        if (window._workerResult && window._workerResult.start) {
-          onFill(window._workerResult.start, window._workerResult.end || '');
+        // 優先使用 Worker 直接解析的起終點+停靠點
+        if (window._workerResult && (window._workerResult.start || window._workerResult.end)) {
+          onFill(window._workerResult.start || '', window._workerResult.end || '', window._workerResult.waypoints || []);
           window._workerResult = null;
           return;
         }
@@ -687,9 +687,13 @@
     return fetch(workerUrl)
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        // Worker 直接解析好起終點，存到全域變數給 autoFillRoute 使用
-        if (data.start && data.end) {
-          window._workerResult = { start: data.start, end: data.end };
+        // Worker 直接解析好起終點+停靠點，存到全域變數
+        if (data.start !== undefined || data.end) {
+          window._workerResult = {
+            start:     data.start     || '',
+            end:       data.end       || '',
+            waypoints: data.waypoints || [],
+          };
         }
         return data.finalUrl || url;
       })
@@ -1119,7 +1123,40 @@
             return;
           }
           Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
-          return getRoadRoute(startPt, endPt, RouteMod.mode).then(function(coords) {
+          // 有停靠點時，分段計算路線再合併
+        var waypoints = window._pendingWaypoints || [];
+        var allPoints = [startPt].concat(
+          waypoints.map(function(wp) { return wp; })
+        ).concat([endPt]);
+        window._pendingWaypoints = [];
+
+        // 分段計算：每兩點之間呼叫一次 getRoadRoute
+        var segPromises = [];
+        for (var si = 0; si < allPoints.length - 1; si++) {
+          (function(a, b) {
+            segPromises.push(getRoadRoute(a, b, RouteMod.mode));
+          })(allPoints[si], allPoints[si+1]);
+        }
+
+        return Promise.all(
+          // 停靠點先 geocode 再計算路線
+          waypoints.length > 0
+            ? [Promise.all(waypoints.map(function(wp) { return extractPointFromUrl(simplifyAddress(wp)); }))]
+            : [Promise.resolve([])]
+        ).then(function(res) {
+          var wpPts = res[0].filter(function(p) { return p; });
+          var finalPoints = [startPt].concat(wpPts).concat([endPt]);
+          var segs = [];
+          for (var fi = 0; fi < finalPoints.length - 1; fi++) {
+            segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
+          }
+          return Promise.all(segs).then(function(segCoords) {
+            // 合併所有段落座標
+            var merged = [];
+            segCoords.forEach(function(seg) { merged = merged.concat(seg); });
+            return merged;
+          });
+        }).then(function(coords) {
             if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
             var info = window._lastRouteInfo;
             var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
@@ -1564,18 +1601,23 @@ function haversineKm(lat1, lon1, lat2, lon2) {
       urlText = urlText ? urlText.trim() : '';
       if (!urlText) return;
       if (gmapsStatus) { gmapsStatus.textContent = '解析中...'; gmapsStatus.classList.remove('hidden'); }
-      autoFillRoute(urlText, function(start, end) {
+      autoFillRoute(urlText, function(start, end, waypoints) {
         if (startEl2) startEl2.value = start || '';
         if (endEl2)   endEl2.value   = end   || '';
         if (gmapsInput) gmapsInput.value = '';
         if (gmapsStatus) { gmapsStatus.classList.add('hidden'); }
-        // 同步清除按鈕狀態
+        // 停靠點存起來，解析路線時一起帶入
+        window._pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
+        // 清除按鈕
         var cs = document.getElementById('clear-start');
         var ce = document.getElementById('clear-end');
         if (cs) cs.classList.toggle('hidden', !start);
         if (ce) ce.classList.toggle('hidden', !end);
         // 提示訊息
-        if (start && end) {
+        var wpCount = window._pendingWaypoints.length;
+        if (start && end && wpCount > 0) {
+          Toast.show('起點→' + wpCount + '停靠點→終點 已帶入', 3500);
+        } else if (start && end) {
           Toast.show('起：' + start.slice(0,10) + ' → 終：' + end.slice(0,10), 3500);
         } else if (end && !start) {
           Toast.show('終點已帶入，請補充起點', 3000);
