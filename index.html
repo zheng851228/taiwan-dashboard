@@ -944,7 +944,8 @@
 
 <script>
 (function() {
-  'use strict';
+  'use strict'      setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 300);
+;
 
   // Theme
   var ThemeMod = {
@@ -1169,7 +1170,6 @@
           var clearMini = document.getElementById('js-route-clear-small');
           if (clearMini) clearMini.classList.remove('hidden');
           RouteMod._doFilter('', coords);
-          setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 500);
         });
       }).catch(function() {
         if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
@@ -1198,6 +1198,7 @@
       if (cnt)  cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + RouteMod.filteredCams.length + ' \u652f';
       Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
       Bus.emit('filter:changed');
+      setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 300);
     },
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = [];
