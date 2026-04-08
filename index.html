@@ -69,6 +69,7 @@
 
   <main class="flex-1 relative mt-0">
 
+```
 <!-- Page: 地圖 -->
 <section id="pg-map" class="pg active">
   <div id="map"></div>
@@ -198,6 +199,7 @@
 
   </div>
 </section>
+```
 
   </main>
 
@@ -258,13 +260,609 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<script src="js/config.js"></script>
+<script>
+(function() {
+  'use strict';
 
-<script src="js/utils.js"></script>
+  window.Config = {
+    CWA_KEY: 'CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB',
+    MAP_CENTER: [23.9, 121.0],
+    MAP_ZOOM: 7,
+    ROUTE_FILTER_KM: 1.0,
+    SIMPLIFY_STEP: 5,
+    TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    TILE_ATTR: '&copy; OpenStreetMap &copy; CARTO',
+    STATUS_COLOR: {
+      smooth:  '#3fb950',
+      slow:    '#d29922',
+      jam:     '#da3633',
+      unknown: '#8b949e'
+    },
+    REGIONS: {
+      north:   ['台北市','新北市','基隆市','桃園市','新竹市','新竹縣','宜蘭縣'],
+      central: ['苗栗縣','台中市','彰化縣','南投縣','雲林縣'],
+      south:   ['嘉義市','嘉義縣','台南市','高雄市','屏東縣'],
+      east:    ['花蓮縣','台東縣'],
+      island:  ['澎湖縣','金門縣','連江縣']
+    }
+  };
+})();
 
-<script src="js/data.js"></script>
+</script>
 
-<script src="js/main.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // Event Bus
+  var _listeners = {};
+  window.Bus = {
+    on: function(evt, fn) {
+      if (!_listeners[evt]) _listeners[evt] = [];
+      _listeners[evt].push(fn);
+    },
+    emit: function(evt, data) {
+      (_listeners[evt] || []).forEach(function(fn) { fn(data); });
+    }
+  };
+
+  // Clock
+  window.Clock = {
+    start: function() {
+      var el = document.getElementById('clock');
+      function tick() {
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2,'0');
+        var m = String(now.getMinutes()).padStart(2,'0');
+        var s = String(now.getSeconds()).padStart(2,'0');
+        if (el) el.textContent = h + ':' + m + ':' + s;
+      }
+      tick();
+      setInterval(tick, 1000);
+    }
+  };
+
+  // Toast
+  window.Toast = {
+    show: function(msg, duration) {
+      var el = document.getElementById('toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(function() { el.classList.remove('show'); }, duration || 2500);
+    }
+  };
+
+  // 點到線段距離 (km)，Haversine 簡化版
+  function toRad(d) { return d * Math.PI / 180; }
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = toRad(lat2 - lat1);
+    var dLon = toRad(lon2 - lon1);
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
+            Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  window.distToSegKm = function(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay;
+    if (dx === 0 && dy === 0) return haversine(px, py, ax, ay);
+    var t = ((px - ax)*dx + (py - ay)*dy) / (dx*dx + dy*dy);
+    t = Math.max(0, Math.min(1, t));
+    return haversine(px, py, ax + t*dx, ay + t*dy);
+  };
+
+  // 座標抽稀
+  window.simplifyCoords = function(coords, step) {
+    step = step || Config.SIMPLIFY_STEP;
+    var out = [];
+    for (var i = 0; i < coords.length; i += step) {
+      out.push(coords[i]);
+    }
+    if (out[out.length-1] !== coords[coords.length-1]) {
+      out.push(coords[coords.length-1]);
+    }
+    return out;
+  };
+
+  // 判斷縣市屬於哪個 region
+  window.getRegion = function(county) {
+    var regions = Config.REGIONS;
+    for (var r in regions) {
+      if (regions[r].indexOf(county) !== -1) return r;
+    }
+    return 'other';
+  };
+
+  // 解析 Google Maps URL 中的座標點 (waypoints)
+  window.parseGoogleMapsCoords = function(url) {
+    var coords = [];
+    // 嘗試解析 /dir/ 路徑
+    var dirMatch = url.match(/\/dir\/([^@?]+)/);
+    if (dirMatch) {
+      var parts = dirMatch[1].split('/');
+      parts.forEach(function(p) {
+        var m = p.match(/^(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+        if (m) coords.push([parseFloat(m[1]), parseFloat(m[2])]);
+      });
+    }
+    // 嘗試解析 data= 內的座標序列
+    var dataMatch = url.match(/data=([^&]+)/);
+    if (dataMatch) {
+      var raw = decodeURIComponent(dataMatch[1]);
+      var re = /!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/g;
+      var m;
+      while ((m = re.exec(raw)) !== null) {
+        coords.push([parseFloat(m[1]), parseFloat(m[2])]);
+      }
+    }
+    // 備援：抓所有明顯台灣座標
+    if (coords.length < 2) {
+      var re2 = /([2][0-5]\.\d{4,}),\s*(1[12][0-9]\.\d{4,})/g;
+      var m2;
+      while ((m2 = re2.exec(url)) !== null) {
+        coords.push([parseFloat(m2[1]), parseFloat(m2[2])]);
+      }
+    }
+    return coords;
+  };
+})();
+
+</script>
+
+<script>
+(function() {
+  'use strict';
+
+  // 全台縣市中心座標
+  window.COUNTY_CENTERS = {
+    '台北市':   [25.0330, 121.5654],
+    '新北市':   [25.0120, 121.4653],
+    '基隆市':   [25.1283, 121.7419],
+    '桃園市':   [24.9937, 121.3010],
+    '新竹市':   [24.8138, 120.9675],
+    '新竹縣':   [24.6877, 121.1565],
+    '苗栗縣':   [24.2603, 120.7986],
+    '台中市':   [24.1477, 120.6736],
+    '彰化縣':   [23.9916, 120.6158],
+    '南投縣':   [23.9609, 120.9718],
+    '雲林縣':   [23.7092, 120.4313],
+    '嘉義市':   [23.4801, 120.4491],
+    '嘉義縣':   [23.4518, 120.2554],
+    '台南市':   [22.9999, 120.2270],
+    '高雄市':   [22.6273, 120.3014],
+    '屏東縣':   [22.5519, 120.5487],
+    '宜蘭縣':   [24.6941, 121.7378],
+    '花蓮縣':   [23.9871, 121.6015],
+    '台東縣':   [22.7972, 121.0713],
+    '澎湖縣':   [23.5711, 119.5793],
+    '金門縣':   [24.4493, 118.3765],
+    '連江縣':   [26.1971, 119.9395]
+  };
+
+  // 靜態 CCTV 資料（主要路段範例，可自行擴充）
+  var STATIC_CAMS = [
+    // 北部
+    { id: 's001', name: '國道1號-基隆端', county: '基隆市', lat: 25.1190, lng: 121.7218, url: 'https://cctv.thb.gov.tw/001.jpg', status: 'smooth' },
+    { id: 's002', name: '台北交流道', county: '台北市', lat: 25.0500, lng: 121.5200, url: 'https://cctv.thb.gov.tw/002.jpg', status: 'smooth' },
+    { id: 's003', name: '新北板橋', county: '新北市', lat: 25.0138, lng: 121.4635, url: 'https://cctv.thb.gov.tw/003.jpg', status: 'slow' },
+    { id: 's004', name: '桃園南崁', county: '桃園市', lat: 25.0610, lng: 121.2993, url: 'https://cctv.thb.gov.tw/004.jpg', status: 'smooth' },
+    { id: 's005', name: '新竹關西', county: '新竹縣', lat: 24.7946, lng: 121.1740, url: 'https://cctv.thb.gov.tw/005.jpg', status: 'smooth' },
+    // 中部
+    { id: 's006', name: '苗栗三義', county: '苗栗縣', lat: 24.3997, lng: 120.7576, url: 'https://cctv.thb.gov.tw/006.jpg', status: 'smooth' },
+    { id: 's007', name: '台中清水', county: '台中市', lat: 24.3601, lng: 120.5678, url: 'https://cctv.thb.gov.tw/007.jpg', status: 'jam' },
+    { id: 's008', name: '彰化交流道', county: '彰化縣', lat: 24.0739, lng: 120.5372, url: 'https://cctv.thb.gov.tw/008.jpg', status: 'slow' },
+    { id: 's009', name: '雲林斗南', county: '雲林縣', lat: 23.6787, lng: 120.4785, url: 'https://cctv.thb.gov.tw/009.jpg', status: 'smooth' },
+    // 南部
+    { id: 's010', name: '嘉義水上', county: '嘉義縣', lat: 23.4589, lng: 120.3912, url: 'https://cctv.thb.gov.tw/010.jpg', status: 'smooth' },
+    { id: 's011', name: '台南新市', county: '台南市', lat: 23.0740, lng: 120.3123, url: 'https://cctv.thb.gov.tw/011.jpg', status: 'smooth' },
+    { id: 's012', name: '高雄岡山', county: '高雄市', lat: 22.7965, lng: 120.2956, url: 'https://cctv.thb.gov.tw/012.jpg', status: 'slow' },
+    { id: 's013', name: '屏東九如', county: '屏東縣', lat: 22.7263, lng: 120.4817, url: 'https://cctv.thb.gov.tw/013.jpg', status: 'smooth' },
+    // 東部
+    { id: 's014', name: '宜蘭頭城', county: '宜蘭縣', lat: 24.8622, lng: 121.8192, url: 'https://cctv.thb.gov.tw/014.jpg', status: 'smooth' },
+    { id: 's015', name: '花蓮北埔', county: '花蓮縣', lat: 24.1326, lng: 121.6298, url: 'https://cctv.thb.gov.tw/015.jpg', status: 'smooth' },
+    { id: 's016', name: '台東卑南', county: '台東縣', lat: 22.7423, lng: 121.1416, url: 'https://cctv.thb.gov.tw/016.jpg', status: 'smooth' },
+    // 交通部 CCTV (外部 API 示範補充)
+    { id: 's017', name: '雪山隧道北口', county: '新北市', lat: 25.0234, lng: 121.7609, url: 'https://tisvcloud.freeway.gov.tw/cctv/01.jpg', status: 'unknown' },
+    { id: 's018', name: '國道3號木柵', county: '台北市', lat: 24.9941, lng: 121.5729, url: 'https://tisvcloud.freeway.gov.tw/cctv/02.jpg', status: 'unknown' },
+    { id: 's019', name: '台9線南迴', county: '台東縣', lat: 22.3219, lng: 120.8784, url: 'https://cctv.thb.gov.tw/019.jpg', status: 'smooth' },
+    { id: 's020', name: '蘇花公路', county: '花蓮縣', lat: 24.0890, lng: 121.7012, url: 'https://cctv.thb.gov.tw/020.jpg', status: 'smooth' }
+  ];
+
+  // 交通部高速公路 CCTV API (動態)
+  var THB_CCTV_API = 'https://tisvcloud.freeway.gov.tw/history/TDCS_M04A/latest.xml';
+
+  // 取得所有攝影機 (靜態 + 快取動態)
+  var _dynamicCams = [];
+  var _loaded = false;
+
+  window.Data = {
+    getCams: function() {
+      return STATIC_CAMS.concat(_dynamicCams);
+    },
+    allCams: function() {
+      return STATIC_CAMS.concat(_dynamicCams);
+    },
+    loadDynamic: function() {
+      // 嘗試載入交通部動態資料（HTTPS OK）
+      fetch('https://ptx.transportdata.tw/MOTC/v2/Road/Traffic/Live?%24top=50&%24format=JSON')
+        .then(function(r) { return r.json(); })
+        .then(function(arr) {
+          if (!Array.isArray(arr)) return;
+          arr.forEach(function(item) {
+            if (item.PositionLat && item.PositionLon) {
+              _dynamicCams.push({
+                id: 'dyn_' + item.CCTVId,
+                name: item.CCTVName || item.CCTVId,
+                county: item.County || '未知',
+                lat: parseFloat(item.PositionLat),
+                lng: parseFloat(item.PositionLon),
+                url: item.VideoStreamURL || '',
+                status: 'unknown'
+              });
+            }
+          });
+          _loaded = true;
+          Bus.emit('cams:updated');
+        })
+        .catch(function() {
+          _loaded = true;
+          Bus.emit('cams:updated');
+        });
+    },
+    // 氣象資料
+    weather: {},
+    fetchWeather: function() {
+      var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=' +
+                Config.CWA_KEY + '&format=JSON&limit=50';
+      fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(json) {
+          var stations = json && json.records && json.records.Station;
+          if (!Array.isArray(stations)) return;
+          stations.forEach(function(s) {
+            var county = s.GeoInfo && s.GeoInfo.CountyName;
+            if (!county) return;
+            var obs = s.WeatherElement;
+            if (!Data.weather[county]) {
+              Data.weather[county] = {
+                temp: obs && obs.AirTemperature,
+                weather: obs && obs.Weather,
+                rain: obs && obs.Now && obs.Now.Precipitation
+              };
+            }
+          });
+          Bus.emit('weather:updated');
+        })
+        .catch(function() {});
+    }
+  };
+
+  window.Data.loadDynamic();
+  window.Data.fetchWeather();
+})();
+
+</script>
+
+<script>
+(function() {
+  'use strict';
+
+  // Theme
+  var ThemeMod = {
+    dark: true,
+    init: function() {
+      var btn = document.getElementById('js-theme');
+      if (!btn) return;
+      btn.addEventListener('click', function() { ThemeMod.toggle(); });
+    },
+    toggle: function() {
+      ThemeMod.dark = !ThemeMod.dark;
+      var btn = document.getElementById('js-theme');
+      if (ThemeMod.dark) {
+        document.body.classList.remove('light');
+        if (btn) btn.textContent = '\u{1F319}';
+        MapMod.setTile(Config.TILE_DARK);
+      } else {
+        document.body.classList.add('light');
+        if (btn) btn.textContent = '\u2600\uFE0F';
+        MapMod.setTile(Config.TILE_LIGHT);
+      }
+    }
+  };
+
+  // Clock
+  var ClockMod = {
+    init: function() {
+      var clkEl  = document.getElementById('js-clk');
+      var dateEl = document.getElementById('js-date');
+      function tick() {
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2,'0');
+        var m = String(now.getMinutes()).padStart(2,'0');
+        var s = String(now.getSeconds()).padStart(2,'0');
+        if (clkEl) clkEl.textContent = h + ':' + m + ':' + s;
+        if (dateEl) {
+          var y  = now.getFullYear();
+          var mo = String(now.getMonth()+1).padStart(2,'0');
+          var d  = String(now.getDate()).padStart(2,'0');
+          dateEl.textContent = y + '/' + mo + '/' + d;
+        }
+      }
+      tick();
+      setInterval(tick, 1000);
+    }
+  };
+
+  // Toast
+  var ToastMod = {
+    show: function(msg, ms) {
+      var el = document.getElementById('toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.style.opacity = '1';
+      el.style.transform = 'translateX(-50%) translateY(0)';
+      setTimeout(function() {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(-50%) translateY(8px)';
+      }, ms || 2500);
+    }
+  };
+  window.Toast = ToastMod;
+
+  // Page Nav
+  var NavMod = {
+    current: 'map',
+    pages:   { map: 'pg-map', list: 'pg-list', tools: 'pg-tools' },
+    navBtns: { map: 'nav-map', list: 'nav-list', tools: 'nav-tools' },
+    init: function() {
+      Object.keys(NavMod.navBtns).forEach(function(key) {
+        var btn = document.getElementById(NavMod.navBtns[key]);
+        if (!btn) return;
+        btn.addEventListener('click', function() { NavMod.go(key); });
+      });
+    },
+    go: function(key) {
+      Object.keys(NavMod.pages).forEach(function(k) {
+        var pg  = document.getElementById(NavMod.pages[k]);
+        var btn = document.getElementById(NavMod.navBtns[k]);
+        if (pg)  pg.classList.toggle('active', k === key);
+        if (btn) {
+          btn.classList.toggle('active', k === key);
+          btn.classList.toggle('text-slate-500', k !== key);
+        }
+      });
+      NavMod.current = key;
+      if (key === 'map') setTimeout(function() { MapMod.map.invalidateSize(); }, 50);
+    }
+  };
+
+  // Map
+  var MapMod = {
+    map: null,
+    tileLayer: null,
+    markers: [],
+    routeLayer: null,
+    init: function() {
+      MapMod.map = L.map('map', { center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM, zoomControl: true });
+      MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
+    },
+    setTile: function(url) { if (MapMod.tileLayer) MapMod.tileLayer.setUrl(url); },
+    clearMarkers: function() {
+      MapMod.markers.forEach(function(m) { MapMod.map.removeLayer(m); });
+      MapMod.markers = [];
+    },
+    addMarker: function(cam) {
+      var color = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="width:12px;height:12px;border-radius:50%;background:' + color + ';border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 6px ' + color + '"></div>',
+        iconSize: [12,12], iconAnchor: [6,6]
+      });
+      var marker = L.marker([cam.lat, cam.lng], { icon: icon })
+        .addTo(MapMod.map)
+        .bindTooltip(cam.name, { direction: 'top', offset: [0,-8] });
+      marker.on('click', function() { ModalMod.open(cam); });
+      MapMod.markers.push(marker);
+    },
+    drawRoute: function(coords) {
+      if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
+      if (!coords || coords.length < 2) return;
+      var latlngs = coords.map(function(c) { return [c[0], c[1]]; });
+      MapMod.routeLayer = L.polyline(latlngs, { color: '#f97316', weight: 3, opacity: 0.8, dashArray: '8,4' }).addTo(MapMod.map);
+      MapMod.map.fitBounds(MapMod.routeLayer.getBounds(), { padding: [40,40] });
+    },
+    clearRoute: function() {
+      if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
+    }
+  };
+
+  // Route
+  var RouteMod = {
+    active: false,
+    filteredCams: [],
+    init: function() {
+      var btn      = document.getElementById('js-route-btn');
+      var clearBtn = document.getElementById('js-rb-clear');
+      var locBtn   = document.getElementById('js-loc');
+      if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
+      if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
+      if (locBtn)   locBtn.addEventListener('click', function() { RouteMod.locate(); });
+    },
+    analyze: function() {
+      var input = document.getElementById('js-route-input');
+      if (!input) return;
+      var url = input.value.trim();
+      if (!url) { ToastMod.show('請貼上 Google Maps 網址'); return; }
+      var coords = parseGoogleMapsCoords(url);
+      if (coords.length < 2) { ToastMod.show('無法解析座標，請確認網址格式'); return; }
+      var simplified = simplifyCoords(coords, Config.SIMPLIFY_STEP);
+      RouteMod.active = true;
+      RouteMod.filteredCams = Data.allCams().filter(function(cam) {
+        for (var i = 0; i < simplified.length - 1; i++) {
+          var d = distToSegKm(cam.lat, cam.lng, simplified[i][0], simplified[i][1], simplified[i+1][0], simplified[i+1][1]);
+          if (d <= Config.ROUTE_FILTER_KM) return true;
+        }
+        return false;
+      });
+      MapMod.drawRoute(simplified);
+      var statusEl = document.getElementById('js-route-status');
+      if (statusEl) statusEl.textContent = '找到 ' + RouteMod.filteredCams.length + ' 支沿途攝影機';
+      var banner = document.getElementById('js-route-banner');
+      if (banner) { banner.classList.remove('hidden'); banner.classList.add('flex'); }
+      var info = document.getElementById('js-list-route-info');
+      var cnt  = document.getElementById('js-list-route-count');
+      if (info) { info.classList.remove('hidden'); info.classList.add('flex'); }
+      if (cnt)  cnt.textContent = '路線過濾中：共 ' + RouteMod.filteredCams.length + ' 支沿途攝影機';
+      ToastMod.show('找到 ' + RouteMod.filteredCams.length + ' 支沿途攝影機');
+      Bus.emit('filter:changed');
+    },
+    clear: function() {
+      RouteMod.active = false;
+      RouteMod.filteredCams = [];
+      MapMod.clearRoute();
+      var input    = document.getElementById('js-route-input');
+      var statusEl = document.getElementById('js-route-status');
+      var banner   = document.getElementById('js-route-banner');
+      var info     = document.getElementById('js-list-route-info');
+      if (input)    input.value = '';
+      if (statusEl) statusEl.textContent = '';
+      if (banner)   { banner.classList.add('hidden'); banner.classList.remove('flex'); }
+      if (info)     { info.classList.add('hidden');   info.classList.remove('flex'); }
+      Bus.emit('filter:changed');
+    },
+    locate: function() {
+      if (!navigator.geolocation) { ToastMod.show('瀏覽器不支援定位'); return; }
+      navigator.geolocation.getCurrentPosition(
+        function(pos) { MapMod.map.setView([pos.coords.latitude, pos.coords.longitude], 13); },
+        function()    { ToastMod.show('無法取得位置'); }
+      );
+    }
+  };
+
+  // List
+  var ListMod = {
+    currentRegion: 'all',
+    searchText: '',
+    init: function() {
+      document.querySelectorAll('.rtab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.rtab').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          ListMod.currentRegion = btn.dataset.r;
+          Bus.emit('filter:changed');
+        });
+      });
+      var searchEl = document.getElementById('js-search');
+      if (searchEl) {
+        searchEl.addEventListener('input', function() {
+          ListMod.searchText = searchEl.value.trim().toLowerCase();
+          Bus.emit('filter:changed');
+        });
+      }
+    },
+    getFiltered: function() {
+      var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
+      return cams.filter(function(cam) {
+        var regionOk = ListMod.currentRegion === 'all' || getRegion(cam.county) === ListMod.currentRegion;
+        var searchOk = !ListMod.searchText ||
+          cam.name.toLowerCase().indexOf(ListMod.searchText) !== -1 ||
+          cam.county.toLowerCase().indexOf(ListMod.searchText) !== -1;
+        return regionOk && searchOk;
+      });
+    },
+    render: function() {
+      var listEl = document.getElementById('js-list-inner');
+      if (!listEl) return;
+      var cams = ListMod.getFiltered();
+      MapMod.clearMarkers();
+      var statEl = document.getElementById('js-stat-cams');
+      if (statEl) statEl.textContent = Data.allCams().length;
+      if (cams.length === 0) {
+        listEl.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">找不到攝影機</div>';
+        return;
+      }
+      var allCamsMap = {};
+      Data.allCams().forEach(function(c) { allCamsMap[c.id] = c; });
+      var html = '';
+      cams.forEach(function(cam) {
+        var color   = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
+        var weather = Data.weather[cam.county];
+        var wText   = weather ? (weather.temp + '\u00B0C ' + (weather.weather || '')) : '';
+        html += '<div class="cam-card glass rounded-2xl p-4 flex items-center gap-4 cursor-pointer border border-white/5" data-id="' + cam.id + '">' +
+          '<div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:' + color + '22">' +
+          '<span class="w-3 h-3 rounded-full inline-block" style="background:' + color + '"></span>' +
+          '</div>' +
+          '<div class="flex-1 min-w-0">' +
+          '<div class="font-bold text-sm truncate">' + cam.name + '</div>' +
+          '<div class="text-[11px] text-slate-400 mt-0.5">' + cam.county + (wText ? ' · ' + wText : '') + '</div>' +
+          '</div>' +
+          '<i class="fa-solid fa-chevron-right text-slate-600 text-sm shrink-0"></i>' +
+          '</div>';
+        MapMod.addMarker(cam);
+      });
+      listEl.innerHTML = html;
+      listEl.querySelectorAll('.cam-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+          var cam = allCamsMap[card.dataset.id];
+          if (!cam) return;
+          ModalMod.open(cam);
+          NavMod.go('map');
+          MapMod.map.setView([cam.lat, cam.lng], 14);
+        });
+      });
+    }
+  };
+
+  // Modal
+  var ModalMod = {
+    open: function(cam) {
+      var ttl = document.getElementById('m-ttl');
+      var org = document.getElementById('m-org');
+      var med = document.getElementById('m-med');
+      if (ttl) ttl.textContent = cam.name;
+      if (org) {
+        var weather = Data.weather[cam.county];
+        var wText   = weather ? (' · ' + weather.temp + '\u00B0C ' + (weather.weather || '')) : '';
+        org.textContent = '\u{1F4CD} ' + cam.county + wText;
+      }
+      if (med) {
+        med.innerHTML = '';
+        if (cam.url) {
+          var img = document.createElement('img');
+          img.src = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Date.now();
+          img.className = 'w-full h-full object-contain';
+          img.alt = cam.name;
+          img.onerror = function() {
+            med.innerHTML = '<div class="text-slate-500 text-sm p-8 text-center">\u26A0\uFE0F \u5F71\u50CF\u7121\u6CD5\u8F09\u5165<br><span class="text-xs text-slate-600 mt-2 block">HTTP \u4F86\u6E90\u6216\u651D\u5F71\u6A5F\u96E2\u7DDA</span></div>';
+          };
+          med.appendChild(img);
+        } else {
+          med.innerHTML = '<div class="text-slate-500 text-sm p-8">\u7121\u5F71\u50CF\u4F86\u6E90</div>';
+        }
+      }
+      if (window.ModalEffect) window.ModalEffect.open();
+    }
+  };
+
+  // Bootstrap
+  window.addEventListener('load', function() {
+    ClockMod.init();
+    MapMod.init();
+    ThemeMod.init();
+    NavMod.init();
+    RouteMod.init();
+    ListMod.init();
+    Bus.on('filter:changed',  function() { ListMod.render(); });
+    Bus.on('cams:updated',    function() { ListMod.render(); });
+    Bus.on('weather:updated', function() { ListMod.render(); });
+    ListMod.render();
+  });
+})();
+
+</script>
 
 <script>
   var modal   = document.getElementById('modal');
