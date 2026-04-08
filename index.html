@@ -106,17 +106,32 @@
     </div>
     <!-- 展開狀態 -->
     <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
+      <!-- 貼路線網址區塊 -->
+      <div class="bg-slate-800/60 rounded-xl px-3 py-2 flex items-center gap-2">
+        <i class="fa-brands fa-google text-blue-400 text-xs shrink-0"></i>
+        <input type="text" id="js-gmaps-url"
+          class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
+          placeholder="貼上 Google Maps 路線網址（自動填入起終點）" />
+        <button id="js-gmaps-parse" class="text-[10px] text-orange-400 font-black shrink-0 hover:text-orange-300">帶入</button>
+      </div>
+      <div id="js-gmaps-status" class="text-[10px] text-blue-400 px-1 hidden"></div>
       <div class="flex gap-2 items-center">
         <span class="text-green-400 text-xs font-black shrink-0 w-6">起</span>
-        <input type="text" id="js-route-start"
-          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
-          placeholder="起點地名或 Google Maps 網址..." />
+        <div class="flex-1 relative">
+          <input type="text" id="js-route-start"
+            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="起點地名或座標..." />
+          <button id="clear-start" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
+        </div>
       </div>
       <div class="flex gap-2 items-center">
         <span class="text-red-400 text-xs font-black shrink-0 w-6">終</span>
-        <input type="text" id="js-route-end"
-          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
-          placeholder="終點地名或 Google Maps 網址..." />
+        <div class="flex-1 relative">
+          <input type="text" id="js-route-end"
+            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="終點地名或座標..." />
+          <button id="clear-end" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
+        </div>
       </div>
       <div class="flex gap-2">
         <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949;&#65039; 機車</button>
@@ -490,30 +505,21 @@
   window.autoFillRoute = function(text, onFill) {
     text = text.trim();
     if (!text) return false;
-    // 直接是長網址，先試解析
-    var result = parseRouteStartEnd(text);
-    if (result) { onFill(result.start, result.end); return true; }
-    // 短網址或任何含 goo.gl / maps.app 的連結
-    var isShort = text.indexOf('maps.app.goo.gl') !== -1 ||
-                  text.indexOf('goo.gl/maps') !== -1 ||
-                  text.indexOf('maps.google') !== -1;
-    if (isShort || text.indexOf('http') === 0) {
+    // 直接長網址含 /dir/ — 直接解析地名
+    if (text.indexOf('google.com/maps/dir') !== -1) {
+      var result = parseRouteStartEnd(text);
+      if (result && result.start && result.end) { onFill(result.start, result.end); return true; }
+    }
+    // 任何 http 連結 — 展開後解析
+    if (text.indexOf('http') === 0) {
       expandGoogleUrl(text).then(function(fullUrl) {
-        // 嘗試從展開後 URL 抓起終點
+        // 1. /dir/ 地名解析
         var r = parseRouteStartEnd(fullUrl);
-        if (r) { onFill(r.start, r.end); return; }
-        // 嘗試抓座標
+        if (r && r.start && r.end) { onFill(r.start, r.end); return; }
+        // 2. data= 座標序列
         var coords = parseGoogleMapsCoords(fullUrl);
         if (coords.length >= 2) {
-          onFill(coords[0][0] + ',' + coords[0][1],
-                 coords[coords.length-1][0] + ',' + coords[coords.length-1][1]);
-          return;
-        }
-        // 嘗試從 @ 座標抓單點（地點網址，非路線）
-        var mAt = fullUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-        if (mAt) {
-          Toast.show('做為起點帶入，請輸入終點');
-          onFill(parseFloat(mAt[1]) + ',' + parseFloat(mAt[2]), '');
+          onFill(coords[0][0]+','+coords[0][1], coords[coords.length-1][0]+','+coords[coords.length-1][1]);
           return;
         }
         Toast.show('無法解析此連結，請手動輸入起終點');
@@ -581,30 +587,31 @@
 
   window.expandGoogleUrl = function(url) {
     if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) return Promise.resolve(url);
-    // 多重展開策略
-    var proxies = [
-      'https://corsproxy.io/?' + encodeURIComponent(url),
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
-    ];
-    function tryProxy(i) {
-      if (i >= proxies.length) return Promise.resolve(url);
-      return fetch(proxies[i], { method: 'GET', redirect: 'follow' })
-        .then(function(r) {
-          // 取最終 URL（redirect 後）
-          var finalUrl = r.url || url;
-          // allorigins 會回傳 HTML，從 Location header 或 body 抽取真實 URL
-          if (finalUrl.indexOf('allorigins') !== -1) {
-            return r.text().then(function(body) {
-              // 從 body 找 google maps URL
-              var m = body.match(/https:\/\/www\.google\.com\/maps\/[^\s"'<>]+/);
-              return m ? m[0] : url;
-            });
-          }
-          return finalUrl;
-        })
-        .catch(function() { return tryProxy(i + 1); });
-    }
-    return tryProxy(0);
+    // 策略 1: allorigins JSON API — 回傳最終 HTML，從中抽取真實 URL
+    var ao = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+    return fetch(ao)
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        var html = j.contents || '';
+        // 找 canonical URL 或 og:url
+        var m1 = html.match(/rel="canonical"\s+href="([^"]+)"/);
+        if (m1 && m1[1].indexOf('google.com/maps') !== -1) return m1[1];
+        var m2 = html.match(/property="og:url"\s+content="([^"]+)"/);
+        if (m2 && m2[1].indexOf('google.com/maps') !== -1) return m2[1];
+        // 找任何 google maps dir URL
+        var m3 = html.match(/https:\/\/(?:www\.)?google\.com\/maps\/dir\/[^"'\s<>\\]+/);
+        if (m3) return m3[0];
+        // 找 /maps/ 任何路徑
+        var m4 = html.match(/https:\/\/(?:www\.)?google\.com\/maps\/[^"'\s<>\\]+/);
+        if (m4) return m4[0];
+        return url;
+      })
+      .catch(function() {
+        // 備援: corsproxy.io
+        return fetch('https://corsproxy.io/?' + encodeURIComponent(url), { redirect: 'follow' })
+          .then(function(r) { return r.url && r.url.indexOf('google.com/maps') !== -1 ? r.url : url; })
+          .catch(function() { return url; });
+      });
   };
 
   window.parseGoogleMapsCoords = function(url) {
@@ -1461,6 +1468,76 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         clearMini.classList.add('hidden');
       });
     }
+
+    // Google Maps 路線網址帶入功能
+    var gmapsInput  = document.getElementById('js-gmaps-url');
+    var gmapsBtn    = document.getElementById('js-gmaps-parse');
+    var gmapsStatus = document.getElementById('js-gmaps-status');
+    var startEl2    = document.getElementById('js-route-start');
+    var endEl2      = document.getElementById('js-route-end');
+
+    function doGmapsParse(urlText) {
+      urlText = urlText ? urlText.trim() : '';
+      if (!urlText) return;
+      if (gmapsStatus) { gmapsStatus.textContent = '解析中...'; gmapsStatus.classList.remove('hidden'); }
+      autoFillRoute(urlText, function(start, end) {
+        if (startEl2) startEl2.value = start || '';
+        if (endEl2)   endEl2.value   = end   || '';
+        if (gmapsInput) gmapsInput.value = '';
+        if (gmapsStatus) { gmapsStatus.classList.add('hidden'); }
+        if (start && end) {
+          Toast.show('起點：' + start.slice(0,12) + '  終點：' + end.slice(0,12), 3500);
+        } else if (start) {
+          Toast.show('起點已帶入，請補充終點');
+        }
+      });
+    }
+
+    if (gmapsBtn) {
+      gmapsBtn.addEventListener('click', function() {
+        if (gmapsInput) doGmapsParse(gmapsInput.value);
+      });
+    }
+    if (gmapsInput) {
+      gmapsInput.addEventListener('paste', function(e) {
+        var txt = (e.clipboardData || window.clipboardData).getData('text');
+        setTimeout(function() { doGmapsParse(txt || gmapsInput.value); }, 80);
+      });
+      gmapsInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doGmapsParse(gmapsInput.value);
+      });
+    }
+
+    // 起終點清除按鈕
+    function bindClearBtn(inputId, btnId) {
+      var inp = document.getElementById(inputId);
+      var btn = document.getElementById(btnId);
+      if (!inp || !btn) return;
+      inp.addEventListener('input', function() {
+        btn.classList.toggle('hidden', inp.value.length === 0);
+      });
+      btn.addEventListener('click', function() {
+        inp.value = '';
+        btn.classList.add('hidden');
+        inp.focus();
+      });
+    }
+    bindClearBtn('js-route-start', 'clear-start');
+    bindClearBtn('js-route-end',   'clear-end');
+
+    // doGmapsParse 填入後顯示清除按鈕
+    var _origDoGmaps = doGmapsParse;
+    doGmapsParse = function(urlText) {
+      _origDoGmaps(urlText);
+      setTimeout(function() {
+        var s = document.getElementById('js-route-start');
+        var e = document.getElementById('js-route-end');
+        var cs = document.getElementById('clear-start');
+        var ce = document.getElementById('clear-end');
+        if (s && cs) cs.classList.toggle('hidden', s.value.length === 0);
+        if (e && ce) ce.classList.toggle('hidden', e.value.length === 0);
+      }, 600);
+    };
   });
 })();
 
