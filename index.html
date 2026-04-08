@@ -609,6 +609,21 @@
     return geocodeName(s);
   };
 
+  // 簡化過長地址，只保留到路名為止（讓 Nominatim 能解析）
+  window.simplifyAddress = function(addr) {
+    if (!addr) return addr;
+    addr = addr.trim();
+    // 座標格式直接回傳
+    if (/^-?[0-9]+\.[0-9]+,-?[0-9]+\.[0-9]+$/.test(addr)) return addr;
+    // 移除空格後的重複地名部分
+    if (addr.indexOf(' ') !== -1) addr = addr.split(' ')[0];
+    // 保留到路/街/道/館/站/場等地標關鍵字為止
+    var m = addr.match(/^(.+?(?:路|街|道|巧|大道|大學|博物館|車站|機場|公園|廟|寺|館|院|場|橋|站|港|廠|廣場))/);
+    if (m) return m[1];
+    // 最多20字
+    return addr.slice(0, 20);
+  };
+
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
     var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
     // 機車模式：用 OSRM driving + exclude motorway/trunk（避開國道/快速道路）
@@ -1092,7 +1107,9 @@
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
       var btn = document.getElementById('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
-      Promise.all([extractPointFromUrl(startVal), extractPointFromUrl(endVal)])
+      var startSimple = simplifyAddress(startVal);
+      var endSimple   = simplifyAddress(endVal);
+      Promise.all([extractPointFromUrl(startSimple), extractPointFromUrl(endSimple)])
         .then(function(results) {
           var startPt = results[0];
           var endPt   = results[1];
