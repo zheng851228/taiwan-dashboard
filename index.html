@@ -48,23 +48,17 @@
 
   <!-- Top Bar -->
 
-  <header class="fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.5rem)] pb-3 glass rounded-b-3xl shadow-2xl">
+  <header class="fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.25rem)] pb-2 glass shadow-2xl">
     <div class="flex justify-between items-center max-w-5xl mx-auto">
       <div class="flex items-center gap-2">
-        <div class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
-          <i class="fa-solid fa-motorcycle text-white text-xl"></i>
+        <div class="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center shadow-lg shadow-orange-500/30">
+          <i class="fa-solid fa-motorcycle text-white text-xs"></i>
         </div>
-        <div>
-          <h1 class="text-lg font-black tracking-tighter leading-none">環島路況指揮中心</h1>
-          <p class="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Taiwan Road Command Center</p>
-        </div>
+        <h1 class="text-sm font-black tracking-tighter leading-none">環島路況指揮中心</h1>
       </div>
-      <div class="flex items-center gap-3">
-        <div class="text-right hidden sm:block">
-          <div id="js-clk" class="text-sm font-mono font-bold leading-none">--:--:--</div>
-          <div id="js-date" class="text-[10px] text-slate-400">----/--/--</div>
-        </div>
-        <button id="js-theme" class="w-10 h-10 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-xl">🌙</button>
+      <div class="flex items-center gap-2">
+        <div id="js-clk" class="text-xs font-mono font-bold text-slate-300">--:--:--</div>
+        <button id="js-theme" class="w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base">🌙</button>
       </div>
     </div>
   </header>
@@ -78,36 +72,42 @@
 <section id="pg-map" class="pg active">
   <div id="map"></div>
 
-  <!-- 路徑解析 -->
-  <div class="absolute top-[calc(var(--safe-top)+5rem)] left-4 right-4 z-[500] max-w-lg">
-    <div class="glass p-3 rounded-2xl shadow-xl space-y-2">
+  <!-- 路徑解析（收合式） -->
+  <div class="absolute top-[calc(var(--safe-top)+3rem)] left-4 right-4 z-[500] max-w-lg">
+    <!-- 收合狀態：單行（支援直接貼路線網址） -->
+    <div id="route-collapsed" class="glass px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2">
+      <i class="fa-solid fa-route text-orange-500 text-sm shrink-0"></i>
+      <input id="route-paste-input" type="text"
+        class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500 min-w-0"
+        placeholder="貼上 Google Maps 路線網址或點此展開..." />
+      <button id="route-toggle" class="text-orange-500 text-xs shrink-0 hover:text-orange-400">展開</button>
+      <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">✕</button>
+    </div>
+    <!-- 展開狀態 -->
+    <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
       <div class="flex gap-2 items-center">
-        <span class="text-green-400 text-xs font-black shrink-0">起點</span>
+        <span class="text-green-400 text-xs font-black shrink-0 w-6">起</span>
         <input type="text" id="js-route-start"
-          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
-          placeholder="貼上起點 Google Maps 網址或地名..." />
+          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
+          placeholder="起點地名或 Google Maps 網址..." />
       </div>
       <div class="flex gap-2 items-center">
-        <span class="text-red-400 text-xs font-black shrink-0">終點</span>
+        <span class="text-red-400 text-xs font-black shrink-0 w-6">終</span>
         <input type="text" id="js-route-end"
-          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
-          placeholder="貼上終點 Google Maps 網址或地名..." />
+          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+          placeholder="終點地名或 Google Maps 網址..." />
       </div>
-      <!-- 交通模式切換 -->
       <div class="flex gap-2">
-        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-2 rounded-xl text-sm font-bold transition-all border border-white/10 bg-orange-500 text-white">
-          🏍️ 機車
-        </button>
-        <button data-mode="car" class="route-mode-btn flex-1 py-2 rounded-xl text-sm font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">
-          🚗 汽車
-        </button>
+        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">🏍️ 機車</button>
+        <button data-mode="car" class="route-mode-btn flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">🚗 汽車</button>
+        <button id="route-toggle-close" class="px-3 py-1.5 rounded-xl text-xs text-slate-500 border border-white/10 bg-slate-800/50">收起</button>
       </div>
       <button id="js-route-btn"
-        class="w-full bg-orange-500 hover:bg-orange-600 py-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-95">
-        🔍 解析路線，找沿途攝影機
+        class="w-full bg-orange-500 hover:bg-orange-600 py-2 rounded-xl text-white font-bold text-xs transition-all active:scale-95">
+        🔍 解析路線找沿途攝影機
       </button>
     </div>
-    <div id="js-route-status" class="mt-2 text-[11px] px-2 font-bold text-orange-400 drop-shadow-md"></div>
+    <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-400 drop-shadow-md"></div>
   </div>
 
   <!-- 定位按鈕 -->
@@ -154,27 +154,25 @@
     <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
   </div>
 
-  <!-- 圖例 + 路況統計 -->
-  <div class="absolute bottom-24 left-4 z-[500] glass px-4 py-3 rounded-2xl text-xs space-y-1.5">
-    <div class="text-[10px] text-slate-400 font-bold mb-1">路況圖例</div>
-    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-smooth inline-block"></span>順暢</div>
-    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-slow   inline-block"></span>緩慢</div>
-    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-jam    inline-block"></span>壅塞</div>
-    <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>未知</div>
-    <div class="border-t border-white/10 pt-1.5 mt-1">
-      <div class="text-[10px] text-slate-400 font-bold mb-1">即時統計</div>
-      <div id="status-summary" class="flex gap-2 text-[11px] font-bold">
-        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>--</div>
-        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>--</div>
-        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>--</div>
-      </div>
-      <div id="status-ts" class="text-[9px] text-slate-600 mt-1">載入中...</div>
+  <!-- 圖例（緊湊版） -->
+  <div class="absolute bottom-24 left-4 z-[500] glass px-2.5 py-2 rounded-xl text-[10px]">
+    <div class="flex flex-col gap-1">
+      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-smooth inline-block"></span>順暢</div>
+      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-slow   inline-block"></span>緩慢</div>
+      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-jam    inline-block"></span>壅塞</div>
+      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-unknown inline-block"></span>未知</div>
     </div>
+    <div id="status-summary" class="flex gap-1.5 mt-1.5 pt-1.5 border-t border-white/10 font-bold">
+      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span><span id="cnt-smooth">-</span></span>
+      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block"></span><span id="cnt-slow">-</span></span>
+      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span><span id="cnt-jam">-</span></span>
+    </div>
+    <div id="status-ts" class="text-[9px] text-slate-600 mt-0.5">載入中...</div>
   </div>
 </section>
 
 <!-- Page: 路況列表 -->
-<section id="pg-list" class="pg bg-slate-900 pt-24 pb-20 px-4 overflow-y-auto">
+<section id="pg-list" class="pg bg-slate-900 pb-20 px-4 overflow-y-auto" style="padding-top:4rem;height:100%;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-4">
 
     <!-- 分區 Tabs -->
@@ -210,7 +208,7 @@
 </section>
 
 <!-- Page: 環島助手 -->
-<section id="pg-tools" class="pg bg-slate-900 pt-24 pb-20 px-4 overflow-y-auto">
+<section id="pg-tools" class="pg bg-slate-900 pb-20 px-4 overflow-y-auto" style="padding-top:4rem;height:100%;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-6">
 
     <!-- 天氣總覽 -->
@@ -488,6 +486,48 @@
       .catch(function() { return null; });
   };
 
+
+
+  // 解析 Google Maps 路線網址，自動填入起終點
+  // 支援格式：/dir/起點/終點/、短網址展開後
+  window.parseRouteStartEnd = function(url) {
+    // 先嘗試直接解析 /dir/A/B/
+    var dirMatch = url.match(/\/dir\/([^@?#]+)/);
+    if (dirMatch) {
+      var parts = dirMatch[1].split('/').map(function(p) {
+        return decodeURIComponent(p.replace(/\+/g,' ')).trim();
+      }).filter(function(p) { return p.length > 1; });
+
+      if (parts.length >= 2) {
+        return {
+          start: parts[0],
+          end:   parts[parts.length - 1]
+        };
+      }
+    }
+    return null;
+  };
+
+  // 偵測貼入內容是否為 Google Maps 路線，自動填入起終點
+  window.autoFillRoute = function(text, onFill) {
+    text = text.trim();
+    if (!text) return false;
+
+    // 直接是長網址
+    var result = parseRouteStartEnd(text);
+    if (result) { onFill(result.start, result.end); return true; }
+
+    // 短網址，展開後再解析
+    if (text.indexOf('maps.app.goo.gl') !== -1 || text.indexOf('goo.gl/maps') !== -1) {
+      expandGoogleUrl(text).then(function(fullUrl) {
+        var r = parseRouteStartEnd(fullUrl);
+        if (r) { onFill(r.start, r.end); }
+      });
+      return true;
+    }
+
+    return false;
+  };
 
   // 從 Google Maps 地點網址抽取單一座標
   window.extractPointFromUrl = function(input) {
@@ -1416,19 +1456,12 @@ var StatusBar = {
     });
 
     // 更新地圖圖例旁的統計
-    var el = document.getElementById('status-summary');
-    if (!el) return;
-    var total = Data.allCams().length;
-    var smoothPct = total ? Math.round(counts.smooth / total * 100) : 0;
-    var slowPct   = total ? Math.round(counts.slow   / total * 100) : 0;
-    var jamPct    = total ? Math.round(counts.jam    / total * 100) : 0;
-    el.innerHTML =
-      '<div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>' +
-      '<span>' + counts.smooth + '</span></div>' +
-      '<div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>' +
-      '<span>' + counts.slow + '</span></div>' +
-      '<div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>' +
-      '<span>' + counts.jam + '</span></div>';
+    var s = document.getElementById('cnt-smooth');
+    var sl = document.getElementById('cnt-slow');
+    var j  = document.getElementById('cnt-jam');
+    if (s)  s.textContent  = counts.smooth;
+    if (sl) sl.textContent = counts.slow;
+    if (j)  j.textContent  = counts.jam;
 
     // 更新時間戳
     var tsEl = document.getElementById('status-ts');
@@ -1603,6 +1636,149 @@ function haversineKm(lat1, lon1, lat2, lon2) {
           Math.sin(dLon/2)*Math.sin(dLon/2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
+
+// ── 路線輸入收合邏輯 ──────────────────────────────────────────────────────
+(function() {
+  window.addEventListener('load', function() {
+    var toggleBtn  = document.getElementById('route-toggle');
+    var closeBtn   = document.getElementById('route-toggle-close');
+    var collapsed  = document.getElementById('route-collapsed');
+    var expanded   = document.getElementById('route-expanded');
+
+    function open() {
+      if (collapsed) collapsed.classList.add('hidden');
+      if (expanded)  expanded.classList.remove('hidden');
+    }
+    function close() {
+      if (collapsed) collapsed.classList.remove('hidden');
+      if (expanded)  expanded.classList.add('hidden');
+    }
+
+    if (toggleBtn) toggleBtn.addEventListener('click', open);
+    if (closeBtn)  closeBtn.addEventListener('click', close);
+
+    // 解析完成後自動收合，更新收合欄文字
+    Bus.on('filter:changed', function() {
+      if (RouteMod.active) {
+        var txt = document.getElementById('route-collapsed-text');
+        var status = document.getElementById('js-route-status');
+        if (txt && status && status.textContent) {
+          txt.textContent = status.textContent;
+          txt.classList.add('text-orange-400');
+        }
+        close();
+        // 顯示清除按鈕
+        var clearMini = document.getElementById('js-route-clear-small');
+        if (clearMini) clearMini.classList.remove('hidden');
+      }
+    });
+
+    // 小清除按鈕
+    var clearMini = document.getElementById('js-route-clear-small');
+    if (clearMini) {
+      clearMini.addEventListener('click', function() {
+        RouteMod.clear();
+        var txt = document.getElementById('route-collapsed-text');
+        if (txt) { txt.textContent = '設定起終點找沿途攝影機...'; txt.classList.remove('text-orange-400'); }
+        clearMini.classList.add('hidden');
+      });
+    }
+  });
+})();
+
+// ── 路線網址自動帶入 ──────────────────────────────────────────────────────
+(function() {
+  window.addEventListener('load', function() {
+    var startEl = document.getElementById('js-route-start');
+    var endEl   = document.getElementById('js-route-end');
+
+    // 監聽起點貼上 — 如果是完整路線網址，自動填終點
+    if (startEl) {
+      startEl.addEventListener('paste', function(e) {
+        setTimeout(function() {
+          var val = startEl.value.trim();
+          var filled = autoFillRoute(val, function(start, end) {
+            startEl.value = start;
+            if (endEl) endEl.value = end;
+            Toast.show('\u8d77\u7d42\u9ede\u5df2\u81ea\u52d5\u5e36\u5165\uff01');
+            // 自動展開輸入框
+            var expanded = document.getElementById('route-expanded');
+            var collapsed = document.getElementById('route-collapsed');
+            if (expanded)  expanded.classList.remove('hidden');
+            if (collapsed) collapsed.classList.add('hidden');
+          });
+        }, 50);
+      });
+    }
+
+    // 也監聽收合欄的貼上事件
+    var toggleBtn = document.getElementById('route-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('paste', function(e) {
+        var text = (e.clipboardData || window.clipboardData).getData('text');
+        setTimeout(function() {
+          var filled = autoFillRoute(text, function(start, end) {
+            if (startEl) startEl.value = start;
+            if (endEl)   endEl.value   = end;
+            Toast.show('\u8d77\u7d42\u9ede\u5df2\u81ea\u52d5\u5e36\u5165\uff01');
+            var expanded = document.getElementById('route-expanded');
+            var collapsed = document.getElementById('route-collapsed');
+            if (expanded)  expanded.classList.remove('hidden');
+            if (collapsed) collapsed.classList.add('hidden');
+          });
+        }, 50);
+      });
+    }
+
+    // 收合欄文字框也支援貼上路線網址
+    var collapsedText = document.getElementById('route-collapsed-text');
+    if (collapsedText) {
+      // 把收合欄的 span 改成可輸入的 input
+      // 讓使用者可以直接貼網址到收合欄
+    }
+  });
+})();
+
+// ── 收合欄直接貼網址處理 ───────────────────────────────────────────────────
+(function() {
+  window.addEventListener('load', function() {
+    var pasteInput = document.getElementById('route-paste-input');
+    var startEl    = document.getElementById('js-route-start');
+    var endEl      = document.getElementById('js-route-end');
+    var expanded   = document.getElementById('route-expanded');
+    var collapsed  = document.getElementById('route-collapsed');
+
+    function doExpand() {
+      if (expanded)  expanded.classList.remove('hidden');
+      if (collapsed) collapsed.classList.add('hidden');
+    }
+
+    if (pasteInput) {
+      // 點擊展開
+      pasteInput.addEventListener('focus', doExpand);
+
+      // 貼上自動解析
+      pasteInput.addEventListener('paste', function(e) {
+        var text = (e.clipboardData || window.clipboardData).getData('text');
+        setTimeout(function() {
+          var filled = autoFillRoute(text, function(start, end) {
+            if (startEl) startEl.value = start;
+            if (endEl)   endEl.value   = end;
+            pasteInput.value = '';
+            Toast.show('\u8d77\u7d42\u9ede\u5df2\u5e36\u5165\uff0c\u8acb\u6309\u89e3\u6790');
+            doExpand();
+          });
+          if (!filled) doExpand();
+        }, 50);
+      });
+
+      // 輸入任何文字也展開
+      pasteInput.addEventListener('input', function() {
+        if (pasteInput.value.length > 3) doExpand();
+      });
+    }
+  });
+})();
 
 </script>
 
