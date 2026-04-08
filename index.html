@@ -25,43 +25,43 @@
     .nav-it.active { color: var(--primary); }
     .nav-it.active i { transform: translateY(-4px); transition: transform 0.2s; }
     .rtab.active { background: var(--primary); color: #fff; }
-    .dot-smooth  { background: #3fb950; }
-    .dot-slow    { background: #d29922; }
-    .dot-jam     { background: #da3633; }
-    .dot-unknown { background: #8b949e; }
-    .cam-card { transition: border-color 0.2s; }
-    .route-mode-btn.active { background: #f97316 !important; color: #fff !important; border-color: #f97316 !important; }
-    .cam-card:hover { border-color: rgba(249,115,22,0.5) !important; }
-    body.light { background: #f1f5f9; color: #1e293b; }
-    body.light .glass { background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); }
-    body.light #pg-list { background: #f1f5f9; }
-    body.light #pg-tools { background: #f1f5f9; }
-    body.light input { background: rgba(0,0,0,0.05) !important; color: #1e293b; }
-    body.light .text-slate-100 { color: #1e293b; }
-    body.light .text-slate-400 { color: #64748b; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
-    /* yt-route-panel 固定浮層 */
-    #yt-route-panel {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: calc(100% - 32px);
-      max-width: 480px;
-      z-index: 1800;
-      display: none;
-      background: rgba(10,18,38,0.97);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(239,68,68,0.45);
-      border-radius: 20px;
-      padding: 16px;
-      box-shadow: 0 12px 48px rgba(0,0,0,0.8);
-    }
-    #yt-route-panel.visible {
-      display: block;
-    }
+
+```
+.cam-card { transition: border-color 0.2s; }
+.route-mode-btn.active { background: #f97316 !important; color: #fff !important; border-color: #f97316 !important; }
+.cam-card:hover { border-color: rgba(249,115,22,0.5) !important; }
+body.light { background: #f1f5f9; color: #1e293b; }
+body.light .glass { background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); }
+body.light #pg-list { background: #f1f5f9; }
+body.light #pg-tools { background: #f1f5f9; }
+body.light input { background: rgba(0,0,0,0.05) !important; color: #1e293b; }
+body.light .text-slate-100 { color: #1e293b; }
+body.light .text-slate-400 { color: #64748b; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
+/* yt-route-panel 固定浮層 */
+#yt-route-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 32px);
+  max-width: 480px;
+  z-index: 1800;
+  display: none;
+  background: rgba(10,18,38,0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(239,68,68,0.45);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.8);
+}
+#yt-route-panel.visible {
+  display: block;
+}
+```
+
   </style>
 </head>
 <body class="text-slate-100">
@@ -196,20 +196,7 @@
   </div>
 
   <!-- 圖例 -->
-  <div class="absolute bottom-[8rem] left-4 z-[500] glass px-2.5 py-2 rounded-xl text-[10px]">
-    <div class="flex flex-col gap-1">
-      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-smooth inline-block"></span>順暢</div>
-      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-slow   inline-block"></span>緩慢</div>
-      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-jam    inline-block"></span>壅塞</div>
-      <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-unknown inline-block"></span>未知</div>
-    </div>
-    <div id="status-summary" class="flex gap-1.5 mt-1.5 pt-1.5 border-t border-white/10 font-bold">
-      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span><span id="cnt-smooth">-</span></span>
-      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block"></span><span id="cnt-slow">-</span></span>
-      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span><span id="cnt-jam">-</span></span>
-    </div>
-    <div id="status-ts" class="text-[9px] text-slate-600 mt-0.5">載入中...</div>
-  </div>
+  
 </section>
 
 <!-- Page: 路況列表 -->
@@ -413,12 +400,7 @@
     TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
-    STATUS_COLOR: {
-      smooth:  '#3fb950',
-      slow:    '#d29922',
-      jam:     '#da3633',
-      unknown: '#8b949e'
-    },
+
     REGIONS: {
       north:   ['台北市','新北市','基隆市','桃園市','新竹市','新竹縣','宜蘭縣'],
       central: ['苗栗縣','台中市','彰化縣','南投縣','雲林縣'],
@@ -738,28 +720,8 @@
 (function() {
   'use strict';
 
-  var TDX_ID     = 'lucky851228-134439b0-5aa3-4d73';
-  var TDX_SECRET = '44bde7f0-94f2-49ec-8b9b-ba071af71a71';
-  var _token = null;
-  var _tokenExpiry = 0;
 
-  function getTDXToken(cb) {
-    var now = Date.now();
-    if (_token && now < _tokenExpiry) { cb(_token); return; }
-    fetch('https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(TDX_ID) +
-            '&client_secret=' + encodeURIComponent(TDX_SECRET)
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(j) {
-      _token = j.access_token;
-      _tokenExpiry = now + (j.expires_in - 60) * 1000;
-      cb(_token);
-    })
-    .catch(function() { cb(null); });
-  }
+
 
   window.COUNTY_CENTERS = {
     '台北市':[25.0330,121.5654],'新北市':[25.0120,121.4653],'基隆市':[25.1283,121.7419],
@@ -772,14 +734,7 @@
     '連江縣':[26.1971,119.9395]
   };
 
-  var CITY_CODES = {
-    '台北市':'Taipei','新北市':'NewTaipei','基隆市':'Keelung','桃園市':'Taoyuan',
-    '新竹市':'Hsinchu','新竹縣':'HsinchuCounty','苗栗縣':'MiaoliCounty',
-    '台中市':'Taichung','彰化縣':'ChanghuaCounty','南投縣':'NantouCounty',
-    '雲林縣':'YunlinCounty','嘉義市':'Chiayi','嘉義縣':'ChiayiCounty',
-    '台南市':'Tainan','高雄市':'Kaohsiung','屏東縣':'PingtungCounty',
-    '宜蘭縣':'YilanCounty','花蓮縣':'HualienCounty','台東縣':'TaitungCounty'
-  };
+  
 
   var B = 'https://c01.twipcam.com/cam/snapshot/';
 
@@ -875,62 +830,66 @@
     {id:'t26-060',name:'台26線 恆春',      county:'屏東縣',lat:21.9400,lng:120.7400,snap:'t26-60k-000.jpg'},
     // 台88線
     {id:'t88-015',name:'台88線 高雄大發',  county:'高雄市',lat:22.6400,lng:120.4000,snap:'t88-15k-766.jpg'},
-    {id:'t88-021',name:'台88線 屏東竹田',  county:'屏東縣',lat:22.6100,lng:120.4800,snap:'t88-21k-900.jpg'}
+    {id:'t88-021',name:'台88線 屏東竹田',  county:'屏東縣',lat:22.6100,lng:120.4800,snap:'t88-21k-900.jpg'},
+    // 台2線（北海岸）
+    {id:'t2-002', name:'台2線 基隆八斗子',  county:'基隆市',lat:25.1450,lng:121.7780,snap:'t2-2k-000.jpg'},
+    {id:'t2-018', name:'台2線 萬里',        county:'新北市',lat:25.1900,lng:121.6800,snap:'t2-18k-000.jpg'},
+    {id:'t2-030', name:'台2線 金山',        county:'新北市',lat:25.2200,lng:121.6300,snap:'t2-30k-000.jpg'},
+    {id:'t2-040', name:'台2線 石門',        county:'新北市',lat:25.2700,lng:121.5600,snap:'t2-40k-000.jpg'},
+    {id:'t2-055', name:'台2線 淡水',        county:'新北市',lat:25.1700,lng:121.4400,snap:'t2-55k-000.jpg'},
+    // 台2丁線（北海岸支線）
+    {id:'t2d-003',name:'台2丁 九份',        county:'新北市',lat:25.1085,lng:121.8440,snap:'t2d-3k-000.jpg'},
+    // 台4線
+    {id:'t4-020', name:'台4線 桃園龜山',    county:'桃園市',lat:24.9980,lng:121.3750,snap:'t4-20k-000.jpg'},
+    {id:'t4-035', name:'台4線 新竹竹北',    county:'新竹縣',lat:24.8380,lng:121.0050,snap:'t4-35k-000.jpg'},
+    // 台7線（北橫）
+    {id:'t7-030', name:'台7線 宜蘭員山',    county:'宜蘭縣',lat:24.7300,lng:121.7000,snap:'t7-30k-000.jpg'},
+    {id:'t7-050', name:'台7線 大溪',        county:'桃園市',lat:24.8800,lng:121.2800,snap:'t7-50k-000.jpg'},
+    {id:'t7-075', name:'台7線 復興',        county:'桃園市',lat:24.8100,lng:121.3600,snap:'t7-75k-000.jpg'},
+    // 台8線（中橫）
+    {id:'t8-060', name:'台8線 太魯閣',      county:'花蓮縣',lat:24.1500,lng:121.6200,snap:'t8-60k-000.jpg'},
+    {id:'t8-090', name:'台8線 天祥',        county:'花蓮縣',lat:24.1800,lng:121.5000,snap:'t8-90k-000.jpg'},
+    // 台14線（中投）
+    {id:'t14-050',name:'台14線 南投埔里',   county:'南投縣',lat:23.9600,lng:121.0000,snap:'t14-50k-000.jpg'},
+    {id:'t14-075',name:'台14線 霧社',       county:'南投縣',lat:24.0450,lng:121.0300,snap:'t14-75k-000.jpg'},
+    // 台18線（阿里山）
+    {id:'t18-040',name:'台18線 嘉義竹崎',   county:'嘉義縣',lat:23.5200,lng:120.5200,snap:'t18-40k-000.jpg'},
+    {id:'t18-060',name:'台18線 阿里山',     county:'嘉義縣',lat:23.5100,lng:120.6500,snap:'t18-60k-000.jpg'},
+    // 台21線（新中橫）
+    {id:'t21-080',name:'台21線 南投信義',   county:'南投縣',lat:23.7200,lng:120.8500,snap:'t21-80k-000.jpg'},
+    {id:'t21-120',name:'台21線 玉山塔塔加', county:'南投縣',lat:23.5000,lng:120.9200,snap:'t21-120k-000.jpg'},
+    // 台29線（高屏）
+    {id:'t29-010',name:'台29線 高雄岡山',   county:'高雄市',lat:22.7900,lng:120.2900,snap:'t29-10k-000.jpg'},
+    // 花蓮補充
+    {id:'t11-030',name:'台11線 花蓮吉安',   county:'花蓮縣',lat:23.9500,lng:121.5900,snap:'t11-30k-000.jpg'},
+    {id:'t11-080',name:'台11線 花蓮玉里',   county:'花蓮縣',lat:23.3500,lng:121.5600,snap:'t11-80k-000.jpg'},
+    // 高雄補充
+    {id:'t17-190',name:'台17線 高雄永安',   county:'高雄市',lat:22.8300,lng:120.2100,snap:'t17-190k-000.jpg'},
+    {id:'t17-230',name:'台17線 高雄茄萣',   county:'高雄市',lat:22.6900,lng:120.1900,snap:'t17-230k-000.jpg'},
+    // 嘉義補充
+    {id:'t1-255', name:'台1線 嘉義市區',    county:'嘉義市',lat:23.4800,lng:120.4500,snap:'t1-255k-000.jpg'},
+    {id:'t1-270', name:'台1線 嘉義水上',    county:'嘉義縣',lat:23.4200,lng:120.4000,snap:'t1-270k-000.jpg'},
+    // 雲林補充
+    {id:'t1-213', name:'台1線 雲林斗南',    county:'雲林縣',lat:23.6800,lng:120.4800,snap:'t1-213k-000.jpg'},
+    {id:'t19-030',name:'台19線 雲林北港',   county:'雲林縣',lat:23.5700,lng:120.3000,snap:'t19-30k-000.jpg'},
+    // 彰化補充
+    {id:'t1-170', name:'台1線 彰化市',      county:'彰化縣',lat:24.0800,lng:120.5400,snap:'t1-170k-000.jpg'},
+    {id:'t14-010',name:'台14線 彰化員林',   county:'彰化縣',lat:23.9600,lng:120.5700,snap:'t14-10k-000.jpg'}
   ];
 
-  function levelToStatus(lv) {
-    if (lv === 1) return 'smooth';
-    if (lv === 2) return 'slow';
-    if (lv >= 3)  return 'jam';
-    return 'unknown';
-  }
 
   var _cams = CAMS.map(function(c) {
     return { id:c.id, name:c.name, county:c.county, lat:c.lat, lng:c.lng,
              url: B + c.snap, type:'cctv', status:'unknown' };
   });
 
-  function applyCountyStatus(county, level) {
-    var status = levelToStatus(level);
-    _cams.forEach(function(cam) { if (cam.county === county) cam.status = status; });
-  }
 
-  function fetchCongestion(token) {
-    var cities = Object.keys(CITY_CODES);
-    var fetched = 0;
-    cities.forEach(function(county) {
-      var code = CITY_CODES[county];
-      fetch('https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CongestionLevel/City/' + code + '?$format=JSON&$top=1', {
-        headers: { 'Authorization': 'Bearer ' + token }
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (Array.isArray(data) && data.length > 0) {
-          applyCountyStatus(county, data[0].CongestionLevel || data[0].Level || 0);
-        }
-        fetched++;
-        if (fetched === cities.length) { Bus.emit('cams:updated'); Bus.emit('status:updated'); }
-      })
-      .catch(function() {
-        fetched++;
-        if (fetched === cities.length) { Bus.emit('cams:updated'); Bus.emit('status:updated'); }
-      });
-    });
-  }
 
   window.Data = {
     weather: {},
     allCams: function() { return _cams; },
     loadDynamic: function() {
       setTimeout(function() { Bus.emit('cams:updated'); }, 100);
-      getTDXToken(function(token) {
-        if (token) {
-          fetchCongestion(token);
-          setInterval(function() {
-            getTDXToken(function(t) { if (t) fetchCongestion(t); });
-          }, 3 * 60 * 1000);
-        }
-      });
     },
     fetchWeather: function() {
       var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
@@ -1032,7 +991,7 @@
       MapMod.markers = [];
     },
     addMarker: function(cam) {
-      var color = cam.type === 'youtube' ? '#ff0000' : (Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown);
+      var color = cam.type === 'youtube' ? '#ff0000' : '#f97316';
       var icon  = cam.type === 'youtube'
         ? L.divIcon({ className:'', html:'<div style="width:18px;height:18px;border-radius:4px;background:#ff0000;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:bold;box-shadow:0 0 6px #ff0000">YT</div>', iconSize:[18,18], iconAnchor:[9,9] })
         : L.divIcon({ className:'', html:'<div style="width:12px;height:12px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 6px '+color+'"></div>', iconSize:[12,12], iconAnchor:[6,6] });
@@ -1271,7 +1230,7 @@
       Data.allCams().forEach(function(c) { map[c.id] = c; });
       var html = '';
       cams.forEach(function(cam) {
-        var color = cam.type === 'youtube' ? '#ff0000' : (Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown);
+        var color = cam.type === 'youtube' ? '#ff0000' : '#f97316';
         var badge = cam.type === 'youtube'
           ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold">YT</span>'
           : '<span class="text-[10px] bg-white/10 text-slate-400 px-2 py-0.5 rounded-full">CCTV</span>';
@@ -1350,9 +1309,9 @@
     Bus.on('filter:changed',  function() { ListMod.render(); });
     Bus.on('cams:updated',    function() { ListMod.render(); });
     Bus.on('weather:updated', function() { ListMod.render(); });
-    Bus.on('status:updated',  function() { ListMod.render(); StatusBar.update(); });
+    Bus.on('status:updated',  function() { ListMod.render(); });
     ListMod.render();
-    StatusBar.init();
+
     NearbyMod.init();
   });
 })();
@@ -1440,25 +1399,7 @@
   });
 })();
 
-// 路況狀態列
-var StatusBar = {
-  init: function() {},
-  update: function() {
-    var counts = { smooth:0, slow:0, jam:0, unknown:0 };
-    Data.allCams().forEach(function(c) { counts[c.status] = (counts[c.status] || 0) + 1; });
-    var s  = document.getElementById('cnt-smooth');
-    var sl = document.getElementById('cnt-slow');
-    var j  = document.getElementById('cnt-jam');
-    if (s)  s.textContent  = counts.smooth;
-    if (sl) sl.textContent = counts.slow;
-    if (j)  j.textContent  = counts.jam;
-    var tsEl = document.getElementById('status-ts');
-    if (tsEl) {
-      var now = new Date();
-      tsEl.textContent = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ' \u66f4\u65b0';
-    }
-  }
-};
+
 
 // GPS + 附近攝影機
 var NearbyMod = {
@@ -1537,7 +1478,7 @@ var NearbyMod = {
     }
     var html = '';
     cams.slice(0,15).forEach(function(cam) {
-      var color  = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
+      var color  = '#f97316';
       var distTx = cam._dist < 1 ? Math.round(cam._dist*1000)+'m' : cam._dist.toFixed(1)+'km';
       html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors nearby-cam-item" data-id="'+cam.id+'">' +
         '<div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style="background:'+color+'22">' +
