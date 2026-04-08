@@ -250,6 +250,25 @@
     </div>
   </div>
 
+  <!-- Info Panel -->
+
+  <div id="info-panel" class="hidden fixed bottom-20 left-4 right-4 z-[1500] glass rounded-3xl p-5 shadow-2xl flex-col gap-3 max-w-lg mx-auto">
+    <div class="flex justify-between items-start">
+      <div class="flex-1 min-w-0">
+        <div id="info-name" class="font-black text-base text-orange-500 truncate"></div>
+        <div id="info-county" class="text-xs text-slate-400 mt-0.5"></div>
+        <div id="info-type" class="text-xs text-slate-500 mt-0.5"></div>
+        <div id="info-weather" class="text-xs text-blue-400 mt-1"></div>
+      </div>
+      <button id="info-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 shrink-0 ml-3">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+    <button id="info-play" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-2xl text-sm transition-all active:scale-95 shadow-lg shadow-orange-500/20">
+      &#9654; 開啟影像
+    </button>
+  </div>
+
   <!-- Toast -->
 
   <div id="toast"
@@ -416,135 +435,145 @@
 (function() {
   'use strict';
 
-  var TDX_CLIENT_ID     = 'lucky851228-134439b0-5aa3-4d73';
-  var TDX_CLIENT_SECRET = '44bde7f0-94f2-49ec-8b9b-ba071af71a71';
-  var _token = null;
-  var _tokenExpiry = 0;
-
-  // 取得 TDX Token
-  function getTDXToken(callback) {
-    var now = Date.now();
-    if (_token && now < _tokenExpiry) { callback(_token); return; }
-    var body = 'grant_type=client_credentials&client_id=' +
-               encodeURIComponent(TDX_CLIENT_ID) +
-               '&client_secret=' + encodeURIComponent(TDX_CLIENT_SECRET);
-    fetch('https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(j) {
-      _token = j.access_token;
-      _tokenExpiry = now + (j.expires_in - 60) * 1000;
-      callback(_token);
-    })
-    .catch(function(e) { console.error('TDX token error', e); callback(null); });
-  }
-
   // 全台縣市中心座標
   window.COUNTY_CENTERS = {
-    '台北市':   [25.0330, 121.5654],
-    '新北市':   [25.0120, 121.4653],
-    '基隆市':   [25.1283, 121.7419],
-    '桃園市':   [24.9937, 121.3010],
-    '新竹市':   [24.8138, 120.9675],
-    '新竹縣':   [24.6877, 121.1565],
-    '苗栗縣':   [24.2603, 120.7986],
-    '台中市':   [24.1477, 120.6736],
-    '彰化縣':   [23.9916, 120.6158],
-    '南投縣':   [23.9609, 120.9718],
-    '雲林縣':   [23.7092, 120.4313],
-    '嘉義市':   [23.4801, 120.4491],
-    '嘉義縣':   [23.4518, 120.2554],
-    '台南市':   [22.9999, 120.2270],
-    '高雄市':   [22.6273, 120.3014],
-    '屏東縣':   [22.5519, 120.5487],
-    '宜蘭縣':   [24.6941, 121.7378],
-    '花蓮縣':   [23.9871, 121.6015],
-    '台東縣':   [22.7972, 121.0713],
-    '澎湖縣':   [23.5711, 119.5793],
-    '金門縣':   [24.4493, 118.3765],
-    '連江縣':   [26.1971, 119.9395]
+    '台北市':[25.0330,121.5654],'新北市':[25.0120,121.4653],'基隆市':[25.1283,121.7419],
+    '桃園市':[24.9937,121.3010],'新竹市':[24.8138,120.9675],'新竹縣':[24.6877,121.1565],
+    '苗栗縣':[24.2603,120.7986],'台中市':[24.1477,120.6736],'彰化縣':[23.9916,120.6158],
+    '南投縣':[23.9609,120.9718],'雲林縣':[23.7092,120.4313],'嘉義市':[23.4801,120.4491],
+    '嘉義縣':[23.4518,120.2554],'台南市':[22.9999,120.2270],'高雄市':[22.6273,120.3014],
+    '屏東縣':[22.5519,120.5487],'宜蘭縣':[24.6941,121.7378],'花蓮縣':[23.9871,121.6015],
+    '台東縣':[22.7972,121.0713],'澎湖縣':[23.5711,119.5793],'金門縣':[24.4493,118.3765],
+    '連江縣':[26.1971,119.9395]
   };
 
-  var _dynamicCams = [];
+  // YouTube 固定直播頻道
+  window.YT_CHANNELS = [
+    { id: 'yt001', name: '高速公路局 - 國道即時影像', county: '全台', videoId: 'live_stream', channelId: 'UCFreewayTW', type: 'youtube', lat: 25.0330, lng: 121.5654, status: 'unknown' },
+    { id: 'yt002', name: '交通部 - 省道即時路況', county: '全台', videoId: 'live_stream', channelId: 'MOTCTW', type: 'youtube', lat: 25.0478, lng: 121.5319, status: 'unknown' },
+    { id: 'yt003', name: '北部路況直播', county: '台北市', videoId: 'JqhZnMm7bV4', type: 'youtube', lat: 25.0330, lng: 121.5654, status: 'unknown' },
+    { id: 'yt004', name: '雪隧即時影像', county: '宜蘭縣', videoId: 'xR3oHBnMoKQ', type: 'youtube', lat: 24.8622, lng: 121.8192, status: 'unknown' }
+  ];
 
-  // 解析縣市名稱
-  function parseCounty(name) {
-    if (!name) return '未知';
-    var counties = Object.keys(window.COUNTY_CENTERS);
-    for (var i = 0; i < counties.length; i++) {
-      if (name.indexOf(counties[i].replace('台','台')) !== -1 ||
-          name.indexOf(counties[i].replace('台','臺')) !== -1 ||
-          name.indexOf(counties[i]) !== -1) return counties[i];
-    }
-    // 簡碼對應
+  var _cams = [];
+  var _loaded = false;
+
+  // 解析縣市
+  function parseCounty(str) {
+    if (!str) return '未知';
     var map = {
-      '北市':'台北市','新北':'新北市','基隆':'基隆市','桃園':'桃園市',
-      '新竹市':'新竹市','新竹縣':'新竹縣','苗栗':'苗栗縣','中市':'台中市',
-      '台中':'台中市','彰化':'彰化縣','南投':'南投縣','雲林':'雲林縣',
-      '嘉市':'嘉義市','嘉縣':'嘉義縣','嘉義':'嘉義縣','南市':'台南市',
-      '台南':'台南市','高市':'高雄市','高雄':'高雄市','屏東':'屏東縣',
-      '宜蘭':'宜蘭縣','花蓮':'花蓮縣','台東':'台東縣','澎湖':'澎湖縣',
-      '金門':'金門縣','馬祖':'連江縣'
+      '台北':'台北市','臺北':'台北市','新北':'新北市','基隆':'基隆市','桃園':'桃園市',
+      '新竹市':'新竹市','新竹縣':'新竹縣','新竹':'新竹市','苗栗':'苗栗縣',
+      '台中':'台中市','臺中':'台中市','彰化':'彰化縣','南投':'南投縣','雲林':'雲林縣',
+      '嘉義市':'嘉義市','嘉義縣':'嘉義縣','嘉義':'嘉義縣',
+      '台南':'台南市','臺南':'台南市','高雄':'高雄市','屏東':'屏東縣',
+      '宜蘭':'宜蘭縣','花蓮':'花蓮縣','台東':'台東縣','臺東':'台東縣',
+      '澎湖':'澎湖縣','金門':'金門縣','馬祖':'連江縣','連江':'連江縣'
     };
     for (var k in map) {
-      if (name.indexOf(k) !== -1) return map[k];
+      if (str.indexOf(k) !== -1) return map[k];
     }
     return '未知';
+  }
+
+  // 解析高速公路局 CCTV XML
+  function parseFreewayXML(xmlText) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(xmlText, 'text/xml');
+    var items = doc.querySelectorAll('CCTV, CCTVInfo');
+    if (!items || items.length === 0) {
+      items = doc.getElementsByTagName('CCTV');
+    }
+    var result = [];
+    Array.prototype.forEach.call(items, function(el) {
+      var getId   = function(t) { var n = el.querySelector(t) || el.getElementsByTagName(t)[0]; return n ? n.textContent.trim() : ''; };
+      var id      = getId('CCTVId') || getId('Id');
+      var name    = getId('CCTVName') || getId('Name') || id;
+      var lat     = parseFloat(getId('PositionLat') || getId('Lat') || '0');
+      var lng     = parseFloat(getId('PositionLon') || getId('PositionLng') || getId('Lon') || '0');
+      var url     = getId('VideoStreamURL') || getId('Url') || '';
+      var road    = getId('RoadName') || getId('LocationDescription') || '';
+      if (!lat || !lng || lat < 21 || lat > 27) return;
+      result.push({
+        id:     'fw_' + (id || Math.random()),
+        name:   name || road || '國道攝影機',
+        county: parseCounty(road + name),
+        lat:    lat,
+        lng:    lng,
+        url:    url,
+        type:   'cctv',
+        status: 'unknown'
+      });
+    });
+    return result;
   }
 
   window.Data = {
     weather: {},
 
     allCams: function() {
-      return _dynamicCams;
+      return _cams;
     },
 
-    // 載入 TDX 省道 CCTV
     loadDynamic: function() {
-      getTDXToken(function(token) {
-        if (!token) { Bus.emit('cams:updated'); return; }
-        // 省道 CCTV（最多 1000 筆）
-        fetch('https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CCTV?$top=1000&$format=JSON', {
-          headers: { 'Authorization': 'Bearer ' + token }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(arr) {
-          if (!Array.isArray(arr)) { Bus.emit('cams:updated'); return; }
-          _dynamicCams = [];
-          arr.forEach(function(item) {
-            var pos = item.PositionLon !== undefined
-              ? { lat: item.PositionLat, lng: item.PositionLon }
-              : (item.GeoInfo && item.GeoInfo.Coordinates && item.GeoInfo.Coordinates[0]
-                ? { lat: item.GeoInfo.Coordinates[0].PositionLat, lng: item.GeoInfo.Coordinates[0].PositionLon }
-                : null);
-            if (!pos) return;
-            var name   = item.CCTVName || item.CCTVId || '未知';
-            var county = parseCounty(item.RoadName || item.LocationDescription || name);
-            var url    = item.VideoStreamURL || item.CCTVVideoStreamURL || '';
-            _dynamicCams.push({
-              id:     'tdx_' + (item.CCTVId || Math.random()),
-              name:   name,
-              county: county,
-              lat:    parseFloat(pos.lat),
-              lng:    parseFloat(pos.lng),
-              url:    url,
-              status: 'unknown'
-            });
+      // 高速公路局公開 XML（無需 token）
+      var urls = [
+        'https://tisvcloud.freeway.gov.tw/history/motc31/CCTV.xml',
+        'https://tisvcloud.freeway.gov.tw/CCTV.xml'
+      ];
+
+      function tryFetch(index) {
+        if (index >= urls.length) {
+          console.warn('高公局 CCTV 載入失敗，使用備援資料');
+          useFallback();
+          return;
+        }
+        fetch(urls[index])
+          .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+          })
+          .then(function(xml) {
+            var parsed = parseFreewayXML(xml);
+            console.log('高公局 CCTV 載入:', parsed.length, '支');
+            _cams = parsed;
+            _loaded = true;
+            Bus.emit('cams:updated');
+          })
+          .catch(function() {
+            tryFetch(index + 1);
           });
-          console.log('TDX CCTV 載入:', _dynamicCams.length, '支');
-          Bus.emit('cams:updated');
-        })
-        .catch(function(e) {
-          console.error('TDX CCTV error', e);
-          Bus.emit('cams:updated');
-        });
-      });
+      }
+
+      function useFallback() {
+        // 備援靜態資料（確保畫面不空白）
+        _cams = [
+          { id:'f001', name:'國道1號-基隆端', county:'基隆市', lat:25.1190, lng:121.7218, url:'', type:'cctv', status:'unknown' },
+          { id:'f002', name:'國道1號-台北交流道', county:'台北市', lat:25.0500, lng:121.5200, url:'', type:'cctv', status:'unknown' },
+          { id:'f003', name:'國道1號-板橋', county:'新北市', lat:25.0138, lng:121.4635, url:'', type:'cctv', status:'unknown' },
+          { id:'f004', name:'國道1號-桃園', county:'桃園市', lat:25.0610, lng:121.2993, url:'', type:'cctv', status:'unknown' },
+          { id:'f005', name:'國道1號-新竹', county:'新竹市', lat:24.7946, lng:121.1740, url:'', type:'cctv', status:'unknown' },
+          { id:'f006', name:'國道1號-苗栗三義', county:'苗栗縣', lat:24.3997, lng:120.7576, url:'', type:'cctv', status:'unknown' },
+          { id:'f007', name:'國道1號-台中', county:'台中市', lat:24.1801, lng:120.6200, url:'', type:'cctv', status:'unknown' },
+          { id:'f008', name:'國道1號-彰化', county:'彰化縣', lat:24.0739, lng:120.5372, url:'', type:'cctv', status:'unknown' },
+          { id:'f009', name:'國道1號-雲林', county:'雲林縣', lat:23.6787, lng:120.4785, url:'', type:'cctv', status:'unknown' },
+          { id:'f010', name:'國道1號-嘉義', county:'嘉義縣', lat:23.4589, lng:120.3912, url:'', type:'cctv', status:'unknown' },
+          { id:'f011', name:'國道1號-台南', county:'台南市', lat:23.0740, lng:120.3123, url:'', type:'cctv', status:'unknown' },
+          { id:'f012', name:'國道1號-高雄', county:'高雄市', lat:22.7965, lng:120.2956, url:'', type:'cctv', status:'unknown' },
+          { id:'f013', name:'國道3號-木柵', county:'台北市', lat:24.9941, lng:121.5729, url:'', type:'cctv', status:'unknown' },
+          { id:'f014', name:'國道3號-新店', county:'新北市', lat:24.9600, lng:121.5400, url:'', type:'cctv', status:'unknown' },
+          { id:'f015', name:'雪山隧道北口', county:'新北市', lat:25.0234, lng:121.7609, url:'', type:'cctv', status:'unknown' },
+          { id:'f016', name:'雪山隧道南口', county:'宜蘭縣', lat:24.8700, lng:121.7900, url:'', type:'cctv', status:'unknown' },
+          { id:'f017', name:'國道5號-宜蘭', county:'宜蘭縣', lat:24.6941, lng:121.7378, url:'', type:'cctv', status:'unknown' },
+          { id:'f018', name:'國道10號-高雄', county:'高雄市', lat:22.6400, lng:120.3200, url:'', type:'cctv', status:'unknown' }
+        ];
+        _loaded = true;
+        Bus.emit('cams:updated');
+      }
+
+      tryFetch(0);
     },
 
-    // CWA 氣象
     fetchWeather: function() {
       var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
                 '?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100';
@@ -560,8 +589,7 @@
             if (!Data.weather[county]) {
               Data.weather[county] = {
                 temp:    obs && obs.AirTemperature,
-                weather: obs && obs.Weather,
-                rain:    obs && obs.Now && obs.Now.Precipitation
+                weather: obs && obs.Weather
               };
             }
           });
@@ -586,8 +614,7 @@
     dark: true,
     init: function() {
       var btn = document.getElementById('js-theme');
-      if (!btn) return;
-      btn.addEventListener('click', function() { ThemeMod.toggle(); });
+      if (btn) btn.addEventListener('click', function() { ThemeMod.toggle(); });
     },
     toggle: function() {
       ThemeMod.dark = !ThemeMod.dark;
@@ -607,28 +634,22 @@
   // Clock
   var ClockMod = {
     init: function() {
-      var clkEl  = document.getElementById('js-clk');
-      var dateEl = document.getElementById('js-date');
+      var clk = document.getElementById('js-clk');
+      var dte = document.getElementById('js-date');
       function tick() {
-        var now = new Date();
-        var h = String(now.getHours()).padStart(2,'0');
-        var m = String(now.getMinutes()).padStart(2,'0');
-        var s = String(now.getSeconds()).padStart(2,'0');
-        if (clkEl) clkEl.textContent = h + ':' + m + ':' + s;
-        if (dateEl) {
-          var y  = now.getFullYear();
-          var mo = String(now.getMonth()+1).padStart(2,'0');
-          var d  = String(now.getDate()).padStart(2,'0');
-          dateEl.textContent = y + '/' + mo + '/' + d;
-        }
+        var n = new Date();
+        var h = String(n.getHours()).padStart(2,'0');
+        var m = String(n.getMinutes()).padStart(2,'0');
+        var s = String(n.getSeconds()).padStart(2,'0');
+        if (clk) clk.textContent = h+':'+m+':'+s;
+        if (dte) dte.textContent = n.getFullYear()+'/'+(String(n.getMonth()+1).padStart(2,'0'))+'/'+String(n.getDate()).padStart(2,'0');
       }
-      tick();
-      setInterval(tick, 1000);
+      tick(); setInterval(tick, 1000);
     }
   };
 
   // Toast
-  var ToastMod = {
+  window.Toast = {
     show: function(msg, ms) {
       var el = document.getElementById('toast');
       if (!el) return;
@@ -641,41 +662,32 @@
       }, ms || 2500);
     }
   };
-  window.Toast = ToastMod;
 
-  // Page Nav
+  // Nav
   var NavMod = {
-    current: 'map',
-    pages:   { map: 'pg-map', list: 'pg-list', tools: 'pg-tools' },
-    navBtns: { map: 'nav-map', list: 'nav-list', tools: 'nav-tools' },
     init: function() {
-      Object.keys(NavMod.navBtns).forEach(function(key) {
-        var btn = document.getElementById(NavMod.navBtns[key]);
-        if (!btn) return;
-        btn.addEventListener('click', function() { NavMod.go(key); });
+      ['map','list','tools'].forEach(function(k) {
+        var btn = document.getElementById('nav-'+k);
+        if (btn) btn.addEventListener('click', function() { NavMod.go(k); });
       });
     },
     go: function(key) {
-      Object.keys(NavMod.pages).forEach(function(k) {
-        var pg  = document.getElementById(NavMod.pages[k]);
-        var btn = document.getElementById(NavMod.navBtns[k]);
+      ['map','list','tools'].forEach(function(k) {
+        var pg  = document.getElementById('pg-'+k);
+        var btn = document.getElementById('nav-'+k);
         if (pg)  pg.classList.toggle('active', k === key);
         if (btn) {
           btn.classList.toggle('active', k === key);
           btn.classList.toggle('text-slate-500', k !== key);
         }
       });
-      NavMod.current = key;
-      if (key === 'map') setTimeout(function() { MapMod.map.invalidateSize(); }, 50);
+      if (key === 'map') setTimeout(function() { MapMod.map && MapMod.map.invalidateSize(); }, 50);
     }
   };
 
   // Map
   var MapMod = {
-    map: null,
-    tileLayer: null,
-    markers: [],
-    routeLayer: null,
+    map: null, tileLayer: null, markers: [], routeLayer: null,
     init: function() {
       MapMod.map = L.map('map', { center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM, zoomControl: true });
       MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
@@ -686,38 +698,75 @@
       MapMod.markers = [];
     },
     addMarker: function(cam) {
-      var color = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
-      var icon = L.divIcon({
-        className: '',
-        html: '<div style="width:12px;height:12px;border-radius:50%;background:' + color + ';border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 6px ' + color + '"></div>',
-        iconSize: [12,12], iconAnchor: [6,6]
-      });
+      var color = cam.type === 'youtube' ? '#ff0000' : (Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown);
+      var icon  = cam.type === 'youtube'
+        ? L.divIcon({ className:'', html:'<div style="width:18px;height:18px;border-radius:4px;background:#ff0000;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:bold;box-shadow:0 0 6px #ff0000">YT</div>', iconSize:[18,18], iconAnchor:[9,9] })
+        : L.divIcon({ className:'', html:'<div style="width:12px;height:12px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 6px '+color+'"></div>', iconSize:[12,12], iconAnchor:[6,6] });
       var marker = L.marker([cam.lat, cam.lng], { icon: icon })
         .addTo(MapMod.map)
-        .bindTooltip(cam.name, { direction: 'top', offset: [0,-8] });
-      marker.on('click', function() { ModalMod.open(cam); });
+        .bindTooltip(cam.name, { direction:'top', offset:[0,-8] });
+      marker.on('click', function() { InfoMod.open(cam); });
       MapMod.markers.push(marker);
     },
     drawRoute: function(coords) {
       if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
       if (!coords || coords.length < 2) return;
-      var latlngs = coords.map(function(c) { return [c[0], c[1]]; });
-      MapMod.routeLayer = L.polyline(latlngs, { color: '#f97316', weight: 3, opacity: 0.8, dashArray: '8,4' }).addTo(MapMod.map);
-      MapMod.map.fitBounds(MapMod.routeLayer.getBounds(), { padding: [40,40] });
+      MapMod.routeLayer = L.polyline(coords.map(function(c){return[c[0],c[1]];}), { color:'#f97316', weight:3, opacity:0.8, dashArray:'8,4' }).addTo(MapMod.map);
+      MapMod.map.fitBounds(MapMod.routeLayer.getBounds(), { padding:[40,40] });
     },
     clearRoute: function() {
       if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
     }
   };
 
+  // Info Panel（點擊先顯示資訊）
+  var InfoMod = {
+    panel: null,
+    current: null,
+    init: function() {
+      var panel = document.getElementById('info-panel');
+      var closeBtn = document.getElementById('info-close');
+      var playBtn  = document.getElementById('info-play');
+      if (closeBtn) closeBtn.addEventListener('click', function() { InfoMod.close(); });
+      if (playBtn)  playBtn.addEventListener('click', function() {
+        if (InfoMod.current) ModalMod.open(InfoMod.current);
+      });
+    },
+    open: function(cam) {
+      InfoMod.current = cam;
+      var panel   = document.getElementById('info-panel');
+      var nameEl  = document.getElementById('info-name');
+      var countyEl= document.getElementById('info-county');
+      var typeEl  = document.getElementById('info-type');
+      var weatherEl = document.getElementById('info-weather');
+      var playBtn = document.getElementById('info-play');
+      if (!panel) return;
+      if (nameEl)   nameEl.textContent   = cam.name;
+      if (countyEl) countyEl.textContent = '\u{1F4CD} ' + cam.county;
+      if (typeEl)   typeEl.textContent   = cam.type === 'youtube' ? '\u{1F534} YouTube \u76f4\u64ad' : '\u{1F4F7} CCTV \u651d\u5f71\u6a5f';
+      var w = Data.weather[cam.county];
+      if (weatherEl) weatherEl.textContent = w ? ('\u{1F321}\uFE0F ' + w.temp + '\u00B0C  ' + (w.weather||'')) : '';
+      if (playBtn) {
+        playBtn.textContent = cam.type === 'youtube' ? '\u25B6 \u958b\u555f YouTube' : '\u25B6 \u958b\u555f\u5f71\u50cf';
+        playBtn.style.display = (cam.url || cam.videoId) ? 'block' : 'none';
+      }
+      panel.classList.remove('hidden');
+      panel.classList.add('flex');
+    },
+    close: function() {
+      var panel = document.getElementById('info-panel');
+      if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex'); }
+      InfoMod.current = null;
+    }
+  };
+
   // Route
   var RouteMod = {
-    active: false,
-    filteredCams: [],
+    active: false, filteredCams: [],
     init: function() {
-      var btn      = document.getElementById('js-route-btn');
-      var clearBtn = document.getElementById('js-rb-clear');
-      var locBtn   = document.getElementById('js-loc');
+      var btn     = document.getElementById('js-route-btn');
+      var clearBtn= document.getElementById('js-rb-clear');
+      var locBtn  = document.getElementById('js-loc');
       if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
       if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
       if (locBtn)   locBtn.addEventListener('click', function() { RouteMod.locate(); });
@@ -726,120 +775,111 @@
       var input = document.getElementById('js-route-input');
       if (!input) return;
       var url = input.value.trim();
-      if (!url) { ToastMod.show('請貼上 Google Maps 網址'); return; }
+      if (!url) { Toast.show('\u8acb\u8cbc\u4e0a Google Maps \u7db2\u5740'); return; }
       var coords = parseGoogleMapsCoords(url);
-      if (coords.length < 2) { ToastMod.show('無法解析座標，請確認網址格式'); return; }
+      if (coords.length < 2) { Toast.show('\u7121\u6cd5\u89e3\u6790\u5ea7\u6a19'); return; }
       var simplified = simplifyCoords(coords, Config.SIMPLIFY_STEP);
       RouteMod.active = true;
       RouteMod.filteredCams = Data.allCams().filter(function(cam) {
-        for (var i = 0; i < simplified.length - 1; i++) {
-          var d = distToSegKm(cam.lat, cam.lng, simplified[i][0], simplified[i][1], simplified[i+1][0], simplified[i+1][1]);
-          if (d <= Config.ROUTE_FILTER_KM) return true;
+        for (var i = 0; i < simplified.length-1; i++) {
+          if (distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]) <= Config.ROUTE_FILTER_KM) return true;
         }
         return false;
       });
       MapMod.drawRoute(simplified);
-      var statusEl = document.getElementById('js-route-status');
-      if (statusEl) statusEl.textContent = '找到 ' + RouteMod.filteredCams.length + ' 支沿途攝影機';
+      var st = document.getElementById('js-route-status');
+      if (st) st.textContent = '\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f';
       var banner = document.getElementById('js-route-banner');
       if (banner) { banner.classList.remove('hidden'); banner.classList.add('flex'); }
       var info = document.getElementById('js-list-route-info');
       var cnt  = document.getElementById('js-list-route-count');
       if (info) { info.classList.remove('hidden'); info.classList.add('flex'); }
-      if (cnt)  cnt.textContent = '路線過濾中：共 ' + RouteMod.filteredCams.length + ' 支沿途攝影機';
-      ToastMod.show('找到 ' + RouteMod.filteredCams.length + ' 支沿途攝影機');
+      if (cnt)  cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + RouteMod.filteredCams.length + ' \u652f';
+      Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
       Bus.emit('filter:changed');
     },
     clear: function() {
-      RouteMod.active = false;
-      RouteMod.filteredCams = [];
+      RouteMod.active = false; RouteMod.filteredCams = [];
       MapMod.clearRoute();
-      var input    = document.getElementById('js-route-input');
-      var statusEl = document.getElementById('js-route-status');
-      var banner   = document.getElementById('js-route-banner');
-      var info     = document.getElementById('js-list-route-info');
-      if (input)    input.value = '';
-      if (statusEl) statusEl.textContent = '';
-      if (banner)   { banner.classList.add('hidden'); banner.classList.remove('flex'); }
-      if (info)     { info.classList.add('hidden');   info.classList.remove('flex'); }
+      var input = document.getElementById('js-route-input');
+      var st    = document.getElementById('js-route-status');
+      var banner= document.getElementById('js-route-banner');
+      var info  = document.getElementById('js-list-route-info');
+      if (input)  input.value = '';
+      if (st)     st.textContent = '';
+      if (banner) { banner.classList.add('hidden'); banner.classList.remove('flex'); }
+      if (info)   { info.classList.add('hidden');   info.classList.remove('flex'); }
       Bus.emit('filter:changed');
     },
     locate: function() {
-      if (!navigator.geolocation) { ToastMod.show('瀏覽器不支援定位'); return; }
+      if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
       navigator.geolocation.getCurrentPosition(
-        function(pos) { MapMod.map.setView([pos.coords.latitude, pos.coords.longitude], 13); },
-        function()    { ToastMod.show('無法取得位置'); }
+        function(p) { MapMod.map.setView([p.coords.latitude, p.coords.longitude], 13); },
+        function()  { Toast.show('\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e'); }
       );
     }
   };
 
   // List
   var ListMod = {
-    currentRegion: 'all',
-    searchText: '',
+    region: 'all', search: '',
     init: function() {
       document.querySelectorAll('.rtab').forEach(function(btn) {
         btn.addEventListener('click', function() {
           document.querySelectorAll('.rtab').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
-          ListMod.currentRegion = btn.dataset.r;
+          ListMod.region = btn.dataset.r;
           Bus.emit('filter:changed');
         });
       });
-      var searchEl = document.getElementById('js-search');
-      if (searchEl) {
-        searchEl.addEventListener('input', function() {
-          ListMod.searchText = searchEl.value.trim().toLowerCase();
-          Bus.emit('filter:changed');
-        });
-      }
+      var s = document.getElementById('js-search');
+      if (s) s.addEventListener('input', function() { ListMod.search = s.value.trim().toLowerCase(); Bus.emit('filter:changed'); });
     },
     getFiltered: function() {
       var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
       return cams.filter(function(cam) {
-        var regionOk = ListMod.currentRegion === 'all' || getRegion(cam.county) === ListMod.currentRegion;
-        var searchOk = !ListMod.searchText ||
-          cam.name.toLowerCase().indexOf(ListMod.searchText) !== -1 ||
-          cam.county.toLowerCase().indexOf(ListMod.searchText) !== -1;
-        return regionOk && searchOk;
+        var rOk = ListMod.region === 'all' || getRegion(cam.county) === ListMod.region;
+        var sOk = !ListMod.search || cam.name.toLowerCase().indexOf(ListMod.search) !== -1 || cam.county.toLowerCase().indexOf(ListMod.search) !== -1;
+        return rOk && sOk;
       });
     },
     render: function() {
-      var listEl = document.getElementById('js-list-inner');
-      if (!listEl) return;
+      var el = document.getElementById('js-list-inner');
+      if (!el) return;
       var cams = ListMod.getFiltered();
       MapMod.clearMarkers();
-      var statEl = document.getElementById('js-stat-cams');
-      if (statEl) statEl.textContent = Data.allCams().length;
+      var stat = document.getElementById('js-stat-cams');
+      if (stat) stat.textContent = Data.allCams().length;
       if (cams.length === 0) {
-        listEl.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">找不到攝影機</div>';
+        el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
         return;
       }
-      var allCamsMap = {};
-      Data.allCams().forEach(function(c) { allCamsMap[c.id] = c; });
+      var map = {};
+      Data.allCams().forEach(function(c) { map[c.id] = c; });
       var html = '';
       cams.forEach(function(cam) {
-        var color   = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
-        var weather = Data.weather[cam.county];
-        var wText   = weather ? (weather.temp + '\u00B0C ' + (weather.weather || '')) : '';
-        html += '<div class="cam-card glass rounded-2xl p-4 flex items-center gap-4 cursor-pointer border border-white/5" data-id="' + cam.id + '">' +
-          '<div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:' + color + '22">' +
-          '<span class="w-3 h-3 rounded-full inline-block" style="background:' + color + '"></span>' +
-          '</div>' +
-          '<div class="flex-1 min-w-0">' +
-          '<div class="font-bold text-sm truncate">' + cam.name + '</div>' +
-          '<div class="text-[11px] text-slate-400 mt-0.5">' + cam.county + (wText ? ' · ' + wText : '') + '</div>' +
-          '</div>' +
-          '<i class="fa-solid fa-chevron-right text-slate-600 text-sm shrink-0"></i>' +
-          '</div>';
+        var color = cam.type === 'youtube' ? '#ff0000' : (Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown);
+        var badge = cam.type === 'youtube'
+          ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold">YT</span>'
+          : '<span class="text-[10px] bg-white/10 text-slate-400 px-2 py-0.5 rounded-full">CCTV</span>';
+        var w = Data.weather[cam.county];
+        var wt = w ? (w.temp + '\u00B0C') : '';
+        html += '<div class="cam-card glass rounded-2xl p-4 flex items-center gap-4 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
+          + '<div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:'+color+'22">'
+          + '<span class="w-3 h-3 rounded-full inline-block" style="background:'+color+'"></span></div>'
+          + '<div class="flex-1 min-w-0">'
+          + '<div class="font-bold text-sm truncate flex items-center gap-2">'+cam.name+' '+badge+'</div>'
+          + '<div class="text-[11px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
+          + '</div>'
+          + '<i class="fa-solid fa-chevron-right text-slate-600 text-sm shrink-0"></i></div>';
         MapMod.addMarker(cam);
       });
-      listEl.innerHTML = html;
-      listEl.querySelectorAll('.cam-card').forEach(function(card) {
+      el.innerHTML = html;
+      el.querySelectorAll('.cam-card').forEach(function(card) {
         card.addEventListener('click', function() {
-          var cam = allCamsMap[card.dataset.id];
+          var cam = map[card.dataset.id];
           if (!cam) return;
-          ModalMod.open(cam);
+          InfoMod.open(cam);
           NavMod.go('map');
           MapMod.map.setView([cam.lat, cam.lng], 14);
         });
@@ -847,7 +887,7 @@
     }
   };
 
-  // Modal
+  // Modal（影像播放）
   var ModalMod = {
     open: function(cam) {
       var ttl = document.getElementById('m-ttl');
@@ -855,25 +895,32 @@
       var med = document.getElementById('m-med');
       if (ttl) ttl.textContent = cam.name;
       if (org) {
-        var weather = Data.weather[cam.county];
-        var wText   = weather ? (' · ' + weather.temp + '\u00B0C ' + (weather.weather || '')) : '';
-        org.textContent = '\u{1F4CD} ' + cam.county + wText;
+        var w = Data.weather[cam.county];
+        org.textContent = '\u{1F4CD} ' + cam.county + (w ? ' \u00B7 '+w.temp+'\u00B0C '+(w.weather||'') : '');
       }
       if (med) {
         med.innerHTML = '';
-        if (cam.url) {
+        if (cam.type === 'youtube' && cam.videoId) {
+          var iframe = document.createElement('iframe');
+          iframe.src = 'https://www.youtube.com/embed/' + cam.videoId + '?autoplay=1&mute=0';
+          iframe.className = 'w-full h-full';
+          iframe.style.minHeight = '240px';
+          iframe.allow = 'autoplay; encrypted-media';
+          iframe.allowFullscreen = true;
+          med.appendChild(iframe);
+        } else if (cam.url) {
           var img = document.createElement('img');
           img.src = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Date.now();
           img.className = 'w-full h-full object-contain';
-          img.alt = cam.name;
           img.onerror = function() {
-            med.innerHTML = '<div class="text-slate-500 text-sm p-8 text-center">\u26A0\uFE0F \u5F71\u50CF\u7121\u6CD5\u8F09\u5165<br><span class="text-xs text-slate-600 mt-2 block">HTTP \u4F86\u6E90\u6216\u651D\u5F71\u6A5F\u96E2\u7DDA</span></div>';
+            med.innerHTML = '<div class="text-slate-500 text-sm p-8 text-center">\u26A0\uFE0F \u5f71\u50cf\u7121\u6cd5\u8f09\u5165<br><span class="text-xs text-slate-600 mt-2 block">HTTP \u4f86\u6e90\u6216\u651d\u5f71\u6a5f\u96e2\u7dda</span></div>';
           };
           med.appendChild(img);
         } else {
-          med.innerHTML = '<div class="text-slate-500 text-sm p-8">\u7121\u5F71\u50CF\u4F86\u6E90</div>';
+          med.innerHTML = '<div class="text-slate-500 text-sm p-8 text-center">\u6b64\u651d\u5f71\u6a5f\u7121\u5f71\u50cf\u4f86\u6e90</div>';
         }
       }
+      InfoMod.close();
       if (window.ModalEffect) window.ModalEffect.open();
     }
   };
@@ -886,6 +933,7 @@
     NavMod.init();
     RouteMod.init();
     ListMod.init();
+    InfoMod.init();
     Bus.on('filter:changed',  function() { ListMod.render(); });
     Bus.on('cams:updated',    function() { ListMod.render(); });
     Bus.on('weather:updated', function() { ListMod.render(); });
