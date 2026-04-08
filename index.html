@@ -480,6 +480,35 @@
     return geocodeName(s);
   };
 
+
+  // 用 OSRM 取得真實道路路徑，回傳 Promise<[[lat,lng],...]>
+  window.getRoadRoute = function(startLatLng, endLatLng) {
+    // OSRM 格式是 lng,lat（注意與我們的 lat,lng 相反）
+    var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
+    var url = 'https://router.project-osrm.org/route/v1/driving/' + coords +
+              '?overview=full&geometries=geojson';
+    return fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.routes || !data.routes[0]) return [startLatLng, endLatLng];
+        var geom = data.routes[0].geometry;
+        if (!geom || !geom.coordinates) return [startLatLng, endLatLng];
+        // OSRM 回傳 [lng, lat]，轉成 [lat, lng]
+        var pts = geom.coordinates.map(function(c) { return [c[1], c[0]]; });
+        // 記錄距離供顯示
+        window._lastRouteInfo = {
+          distance: Math.round(data.routes[0].distance / 1000),
+          duration: Math.round(data.routes[0].duration / 60)
+        };
+        return pts;
+      })
+      .catch(function() {
+        // OSRM 失敗時降級為直線
+        console.warn('OSRM 失敗，使用直線');
+        return [startLatLng, endLatLng];
+      });
+  };
+
   // 解析 Google Maps /dir/ 網址中的地名或座標，回傳 Promise<[[lat,lng],...]>
   window.parseRouteFromUrl = function(url) {
     // 先試用現有的座標解析
@@ -947,16 +976,24 @@
         extractPointFromUrl(startVal),
         extractPointFromUrl(endVal)
       ]).then(function(results) {
-        if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
         var startPt = results[0];
         var endPt   = results[1];
         if (!startPt || !endPt) {
+          if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
           Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
           return;
         }
-        var coords = [startPt, endPt];
-        Toast.show('\u8d77\u9ede\u2192\u7d42\u9ede\u89e3\u6790\u5b8c\u6210');
-        RouteMod._doFilter('', coords);
+        // 取得真實道路路徑
+        Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
+        return getRoadRoute(startPt, endPt).then(function(coords) {
+          if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+          var info = window._lastRouteInfo;
+          var msg = info
+            ? ('\u8def\u7dda\u89e3\u6790\u5b8c\u6210\uff01' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418')
+            : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
+          Toast.show(msg, 3000);
+          RouteMod._doFilter('', coords);
+        });
       }).catch(function() {
         if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
         Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
