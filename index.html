@@ -552,18 +552,28 @@
     // 任何 http 連結 — 展開後解析
     if (text.indexOf('http') === 0) {
       expandGoogleUrl(text).then(function(fullUrl) {
+        // 1. /dir/ 路線格式（有起終點）
         var r = parseRouteStartEnd(fullUrl);
         if (r && (r.start || r.end)) {
           onFill(r.start || '', r.end || '');
           return;
         }
-        // 嘗試 data= 座標序列（舊版 parseGoogleMapsCoords）
+        // 2. data= 座標序列
         var coords = parseGoogleMapsCoords(fullUrl);
         if (coords.length >= 2) {
           onFill(coords[0][0]+','+coords[0][1], coords[coords.length-1][0]+','+coords[coords.length-1][1]);
           return;
         }
-        Toast.show('\u7121\u6cd5\u89e3\u6790\uff0c\u8acb\u624b\u52d5\u8f38\u5165\u8d77\u7d42\u9ede');
+        // 3. 單點座標（place 頁面）當作起點
+        var mAt = fullUrl.match(/@(-?[0-9]+\.[0-9]+),(-?[0-9]+\.[0-9]+)/);
+        if (mAt) {
+          onFill(mAt[1]+','+mAt[2], '');
+          Toast.show('地點帶入為起點，請補充終點');
+          return;
+        }
+        // 除錯：顯示展開後 URL（方便回報問題）
+        var dbg = fullUrl.slice(0, 80);
+        Toast.show('展開結果：' + dbg, 6000);
       });
       return true;
     }
