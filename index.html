@@ -154,18 +154,18 @@
     <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
   </div>
 
-  <!-- YouTube 路線搜尋 Panel -->
-  <div id="yt-route-panel" class="hidden absolute bottom-40 left-4 right-4 z-[500] max-w-sm glass rounded-2xl p-3 shadow-2xl">
+  <!-- YouTube 路線搜尋 Panel（路線解析完成後顯示） -->
+  <div id="yt-route-panel" class="hidden absolute top-[calc(var(--safe-top)+3rem)] right-4 z-[600] w-64 glass rounded-2xl p-3 shadow-2xl border border-red-500/30">
     <div class="flex items-center justify-between mb-2">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
         <i class="fa-brands fa-youtube text-red-500"></i>
-        <span class="text-xs font-black">路線 YouTube 搜尋</span>
+        <span class="text-xs font-black">路線直播搜尋</span>
       </div>
       <button onclick="YoutubeMod.hide()" class="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
         <i class="fa-solid fa-xmark text-[10px]"></i>
       </button>
     </div>
-    <div id="yt-route-cities" class="text-[10px] text-slate-400 mb-2 truncate"></div>
+    <div id="yt-route-cities" class="text-[10px] text-orange-400 mb-2 truncate font-bold"></div>
     <div id="yt-route-links" class="space-y-1.5"></div>
   </div>
 
@@ -1159,16 +1159,27 @@
             ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418')
             : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
           Toast.show(msg, 3000);
+          // 自動收起輸入框
+          var exp = document.getElementById('route-expanded');
+          var col = document.getElementById('route-collapsed');
+          var colTxt = document.getElementById('route-collapsed-text');
+          if (exp) exp.classList.add('hidden');
+          if (col) col.classList.remove('hidden');
+          if (colTxt) { colTxt.textContent = msg; colTxt.classList.add('text-orange-400'); }
+          var clearMini = document.getElementById('js-route-clear-small');
+          if (clearMini) clearMini.classList.remove('hidden');
           RouteMod._doFilter('', coords);
-          YoutubeMod.showRouteSearch(coords);
+          setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 500);
         });
       }).catch(function() {
         if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
         Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
       });
     },
+    routeCoords: [],
     _doFilter: function(url, coords) {
       var simplified = simplifyCoords(coords, Config.SIMPLIFY_STEP);
+      RouteMod.routeCoords = coords;
       RouteMod.active = true;
       RouteMod.filteredCams = Data.allCams().filter(function(cam) {
         for (var i = 0; i < simplified.length-1; i++) {
