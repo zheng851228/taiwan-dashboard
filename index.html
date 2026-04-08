@@ -154,6 +154,21 @@
     <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
   </div>
 
+  <!-- YouTube 路線搜尋 Panel -->
+  <div id="yt-route-panel" class="hidden absolute bottom-40 left-4 right-4 z-[500] max-w-sm glass rounded-2xl p-3 shadow-2xl">
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center gap-2">
+        <i class="fa-brands fa-youtube text-red-500"></i>
+        <span class="text-xs font-black">路線 YouTube 搜尋</span>
+      </div>
+      <button onclick="YoutubeMod.hide()" class="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
+        <i class="fa-solid fa-xmark text-[10px]"></i>
+      </button>
+    </div>
+    <div id="yt-route-cities" class="text-[10px] text-slate-400 mb-2 truncate"></div>
+    <div id="yt-route-links" class="space-y-1.5"></div>
+  </div>
+
   <!-- 圖例（緊湊版） -->
   <div class="absolute bottom-24 left-4 z-[500] glass px-2.5 py-2 rounded-xl text-[10px]">
     <div class="flex flex-col gap-1">
@@ -1145,6 +1160,7 @@
             : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
           Toast.show(msg, 3000);
           RouteMod._doFilter('', coords);
+          YoutubeMod.showRouteSearch(coords);
         });
       }).catch(function() {
         if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
@@ -1779,6 +1795,77 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     }
   });
 })();
+
+// ── YouTube 路線搜尋模組（方案 A）────────────────────────────────────────
+var YoutubeMod = {
+
+  // 根據路線座標判斷經過哪些縣市
+  getRouteCities: function(coords) {
+    if (!coords || coords.length < 2) return [];
+    var cities = [];
+    var centers = window.COUNTY_CENTERS || {};
+
+    Object.keys(centers).forEach(function(county) {
+      var c = centers[county];
+      // 判斷縣市中心點是否在路線 25km 內
+      for (var i = 0; i < coords.length - 1; i++) {
+        var d = distToSegKm(c[0], c[1], coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1]);
+        if (d <= 25) { cities.push(county); break; }
+      }
+    });
+    return cities;
+  },
+
+  // 根據縣市產生 YouTube 搜尋關鍵字
+  getSearchKeyword: function(cities) {
+    // 取前三個縣市
+    var names = cities.slice(0, 3).map(function(c) {
+      return c.replace('市','').replace('縣','');
+    });
+    return names.join(' ') + ' 路況 直播';
+  },
+
+  // 顯示 YouTube 搜尋 Panel
+  showRouteSearch: function(coords) {
+    var cities = YoutubeMod.getRouteCities(coords);
+    if (cities.length === 0) return;
+
+    var panel = document.getElementById('yt-route-panel');
+    if (!panel) return;
+
+    var keyword = YoutubeMod.getSearchKeyword(cities);
+    var ytUrl   = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(keyword + ' live');
+
+    // 也產生幾個精確搜尋
+    var links = '';
+    var searches = [
+      keyword + ' live',
+      cities.slice(0,2).join('') + ' 國道 路況',
+      cities.slice(0,2).join('') + ' 省道 直播'
+    ];
+    searches.forEach(function(q) {
+      var url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+      links += '<a href="' + url + '" target="_blank" ' +
+        'class="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 hover:bg-red-500/20 transition-colors text-xs">' +
+        '<i class="fa-brands fa-youtube text-red-500 shrink-0"></i>' +
+        '<span class="truncate">' + q + '</span>' +
+        '<i class="fa-solid fa-arrow-up-right-from-square text-slate-500 text-[10px] shrink-0"></i>' +
+        '</a>';
+    });
+
+    var cityList = document.getElementById('yt-route-cities');
+    var linkList = document.getElementById('yt-route-links');
+    if (cityList) cityList.textContent = cities.slice(0,5).join(' → ');
+    if (linkList) linkList.innerHTML = links;
+
+    panel.classList.remove('hidden');
+  },
+
+  hide: function() {
+    var panel = document.getElementById('yt-route-panel');
+    if (panel) panel.classList.add('hidden');
+  }
+};
 
 </script>
 
