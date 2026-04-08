@@ -41,7 +41,27 @@
     body.light .text-slate-400 { color: #64748b; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
-
+    /* yt-route-panel 固定浮層 */
+    #yt-route-panel {
+      position: fixed;
+      bottom: 90px;
+      left: 16px;
+      right: 16px;
+      max-width: 500px;
+      margin: 0 auto;
+      z-index: 900;
+      display: none;
+      background: rgba(15,23,42,0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: 20px;
+      padding: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    #yt-route-panel.visible {
+      display: block;
+    }
   </style>
 </head>
 <body class="text-slate-100">
@@ -59,7 +79,7 @@
       </div>
       <div class="flex items-center gap-2">
         <div id="js-clk" class="text-xs font-mono font-bold text-slate-300">--:--:--</div>
-        <button id="js-theme" class="w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base">🌙</button>
+        <button id="js-theme" class="w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base">&#127769;</button>
       </div>
     </div>
   </header>
@@ -75,14 +95,14 @@
 
   <!-- 路徑解析（收合式） -->
   <div class="absolute top-[calc(var(--safe-top)+3rem)] left-4 right-4 z-[500] max-w-lg">
-    <!-- 收合狀態：單行（支援直接貼路線網址） -->
+    <!-- 收合狀態 -->
     <div id="route-collapsed" class="glass px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2">
       <i class="fa-solid fa-route text-orange-500 text-sm shrink-0"></i>
       <input id="route-paste-input" type="text"
         class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500 min-w-0"
         placeholder="貼上 Google Maps 路線網址或點此展開..." />
       <button id="route-toggle" class="text-orange-500 text-xs shrink-0 hover:text-orange-400">展開</button>
-      <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">✕</button>
+      <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">&#10005;</button>
     </div>
     <!-- 展開狀態 -->
     <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
@@ -99,30 +119,16 @@
           placeholder="終點地名或 Google Maps 網址..." />
       </div>
       <div class="flex gap-2">
-        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">🏍️ 機車</button>
-        <button data-mode="car" class="route-mode-btn flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">🚗 汽車</button>
+        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949;&#65039; 機車</button>
+        <button data-mode="car" class="route-mode-btn flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">&#128663; 汽車</button>
         <button id="route-toggle-close" class="px-3 py-1.5 rounded-xl text-xs text-slate-500 border border-white/10 bg-slate-800/50">收起</button>
       </div>
       <button id="js-route-btn"
         class="w-full bg-orange-500 hover:bg-orange-600 py-2 rounded-xl text-white font-bold text-xs transition-all active:scale-95">
-        🔍 解析路線找沿途攝影機
+        &#128269; 解析路線找沿途攝影機
       </button>
     </div>
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-400 drop-shadow-md"></div>
-    <!-- YouTube 路線搜尋 Panel -->
-    <div id="yt-route-panel" style="display:none;" class="glass rounded-2xl p-3 mt-2 border border-red-500/30">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-1.5">
-          <i class="fa-brands fa-youtube text-red-500 text-sm"></i>
-          <span class="text-xs font-black">沿途路況直播搜尋</span>
-        </div>
-        <button onclick="YoutubeMod.hide()" class="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center">
-          <i class="fa-solid fa-xmark text-[10px]"></i>
-        </button>
-      </div>
-      <div id="yt-route-cities" class="text-[10px] text-orange-400 mb-2 font-bold"></div>
-      <div id="yt-route-links"></div>
-    </div>
   </div>
 
   <!-- 定位按鈕 -->
@@ -137,7 +143,7 @@
   <div id="nearby-panel" class="hidden absolute bottom-24 right-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
     <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
       <div class="flex items-center gap-2">
-        <span class="text-orange-500 text-sm">📍</span>
+        <span class="text-orange-500 text-sm">&#128205;</span>
         <span class="font-black text-sm">附近攝影機</span>
         <span id="nearby-count" class="text-[10px] text-slate-400"></span>
       </div>
@@ -169,9 +175,7 @@
     <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
   </div>
 
-
-
-  <!-- 圖例（緊湊版） -->
+  <!-- 圖例 -->
   <div class="absolute bottom-24 left-4 z-[500] glass px-2.5 py-2 rounded-xl text-[10px]">
     <div class="flex flex-col gap-1">
       <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full dot-smooth inline-block"></span>順暢</div>
@@ -191,8 +195,6 @@
 <!-- Page: 路況列表 -->
 <section id="pg-list" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-4">
-
-    <!-- 分區 Tabs -->
     <div id="js-tabs" class="flex gap-1 p-1 glass rounded-2xl sticky top-0 z-10">
       <button data-r="all"     class="rtab active flex-1 py-2 text-xs font-bold rounded-xl transition-all">全部</button>
       <button data-r="north"   class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">北部</button>
@@ -201,16 +203,12 @@
       <button data-r="east"    class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">東部</button>
       <button data-r="island"  class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">離島</button>
     </div>
-
-    <!-- 搜尋 -->
     <div class="relative">
       <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
       <input type="text" id="js-search"
         placeholder="搜尋攝影機名稱或縣市..."
         class="w-full bg-slate-800/50 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
     </div>
-
-    <!-- 路線過濾提示 -->
     <div id="js-list-route-info" class="hidden text-xs font-bold text-orange-400 px-1 flex items-center gap-2">
       <span class="relative flex h-2 w-2">
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
@@ -218,8 +216,6 @@
       </span>
       <span id="js-list-route-count"></span>
     </div>
-
-    <!-- 攝影機卡片 -->
     <div id="js-list-inner" class="space-y-3"></div>
   </div>
 </section>
@@ -247,7 +243,6 @@
       <div id="wx-updated" class="text-[10px] text-slate-600 text-right"></div>
     </div>
 
-
     <div class="glass p-6 rounded-3xl space-y-3">
       <div class="flex items-center gap-3 mb-2">
         <div class="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
@@ -256,7 +251,7 @@
         <h2 class="font-black text-base">路線解析工具</h2>
       </div>
       <p class="text-xs text-slate-400 leading-relaxed">
-        將 Google Maps 規劃好的路線網址貼入地圖頁面的輸入框，系統會自動解析座標並過濾出沿途 1km 內的 CCTV 攝影機。
+        將 Google Maps 規劃好的路線網址貼入地圖頁面的輸入框，系統會自動解析座標並過濾出沿途 15km 內的 CCTV 攝影機。
       </p>
       <div class="bg-slate-800/60 rounded-2xl p-4 text-xs text-slate-300 space-y-2 mt-2">
         <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">1</span><span>前往 Google Maps 規劃路線</span></div>
@@ -318,6 +313,22 @@
     </div>
   </nav>
 
+  <!-- YouTube 路線搜尋 Panel（fixed 浮層，移出所有 overflow 容器） -->
+
+  <div id="yt-route-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <i class="fa-brands fa-youtube" style="color:#ef4444;font-size:15px;"></i>
+        <span style="font-size:12px;font-weight:900;">沿途路況直播搜尋</span>
+      </div>
+      <button onclick="YoutubeMod.hide()" style="width:22px;height:22px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
+        <i class="fa-solid fa-xmark" style="font-size:10px;"></i>
+      </button>
+    </div>
+    <div id="yt-route-cities" style="font-size:10px;color:#fb923c;font-weight:700;margin-bottom:8px;"></div>
+    <div id="yt-route-links"></div>
+  </div>
+
   <!-- CCTV Modal -->
 
   <div id="modal" class="fixed inset-0 z-[2000] hidden items-center justify-center p-4">
@@ -334,8 +345,8 @@
       </div>
       <div id="m-med" class="aspect-video bg-black flex items-center justify-center relative min-h-[180px]"></div>
       <div class="p-4 bg-slate-900/50 text-[10px] text-slate-500 flex justify-between items-center">
-        <span>⚠️ 影像若無畫面，可能為 HTTP 混合內容攔截。</span>
-        <span class="text-orange-500 font-bold animate-pulse">● LIVE</span>
+        <span>&#9888;&#65039; 影像若無畫面，可能為 HTTP 混合內容攔截。</span>
+        <span class="text-orange-500 font-bold animate-pulse">&#9679; LIVE</span>
       </div>
     </div>
   </div>
@@ -379,9 +390,9 @@
     MAP_ZOOM: 7,
     ROUTE_FILTER_KM: 15.0,
     SIMPLIFY_STEP: 5,
-    TILE_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    TILE_ATTR: '&copy; OpenStreetMap &copy; CARTO',
+    TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
     STATUS_COLOR: {
       smooth:  '#3fb950',
       slow:    '#d29922',
@@ -397,53 +408,32 @@
     }
   };
 })();
-
 </script>
 
 <script>
 (function() {
   'use strict';
 
-  // Event Bus
   var _listeners = {};
   window.Bus = {
-    on: function(evt, fn) {
-      if (!_listeners[evt]) _listeners[evt] = [];
-      _listeners[evt].push(fn);
-    },
-    emit: function(evt, data) {
-      (_listeners[evt] || []).forEach(function(fn) { fn(data); });
-    }
+    on:   function(evt, fn) { if (!_listeners[evt]) _listeners[evt] = []; _listeners[evt].push(fn); },
+    emit: function(evt, data) { (_listeners[evt] || []).forEach(function(fn) { fn(data); }); }
   };
 
-  // Clock
-  window.Clock = {
-    start: function() {
-      var el = document.getElementById('clock');
-      function tick() {
-        var now = new Date();
-        var h = String(now.getHours()).padStart(2,'0');
-        var m = String(now.getMinutes()).padStart(2,'0');
-        var s = String(now.getSeconds()).padStart(2,'0');
-        if (el) el.textContent = h + ':' + m + ':' + s;
-      }
-      tick();
-      setInterval(tick, 1000);
-    }
-  };
-
-  // Toast
   window.Toast = {
-    show: function(msg, duration) {
+    show: function(msg, ms) {
       var el = document.getElementById('toast');
       if (!el) return;
       el.textContent = msg;
-      el.classList.add('show');
-      setTimeout(function() { el.classList.remove('show'); }, duration || 2500);
+      el.style.opacity = '1';
+      el.style.transform = 'translateX(-50%) translateY(0)';
+      setTimeout(function() {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(-50%) translateY(8px)';
+      }, ms || 2500);
     }
   };
 
-  // 點到線段距離 (km)，Haversine 簡化版
   function toRad(d) { return d * Math.PI / 180; }
   function haversine(lat1, lon1, lat2, lon2) {
     var R = 6371;
@@ -463,243 +453,145 @@
     return haversine(px, py, ax + t*dx, ay + t*dy);
   };
 
-  // 座標抽稀
   window.simplifyCoords = function(coords, step) {
     step = step || Config.SIMPLIFY_STEP;
     var out = [];
-    for (var i = 0; i < coords.length; i += step) {
-      out.push(coords[i]);
-    }
-    if (out[out.length-1] !== coords[coords.length-1]) {
-      out.push(coords[coords.length-1]);
-    }
+    for (var i = 0; i < coords.length; i += step) { out.push(coords[i]); }
+    if (out[out.length-1] !== coords[coords.length-1]) out.push(coords[coords.length-1]);
     return out;
   };
 
-  // 判斷縣市屬於哪個 region
   window.getRegion = function(county) {
     var regions = Config.REGIONS;
-    for (var r in regions) {
-      if (regions[r].indexOf(county) !== -1) return r;
-    }
+    for (var r in regions) { if (regions[r].indexOf(county) !== -1) return r; }
     return 'other';
   };
 
-
-
-  // 用 Nominatim 把地名轉成座標，回傳 Promise<[lat,lng] | null>
   window.geocodeName = function(name) {
     var q = encodeURIComponent(name.trim());
-    var url = 'https://nominatim.openstreetmap.org/search?q=' + q +
-              '&format=json&limit=1&countrycodes=tw';
+    var url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1&countrycodes=tw';
     return fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data && data.length > 0) {
-          return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-        }
+        if (data && data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
         return null;
       })
       .catch(function() { return null; });
   };
 
-
-
-  // 解析 Google Maps 路線網址，自動填入起終點
-  // 支援格式：/dir/起點/終點/、短網址展開後
   window.parseRouteStartEnd = function(url) {
-    // 先嘗試直接解析 /dir/A/B/
     var dirMatch = url.match(/\/dir\/([^@?#]+)/);
     if (dirMatch) {
       var parts = dirMatch[1].split('/').map(function(p) {
         return decodeURIComponent(p.replace(/\+/g,' ')).trim();
       }).filter(function(p) { return p.length > 1; });
-
-      if (parts.length >= 2) {
-        return {
-          start: parts[0],
-          end:   parts[parts.length - 1]
-        };
-      }
+      if (parts.length >= 2) return { start: parts[0], end: parts[parts.length - 1] };
     }
     return null;
   };
 
-  // 偵測貼入內容是否為 Google Maps 路線，自動填入起終點
   window.autoFillRoute = function(text, onFill) {
     text = text.trim();
     if (!text) return false;
-
-    // 直接是長網址
     var result = parseRouteStartEnd(text);
     if (result) { onFill(result.start, result.end); return true; }
-
-    // 短網址，展開後再解析
     if (text.indexOf('maps.app.goo.gl') !== -1 || text.indexOf('goo.gl/maps') !== -1) {
       expandGoogleUrl(text).then(function(fullUrl) {
         var r = parseRouteStartEnd(fullUrl);
-        if (r) { onFill(r.start, r.end); }
+        if (r) onFill(r.start, r.end);
       });
       return true;
     }
-
     return false;
   };
 
-  // 從 Google Maps 地點網址抽取單一座標
   window.extractPointFromUrl = function(input) {
     if (!input || !input.trim()) return Promise.resolve(null);
     var s = input.trim();
-
-    // 1. 直接是座標格式 "25.03,121.36"
     var coordM = s.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
     if (coordM) return Promise.resolve([parseFloat(coordM[1]), parseFloat(coordM[2])]);
-
-    // 2. 是網址，先展開短網址
     if (s.indexOf('http') === 0) {
       return expandGoogleUrl(s).then(function(fullUrl) {
-        // 從 @ 抓座標
         var m = fullUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
         if (m) return [parseFloat(m[1]), parseFloat(m[2])];
-        // 從 query= 抓座標
         var m2 = fullUrl.match(/query=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
         if (m2) return [parseFloat(m2[1]), parseFloat(m2[2])];
-        // 從 ll= 抓座標
         var m3 = fullUrl.match(/ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
         if (m3) return [parseFloat(m3[1]), parseFloat(m3[2])];
-        // 抓不到座標，嘗試從地名 geocode
         var placeM = fullUrl.match(/\/place\/([^/@]+)/);
-        if (placeM) {
-          var name = decodeURIComponent(placeM[1].replace(/\+/g, ' '));
-          return geocodeName(name);
-        }
+        if (placeM) return geocodeName(decodeURIComponent(placeM[1].replace(/\+/g,' ')));
         return null;
       });
     }
-
-    // 3. 純文字地名，直接 geocode
     return geocodeName(s);
   };
 
-
-  // 用 OSRM 取得真實道路路徑，回傳 Promise<[[lat,lng],...]>
-  // mode: 'driving'（汽車）| 'motorcycle' → OSRM 統一用 driving，機車另外處理
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
     var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
-    // OSRM 公開 API 的模式：driving / cycling / foot
-    // motorcycle 用 driving（路線相似），但可加 avoid=motorway 走省道
-    var osrmMode = (mode === 'motorcycle') ? 'driving' : 'driving';
-    var avoid    = (mode === 'motorcycle') ? '' : '';
-    var url = 'https://router.project-osrm.org/route/v1/' + osrmMode + '/' + coords +
-              '?overview=full&geometries=geojson' + avoid;
+    var url = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson';
     return fetch(url)
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (!data.routes || !data.routes[0]) return [startLatLng, endLatLng];
         var geom = data.routes[0].geometry;
         if (!geom || !geom.coordinates) return [startLatLng, endLatLng];
-        // OSRM 回傳 [lng, lat]，轉成 [lat, lng]
-        var pts = geom.coordinates.map(function(c) { return [c[1], c[0]]; });
-        // 記錄距離供顯示
         window._lastRouteInfo = {
           distance: Math.round(data.routes[0].distance / 1000),
           duration: Math.round(data.routes[0].duration / 60)
         };
-        return pts;
+        return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
       })
-      .catch(function() {
-        // OSRM 失敗時降級為直線
-        console.warn('OSRM 失敗，使用直線');
-        return [startLatLng, endLatLng];
-      });
+      .catch(function() { return [startLatLng, endLatLng]; });
   };
 
-  // 解析 Google Maps /dir/ 網址中的地名或座標，回傳 Promise<[[lat,lng],...]>
   window.parseRouteFromUrl = function(url) {
-    // 先試用現有的座標解析
     var coords = parseGoogleMapsCoords(url);
-    if (coords.length >= 2) {
-      return Promise.resolve(coords);
-    }
-
-    // 嘗試從 /dir/地名A/地名B/ 解析地名
+    if (coords.length >= 2) return Promise.resolve(coords);
     var dirMatch = url.match(/\/dir\/([^@?#]+)/);
     if (!dirMatch) return Promise.resolve([]);
-
     var parts = dirMatch[1].split('/').map(function(p) {
-      return decodeURIComponent(p.replace(/\+/g, ' ')).trim();
-    }).filter(function(p) {
-      return p.length > 0 && p !== '';
-    });
-
+      return decodeURIComponent(p.replace(/\+/g,' ')).trim();
+    }).filter(function(p) { return p.length > 0; });
     if (parts.length < 2) return Promise.resolve([]);
-
-    // 取起點和終點（忽略中間路線點）
-    var waypoints = [parts[0], parts[parts.length - 1]];
-
-    // 逐一 geocode
-    var promises = waypoints.map(function(name) {
-      // 先試座標格式
+    var waypoints = [parts[0], parts[parts.length-1]];
+    return Promise.all(waypoints.map(function(name) {
       var m = name.match(/^(-?\d+\.?\d*),(-?\d+\.?\d*)$/);
       if (m) return Promise.resolve([parseFloat(m[1]), parseFloat(m[2])]);
-      // 地名 geocode
       return geocodeName(name);
-    });
-
-    return Promise.all(promises).then(function(results) {
-      return results.filter(function(r) { return r !== null; });
-    });
+    })).then(function(results) { return results.filter(function(r) { return r !== null; }); });
   };
 
-  // 展開 Google Maps 短網址，回傳 Promise<string>
   window.expandGoogleUrl = function(url) {
-    // 已經是長網址直接回傳
-    if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) {
-      return Promise.resolve(url);
-    }
-    // 用 fetch 跟隨 redirect 取得最終 URL
+    if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) return Promise.resolve(url);
     return fetch('https://corsproxy.io/?' + encodeURIComponent(url), { method: 'GET', redirect: 'follow' })
       .then(function(r) { return r.url || url; })
-      .catch(function() {
-        // 備援：直接回傳原本，讓後續解析嘗試
-        return url;
-      });
+      .catch(function() { return url; });
   };
 
-  // 解析 Google Maps URL 中的座標點 (waypoints)
   window.parseGoogleMapsCoords = function(url) {
     var coords = [];
-    // 嘗試解析 /dir/ 路徑
     var dirMatch = url.match(/\/dir\/([^@?]+)/);
     if (dirMatch) {
-      var parts = dirMatch[1].split('/');
-      parts.forEach(function(p) {
+      dirMatch[1].split('/').forEach(function(p) {
         var m = p.match(/^(-?\d+\.?\d*),(-?\d+\.?\d*)/);
         if (m) coords.push([parseFloat(m[1]), parseFloat(m[2])]);
       });
     }
-    // 嘗試解析 data= 內的座標序列
     var dataMatch = url.match(/data=([^&]+)/);
     if (dataMatch) {
       var raw = decodeURIComponent(dataMatch[1]);
       var re = /!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/g;
       var m;
-      while ((m = re.exec(raw)) !== null) {
-        coords.push([parseFloat(m[1]), parseFloat(m[2])]);
-      }
+      while ((m = re.exec(raw)) !== null) coords.push([parseFloat(m[1]), parseFloat(m[2])]);
     }
-    // 備援：抓所有明顯台灣座標
     if (coords.length < 2) {
       var re2 = /([2][0-5]\.\d{4,}),\s*(1[12][0-9]\.\d{4,})/g;
       var m2;
-      while ((m2 = re2.exec(url)) !== null) {
-        coords.push([parseFloat(m2[1]), parseFloat(m2[2])]);
-      }
+      while ((m2 = re2.exec(url)) !== null) coords.push([parseFloat(m2[1]), parseFloat(m2[2])]);
     }
     return coords;
   };
 })();
-
 </script>
 
 <script>
@@ -711,7 +603,6 @@
   var _token = null;
   var _tokenExpiry = 0;
 
-  // TDX Token
   function getTDXToken(cb) {
     var now = Date.now();
     if (_token && now < _tokenExpiry) { cb(_token); return; }
@@ -741,7 +632,6 @@
     '連江縣':[26.1971,119.9395]
   };
 
-  // TDX 縣市代碼對照
   var CITY_CODES = {
     '台北市':'Taipei','新北市':'NewTaipei','基隆市':'Keelung','桃園市':'Taoyuan',
     '新竹市':'Hsinchu','新竹縣':'HsinchuCounty','苗栗縣':'MiaoliCounty',
@@ -754,7 +644,7 @@
   var B = 'https://c01.twipcam.com/cam/snapshot/';
 
   var CAMS = [
-    // 國道1號（南下）
+    // 國道1號 南下
     {id:'n1s000',name:'國1 基隆端',       county:'基隆市',lat:25.1190,lng:121.7218,snap:'n1-s-0k-000.jpg'},
     {id:'n1s008',name:'國1 汐止',          county:'新北市',lat:25.0720,lng:121.6590,snap:'n1-s-8k-000.jpg'},
     {id:'n1s020',name:'國1 五股',          county:'新北市',lat:25.0700,lng:121.4700,snap:'n1-s-20k-000.jpg'},
@@ -770,7 +660,7 @@
     {id:'n1s230',name:'國1 嘉義',          county:'嘉義縣',lat:23.4500,lng:120.3800,snap:'n1-s-230k-000.jpg'},
     {id:'n1s280',name:'國1 台南',          county:'台南市',lat:23.0500,lng:120.2900,snap:'n1-s-280k-000.jpg'},
     {id:'n1s330',name:'國1 高雄',          county:'高雄市',lat:22.7000,lng:120.2900,snap:'n1-s-330k-000.jpg'},
-    // 國道1號（北上）
+    // 國道1號 北上
     {id:'n1n000',name:'國1 基隆端(北)',    county:'基隆市',lat:25.1200,lng:121.7230,snap:'n1-n-0k-000.jpg'},
     {id:'n1n040',name:'國1 桃園(北)',      county:'桃園市',lat:25.0100,lng:121.3100,snap:'n1-n-40k-000.jpg'},
     {id:'n1n060',name:'國1 中壢(北)',      county:'桃園市',lat:24.9700,lng:121.2400,snap:'n1-n-60k-000.jpg'},
@@ -848,8 +738,6 @@
     {id:'t88-021',name:'台88線 屏東竹田',  county:'屏東縣',lat:22.6100,lng:120.4800,snap:'t88-21k-900.jpg'}
   ];
 
-  // 路況 level → status 對照
-  // TDX CongestionLevel: 1=順暢, 2=緩慢, 3=壅塞, 4=非常壅塞, 0=未知
   function levelToStatus(lv) {
     if (lv === 1) return 'smooth';
     if (lv === 2) return 'slow';
@@ -862,15 +750,11 @@
              url: B + c.snap, type:'cctv', status:'unknown' };
   });
 
-  // 用縣市路況更新攝影機 status
   function applyCountyStatus(county, level) {
     var status = levelToStatus(level);
-    _cams.forEach(function(cam) {
-      if (cam.county === county) cam.status = status;
-    });
+    _cams.forEach(function(cam) { if (cam.county === county) cam.status = status; });
   }
 
-  // 抓取全台縣市壅塞等級
   function fetchCongestion(token) {
     var cities = Object.keys(CITY_CODES);
     var fetched = 0;
@@ -882,21 +766,14 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (Array.isArray(data) && data.length > 0) {
-          var lv = data[0].CongestionLevel || data[0].Level || 0;
-          applyCountyStatus(county, lv);
+          applyCountyStatus(county, data[0].CongestionLevel || data[0].Level || 0);
         }
         fetched++;
-        if (fetched === cities.length) {
-          Bus.emit('cams:updated');
-          Bus.emit('status:updated');
-        }
+        if (fetched === cities.length) { Bus.emit('cams:updated'); Bus.emit('status:updated'); }
       })
       .catch(function() {
         fetched++;
-        if (fetched === cities.length) {
-          Bus.emit('cams:updated');
-          Bus.emit('status:updated');
-        }
+        if (fetched === cities.length) { Bus.emit('cams:updated'); Bus.emit('status:updated'); }
       });
     });
   }
@@ -904,21 +781,17 @@
   window.Data = {
     weather: {},
     allCams: function() { return _cams; },
-
     loadDynamic: function() {
       setTimeout(function() { Bus.emit('cams:updated'); }, 100);
-      // 取得 TDX Token 後抓路況
       getTDXToken(function(token) {
         if (token) {
           fetchCongestion(token);
-          // 每 3 分鐘更新一次
           setInterval(function() {
             getTDXToken(function(t) { if (t) fetchCongestion(t); });
           }, 3 * 60 * 1000);
         }
       });
     },
-
     fetchWeather: function() {
       var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
                 '?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100';
@@ -941,7 +814,6 @@
   window.Data.loadDynamic();
   window.Data.fetchWeather();
 })();
-
 </script>
 
 <script>
@@ -974,31 +846,14 @@
   var ClockMod = {
     init: function() {
       var clk = document.getElementById('js-clk');
-      var dte = document.getElementById('js-date');
       function tick() {
         var n = new Date();
         var h = String(n.getHours()).padStart(2,'0');
         var m = String(n.getMinutes()).padStart(2,'0');
         var s = String(n.getSeconds()).padStart(2,'0');
         if (clk) clk.textContent = h+':'+m+':'+s;
-        if (dte) dte.textContent = n.getFullYear()+'/'+(String(n.getMonth()+1).padStart(2,'0'))+'/'+String(n.getDate()).padStart(2,'0');
       }
       tick(); setInterval(tick, 1000);
-    }
-  };
-
-  // Toast
-  window.Toast = {
-    show: function(msg, ms) {
-      var el = document.getElementById('toast');
-      if (!el) return;
-      el.textContent = msg;
-      el.style.opacity = '1';
-      el.style.transform = 'translateX(-50%) translateY(0)';
-      setTimeout(function() {
-        el.style.opacity = '0';
-        el.style.transform = 'translateX(-50%) translateY(8px)';
-      }, ms || 2500);
     }
   };
 
@@ -1058,27 +913,23 @@
     }
   };
 
-  // Info Panel（點擊先顯示資訊）
+  // Info Panel
   var InfoMod = {
-    panel: null,
     current: null,
     init: function() {
-      var panel = document.getElementById('info-panel');
       var closeBtn = document.getElementById('info-close');
       var playBtn  = document.getElementById('info-play');
       if (closeBtn) closeBtn.addEventListener('click', function() { InfoMod.close(); });
-      if (playBtn)  playBtn.addEventListener('click', function() {
-        if (InfoMod.current) ModalMod.open(InfoMod.current);
-      });
+      if (playBtn)  playBtn.addEventListener('click', function() { if (InfoMod.current) ModalMod.open(InfoMod.current); });
     },
     open: function(cam) {
       InfoMod.current = cam;
-      var panel   = document.getElementById('info-panel');
-      var nameEl  = document.getElementById('info-name');
-      var countyEl= document.getElementById('info-county');
-      var typeEl  = document.getElementById('info-type');
+      var panel     = document.getElementById('info-panel');
+      var nameEl    = document.getElementById('info-name');
+      var countyEl  = document.getElementById('info-county');
+      var typeEl    = document.getElementById('info-type');
       var weatherEl = document.getElementById('info-weather');
-      var playBtn = document.getElementById('info-play');
+      var playBtn   = document.getElementById('info-play');
       if (!panel) return;
       if (nameEl)   nameEl.textContent   = cam.name;
       if (countyEl) countyEl.textContent = '\u{1F4CD} ' + cam.county;
@@ -1101,84 +952,66 @@
 
   // Route
   var RouteMod = {
-    active: false, filteredCams: [],
+    active: false, filteredCams: [], routeCoords: [],
     mode: 'motorcycle',
     init: function() {
-      // 模式切換按鈕
       document.querySelectorAll('.route-mode-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          document.querySelectorAll('.route-mode-btn').forEach(function(b) {
-            b.classList.remove('active');
-            b.style.background = '';
-            b.style.color = '';
-          });
+          document.querySelectorAll('.route-mode-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           RouteMod.mode = btn.dataset.mode;
         });
       });
-      var btn     = document.getElementById('js-route-btn');
-      var clearBtn= document.getElementById('js-rb-clear');
-      var locBtn  = document.getElementById('js-loc');
+      var btn      = document.getElementById('js-route-btn');
+      var clearBtn = document.getElementById('js-rb-clear');
+      var locBtn   = document.getElementById('js-loc');
       if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
       if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
-      if (locBtn)   locBtn.addEventListener('click', function() { RouteMod.locate(); });
-      // Enter 鍵觸發解析
+      if (locBtn)   locBtn.addEventListener('click', function() { NearbyMod.locate(); });
       ['js-route-start','js-route-end'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') RouteMod.analyze(); });
       });
     },
     analyze: function() {
-      var startEl = document.getElementById('js-route-start');
-      var endEl   = document.getElementById('js-route-end');
+      var startEl  = document.getElementById('js-route-start');
+      var endEl    = document.getElementById('js-route-end');
       var startVal = startEl ? startEl.value.trim() : '';
       var endVal   = endEl   ? endEl.value.trim()   : '';
-      if (!startVal || !endVal) {
-        Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede');
-        return;
-      }
+      if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
       var btn = document.getElementById('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
-
-      Promise.all([
-        extractPointFromUrl(startVal),
-        extractPointFromUrl(endVal)
-      ]).then(function(results) {
-        var startPt = results[0];
-        var endPt   = results[1];
-        if (!startPt || !endPt) {
+      Promise.all([extractPointFromUrl(startVal), extractPointFromUrl(endVal)])
+        .then(function(results) {
+          var startPt = results[0];
+          var endPt   = results[1];
+          if (!startPt || !endPt) {
+            if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+            Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
+            return;
+          }
+          Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
+          return getRoadRoute(startPt, endPt, RouteMod.mode).then(function(coords) {
+            if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+            var info = window._lastRouteInfo;
+            var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
+            var msg = info ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418') : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
+            Toast.show(msg, 3000);
+            var exp = document.getElementById('route-expanded');
+            var col = document.getElementById('route-collapsed');
+            if (exp) exp.classList.add('hidden');
+            if (col) col.classList.remove('hidden');
+            var clearMini = document.getElementById('js-route-clear-small');
+            if (clearMini) clearMini.classList.remove('hidden');
+            RouteMod._doFilter(coords);
+          });
+        })
+        .catch(function() {
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
-          Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
-          return;
-        }
-        // 取得真實道路路徑
-        Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
-        return getRoadRoute(startPt, endPt, RouteMod.mode).then(function(coords) {
-          if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
-          var info = window._lastRouteInfo;
-          var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
-          var msg = info
-            ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418')
-            : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
-          Toast.show(msg, 3000);
-          // 自動收起輸入框
-          var exp = document.getElementById('route-expanded');
-          var col = document.getElementById('route-collapsed');
-          var colTxt = document.getElementById('route-collapsed-text');
-          if (exp) exp.classList.add('hidden');
-          if (col) col.classList.remove('hidden');
-          if (colTxt) { colTxt.textContent = msg; colTxt.classList.add('text-orange-400'); }
-          var clearMini = document.getElementById('js-route-clear-small');
-          if (clearMini) clearMini.classList.remove('hidden');
-          RouteMod._doFilter('', coords);
+          Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
         });
-      }).catch(function() {
-        if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
-        Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
-      });
     },
-    routeCoords: [],
-    _doFilter: function(url, coords) {
+    _doFilter: function(coords) {
       var simplified = simplifyCoords(coords, Config.SIMPLIFY_STEP);
       RouteMod.routeCoords = coords;
       RouteMod.active = true;
@@ -1199,29 +1032,24 @@
       if (cnt)  cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + RouteMod.filteredCams.length + ' \u652f';
       Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
       Bus.emit('filter:changed');
-      setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 300);
+      // 延遲顯示 YouTube panel，確保 DOM 已穩定
+      setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 400);
     },
     clear: function() {
-      RouteMod.active = false; RouteMod.filteredCams = [];
+      RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
       MapMod.clearRoute();
+      YoutubeMod.hide();
       var startEl = document.getElementById('js-route-start');
       var endEl   = document.getElementById('js-route-end');
-      var st    = document.getElementById('js-route-status');
+      var st      = document.getElementById('js-route-status');
       if (startEl) startEl.value = '';
       if (endEl)   endEl.value   = '';
-      var banner= document.getElementById('js-route-banner');
-      var info  = document.getElementById('js-list-route-info');
-      if (st) st.textContent = '';
+      var banner = document.getElementById('js-route-banner');
+      var info   = document.getElementById('js-list-route-info');
+      if (st)     st.textContent = '';
       if (banner) { banner.classList.add('hidden'); banner.classList.remove('flex'); }
       if (info)   { info.classList.add('hidden');   info.classList.remove('flex'); }
       Bus.emit('filter:changed');
-    },
-    locate: function() {
-      if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
-      navigator.geolocation.getCurrentPosition(
-        function(p) { MapMod.map.setView([p.coords.latitude, p.coords.longitude], 13); },
-        function()  { Toast.show('\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e'); }
-      );
     }
   };
 
@@ -1267,7 +1095,7 @@
         var badge = cam.type === 'youtube'
           ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold">YT</span>'
           : '<span class="text-[10px] bg-white/10 text-slate-400 px-2 py-0.5 rounded-full">CCTV</span>';
-        var w = Data.weather[cam.county];
+        var w  = Data.weather[cam.county];
         var wt = w ? (w.temp + '\u00B0C') : '';
         html += '<div class="cam-card glass rounded-2xl p-4 flex items-center gap-4 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
           + '<div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:'+color+'22">'
@@ -1292,7 +1120,7 @@
     }
   };
 
-  // Modal（影像播放）
+  // Modal
   var ModalMod = {
     open: function(cam) {
       var ttl = document.getElementById('m-ttl');
@@ -1348,70 +1176,37 @@
     NearbyMod.init();
   });
 })();
+</script>
 
-// YouTube 自訂播放器（環島助手頁）
-(function() {
-  function extractYTId(url) {
-    var m = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
-    return m ? m[1] : null;
-  }
-  window.addEventListener('load', function() {
-    var btn   = document.getElementById('yt-play-btn');
-    var input = document.getElementById('yt-input');
-    var wrap  = document.getElementById('yt-player-wrap');
-    var frame = document.getElementById('yt-player');
-    function play(url) {
-      var id = extractYTId(url);
-      if (!id) { Toast.show('無法解析 YouTube 網址'); return; }
-      frame.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
-      wrap.classList.remove('hidden');
-    }
-    if (btn && input) {
-      btn.addEventListener('click', function() { play(input.value.trim()); });
-    }
-    document.querySelectorAll('.yt-suggest').forEach(function(el) {
-      el.addEventListener('click', function() {
-        if (input) input.value = el.dataset.url;
-        play(el.dataset.url);
-        NavMod.go('tools');
-      });
-    });
-  });
-})();
-
-// ── 天氣總覽模組 ──────────────────────────────────────────────────────────
+<script>
+// 天氣總覽
 (function() {
   var WX_ICONS = {
-    '晴':        '☀️', '晴天':      '☀️', '多雲時晴':  '🌤️',
-    '多雲':      '⛅', '多雲時陰':  '🌥️', '陰':       '☁️',
-    '陰天':      '☁️', '短暫雨':    '🌦️', '短暫陣雨': '🌦️',
-    '雨':        '🌧️', '大雨':      '🌧️', '豪雨':     '⛈️',
-    '雷雨':      '⛈️', '有雷':      '⛈️', '霧':       '🌫️',
-    '起霧':      '🌫️', '雪':        '❄️'
+    '\u6674':'\u2600\uFE0F','\u6674\u5929':'\u2600\uFE0F','\u591a\u96f2\u6642\u6674':'\ud83c\udf24\ufe0f',
+    '\u591a\u96f2':'\u26c5','\u591a\u96f2\u6642\u9670':'\ud83c\udf25\ufe0f','\u9670':'\u2601\uFE0F',
+    '\u9670\u5929':'\u2601\uFE0F','\u77ed\u6682\u96e8':'\ud83c\udf26\ufe0f','\u77ed\u6682\u9663\u96e8':'\ud83c\udf26\ufe0f',
+    '\u96e8':'\ud83c\udf27\ufe0f','\u5927\u96e8':'\ud83c\udf27\ufe0f','\u8c6a\u96e8':'\u26c8\uFE0F',
+    '\u96f7\u96e8':'\u26c8\uFE0F','\u6709\u96f7':'\u26c8\uFE0F','\u9727':'\ud83c\udf2b\ufe0f',
+    '\u8d77\u9727':'\ud83c\udf2b\ufe0f','\u96ea':'\u2744\uFE0F'
   };
-
   function getWxIcon(desc) {
-    if (!desc) return '🌡️';
-    for (var k in WX_ICONS) {
-      if (desc.indexOf(k) !== -1) return WX_ICONS[k];
-    }
-    return '🌡️';
+    if (!desc) return '\ud83c\udf21\ufe0f';
+    for (var k in WX_ICONS) { if (desc.indexOf(k) !== -1) return WX_ICONS[k]; }
+    return '\ud83c\udf21\ufe0f';
   }
-
   var COUNTIES = [
-    '基隆市','台北市','新北市','桃園市','新竹市','新竹縣',
-    '苗栗縣','台中市','彰化縣','南投縣','雲林縣',
-    '嘉義市','嘉義縣','台南市','高雄市','屏東縣',
-    '宜蘭縣','花蓮縣','台東縣','澎湖縣','金門縣','連江縣'
+    '\u57fa\u9686\u5e02','\u53f0\u5317\u5e02','\u65b0\u5317\u5e02','\u6843\u5712\u5e02','\u65b0\u7af9\u5e02','\u65b0\u7af9\u7e23',
+    '\u82d7\u6817\u7e23','\u53f0\u4e2d\u5e02','\u5f70\u5316\u7e23','\u5357\u6295\u7e23','\u96f2\u6797\u7e23',
+    '\u5609\u7fa9\u5e02','\u5609\u7fa9\u7e23','\u53f0\u5357\u5e02','\u9ad8\u96c4\u5e02','\u5c4f\u6771\u7e23',
+    '\u5b9c\u862d\u7e23','\u82b1\u84ee\u7e23','\u53f0\u6771\u7e23','\u6f8e\u6e56\u7e23','\u91d1\u9580\u7e23','\u9023\u6c5f\u7e23'
   ];
-
   function renderWeather() {
     var grid = document.getElementById('wx-grid');
     if (!grid) return;
     var wx = Data.weather;
     var hasData = Object.keys(wx).length > 0;
     if (!hasData) {
-      grid.innerHTML = '<div class="col-span-2 text-center text-slate-500 text-xs py-4">天氣資料載入中...</div>';
+      grid.innerHTML = '<div class="col-span-2 text-center text-slate-500 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...</div>';
       return;
     }
     var html = '';
@@ -1420,7 +1215,7 @@
       var temp    = w ? w.temp    : '--';
       var weather = w ? w.weather : '--';
       var icon    = getWxIcon(weather);
-      var shortName = county.replace('台','').replace('市','').replace('縣','');
+      var shortName = county.replace('\u53f0','').replace('\u5e02','').replace('\u7e23','');
       html += '<div class="bg-slate-800/50 rounded-2xl p-3 flex items-center gap-2 hover:bg-slate-700/50 transition-colors cursor-pointer wx-county-card" data-county="' + county + '">' +
         '<span class="text-xl">' + icon + '</span>' +
         '<div class="flex-1 min-w-0">' +
@@ -1428,13 +1223,11 @@
           '<div class="text-[10px] text-slate-400 truncate">' + (weather || '--') + '</div>' +
         '</div>' +
         '<div class="text-right shrink-0">' +
-          '<div class="text-sm font-black text-orange-400">' + (temp !== '--' ? temp + '°' : '--') + '</div>' +
+          '<div class="text-sm font-black text-orange-400">' + (temp !== '--' ? temp + '\u00B0' : '--') + '</div>' +
         '</div>' +
       '</div>';
     });
     grid.innerHTML = html;
-
-    // 點擊縣市卡片切換到地圖
     grid.querySelectorAll('.wx-county-card').forEach(function(card) {
       card.addEventListener('click', function() {
         var county = card.dataset.county;
@@ -1442,122 +1235,89 @@
         if (center && MapMod.map) {
           NavMod.go('map');
           MapMod.map.setView(center, 11);
-          Toast.show(county + ' ' + (Data.weather[county] ? Data.weather[county].temp + '°C' : ''));
+          Toast.show(county + ' ' + (Data.weather[county] ? Data.weather[county].temp + '\u00B0C' : ''));
         }
       });
     });
-
     var updEl = document.getElementById('wx-updated');
     if (updEl) {
       var now = new Date();
-      updEl.textContent = '更新時間：' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+      updEl.textContent = '\u66f4\u65b0\u6642\u9593\uff1a' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
     }
   }
-
   window.addEventListener('load', function() {
     Bus.on('weather:updated', function() { renderWeather(); });
-
     var refreshBtn = document.getElementById('wx-refresh');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', function() {
         var icon = refreshBtn.querySelector('i');
         if (icon) icon.style.animation = 'spin 1s linear infinite';
         Data.fetchWeather();
-        setTimeout(function() {
-          if (icon) icon.style.animation = '';
-        }, 1500);
+        setTimeout(function() { if (icon) icon.style.animation = ''; }, 1500);
       });
     }
-
-    // 若天氣已載入則立即渲染
     if (Object.keys(Data.weather).length > 0) renderWeather();
   });
 })();
 
-// ── 路況狀態列模組 ────────────────────────────────────────────────────────
+// 路況狀態列
 var StatusBar = {
   init: function() {},
   update: function() {
-    // 統計各路況數量
     var counts = { smooth:0, slow:0, jam:0, unknown:0 };
-    Data.allCams().forEach(function(c) {
-      counts[c.status] = (counts[c.status] || 0) + 1;
-    });
-
-    // 更新地圖圖例旁的統計
-    var s = document.getElementById('cnt-smooth');
+    Data.allCams().forEach(function(c) { counts[c.status] = (counts[c.status] || 0) + 1; });
+    var s  = document.getElementById('cnt-smooth');
     var sl = document.getElementById('cnt-slow');
     var j  = document.getElementById('cnt-jam');
     if (s)  s.textContent  = counts.smooth;
     if (sl) sl.textContent = counts.slow;
     if (j)  j.textContent  = counts.jam;
-
-    // 更新時間戳
     var tsEl = document.getElementById('status-ts');
     if (tsEl) {
       var now = new Date();
-      tsEl.textContent = String(now.getHours()).padStart(2,'0') + ':' +
-                         String(now.getMinutes()).padStart(2,'0') + ' 更新';
+      tsEl.textContent = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ' \u66f4\u65b0';
     }
   }
 };
 
-// ── GPS 定位 + 附近攝影機模組 ────────────────────────────────────────────
+// GPS + 附近攝影機
 var NearbyMod = {
-  userLat: null,
-  userLng: null,
-  radius: 5,
-  marker: null,
-
+  userLat: null, userLng: null, radius: 5, marker: null, circle: null,
   init: function() {
-    var locBtn      = document.getElementById('js-loc');
-    var closeBtn    = document.getElementById('nearby-close');
-    var radiusBtns  = document.querySelectorAll('.nearby-r-btn');
-
-    if (locBtn) locBtn.addEventListener('click', function() { NearbyMod.locate(); });
+    var closeBtn   = document.getElementById('nearby-close');
+    var radiusBtns = document.querySelectorAll('.nearby-r-btn');
     if (closeBtn) closeBtn.addEventListener('click', function() { NearbyMod.hide(); });
-
     radiusBtns.forEach(function(btn) {
       btn.addEventListener('click', function() {
         radiusBtns.forEach(function(b) { b.classList.remove('text-orange-400','font-bold'); b.classList.add('text-slate-400'); });
-        btn.classList.add('text-orange-400','font-bold');
-        btn.classList.remove('text-slate-400');
+        btn.classList.add('text-orange-400','font-bold'); btn.classList.remove('text-slate-400');
         NearbyMod.radius = parseInt(btn.dataset.r);
         if (NearbyMod.userLat !== null) NearbyMod.render();
       });
     });
   },
-
   locate: function() {
     if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
     var btn = document.getElementById('js-loc');
     if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-2xl"></i>';
-
     navigator.geolocation.getCurrentPosition(
       function(pos) {
         if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
         NearbyMod.userLat = pos.coords.latitude;
         NearbyMod.userLng = pos.coords.longitude;
-        NearbyMod.showOnMap();
-        NearbyMod.render();
-        NearbyMod.show();
+        NearbyMod.showOnMap(); NearbyMod.render(); NearbyMod.show();
       },
       function(err) {
         if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
-        var msg = err.code === 1 ? '\u5b9a\u4f4d\u6b0a\u9650\u88ab\u62d2\u7d55' :
-                  err.code === 2 ? '\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e' : '\u5b9a\u4f4d\u903e\u6642';
+        var msg = err.code === 1 ? '\u5b9a\u4f4d\u6b0a\u9650\u88ab\u62d2\u7d55' : err.code === 2 ? '\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e' : '\u5b9a\u4f4d\u903e\u6642';
         Toast.show(msg);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   },
-
   showOnMap: function() {
     if (!NearbyMod.userLat) return;
-    // 移除舊標記
     if (NearbyMod.marker) MapMod.map.removeLayer(NearbyMod.marker);
-
-    // 使用者位置標記（藍色脈衝）
     var icon = L.divIcon({
       className: '',
       html: '<div style="position:relative;width:20px;height:20px">' +
@@ -1567,95 +1327,66 @@ var NearbyMod = {
       iconSize: [20,20], iconAnchor: [10,10]
     });
     NearbyMod.marker = L.marker([NearbyMod.userLat, NearbyMod.userLng], { icon: icon })
-      .addTo(MapMod.map)
-      .bindTooltip('\u{1F4CD} \u6211\u7684\u4f4d\u7f6e', { direction:'top', permanent: false });
-
-    // 顯示半徑圓圈
+      .addTo(MapMod.map).bindTooltip('\u{1F4CD} \u6211\u7684\u4f4d\u7f6e', { direction:'top', permanent: false });
     if (NearbyMod.circle) MapMod.map.removeLayer(NearbyMod.circle);
     NearbyMod.circle = L.circle([NearbyMod.userLat, NearbyMod.userLng], {
-      radius: NearbyMod.radius * 1000,
-      color: '#3b82f6', fillColor: '#3b82f6',
+      radius: NearbyMod.radius * 1000, color: '#3b82f6', fillColor: '#3b82f6',
       fillOpacity: 0.05, weight: 1.5, dashArray: '6,4'
     }).addTo(MapMod.map);
-
     MapMod.map.setView([NearbyMod.userLat, NearbyMod.userLng], 12);
   },
-
   getNearby: function() {
     if (NearbyMod.userLat === null) return [];
     return Data.allCams().filter(function(cam) {
-      var d = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng);
-      cam._dist = d;
-      return d <= NearbyMod.radius;
-    }).sort(function(a, b) { return a._dist - b._dist; });
+      cam._dist = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng);
+      return cam._dist <= NearbyMod.radius;
+    }).sort(function(a,b) { return a._dist - b._dist; });
   },
-
   render: function() {
     var list  = document.getElementById('nearby-list');
     var count = document.getElementById('nearby-count');
     if (!list) return;
-
-    // 更新圓圈半徑
-    if (NearbyMod.circle) {
-      NearbyMod.circle.setRadius(NearbyMod.radius * 1000);
-    }
-
+    if (NearbyMod.circle) NearbyMod.circle.setRadius(NearbyMod.radius * 1000);
     var cams = NearbyMod.getNearby();
     if (count) count.textContent = cams.length + ' \u652f';
-
     if (cams.length === 0) {
-      list.innerHTML = '<div class="px-4 py-6 text-center text-slate-500 text-xs">' +
-        NearbyMod.radius + 'km \u5167\u7121\u653d\u5f71\u6a5f</div>';
+      list.innerHTML = '<div class="px-4 py-6 text-center text-slate-500 text-xs">' + NearbyMod.radius + 'km \u5167\u7121\u653d\u5f71\u6a5f</div>';
       return;
     }
-
     var html = '';
-    cams.slice(0, 15).forEach(function(cam) {
+    cams.slice(0,15).forEach(function(cam) {
       var color  = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
-      var distTx = cam._dist < 1
-        ? Math.round(cam._dist * 1000) + 'm'
-        : cam._dist.toFixed(1) + 'km';
-      html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors nearby-cam-item" data-id="' + cam.id + '">' +
-        '<div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style="background:' + color + '22">' +
-        '<span class="w-2.5 h-2.5 rounded-full inline-block" style="background:' + color + '"></span></div>' +
-        '<div class="flex-1 min-w-0">' +
-        '<div class="text-xs font-bold truncate">' + cam.name + '</div>' +
-        '<div class="text-[10px] text-slate-400">' + cam.county + '</div>' +
-        '</div>' +
-        '<div class="text-[11px] font-bold text-blue-400 shrink-0">' + distTx + '</div>' +
-        '</div>';
+      var distTx = cam._dist < 1 ? Math.round(cam._dist*1000)+'m' : cam._dist.toFixed(1)+'km';
+      html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors nearby-cam-item" data-id="'+cam.id+'">' +
+        '<div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style="background:'+color+'22">' +
+        '<span class="w-2.5 h-2.5 rounded-full inline-block" style="background:'+color+'"></span></div>' +
+        '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+cam.name+'</div>' +
+        '<div class="text-[10px] text-slate-400">'+cam.county+'</div></div>' +
+        '<div class="text-[11px] font-bold text-blue-400 shrink-0">'+distTx+'</div></div>';
     });
     list.innerHTML = html;
-
     var camMap = {};
     Data.allCams().forEach(function(c) { camMap[c.id] = c; });
     list.querySelectorAll('.nearby-cam-item').forEach(function(item) {
       item.addEventListener('click', function() {
         var cam = camMap[item.dataset.id];
-        if (cam) {
-          InfoMod.open(cam);
-          MapMod.map.setView([cam.lat, cam.lng], 14);
-        }
+        if (cam) { InfoMod.open(cam); MapMod.map.setView([cam.lat, cam.lng], 14); }
       });
     });
   },
-
   show: function() {
     var panel = document.getElementById('nearby-panel');
     if (panel) { panel.classList.remove('hidden'); panel.classList.add('flex','flex-col'); }
   },
-
   hide: function() {
     var panel = document.getElementById('nearby-panel');
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex','flex-col'); }
     if (NearbyMod.marker) { MapMod.map.removeLayer(NearbyMod.marker); NearbyMod.marker = null; }
     if (NearbyMod.circle) { MapMod.map.removeLayer(NearbyMod.circle); NearbyMod.circle = null; }
-    NearbyMod.userLat = null;
-    NearbyMod.userLng = null;
+    NearbyMod.userLat = null; NearbyMod.userLng = null;
   }
 };
 
-// Haversine 距離（km）
 function haversineKm(lat1, lon1, lat2, lon2) {
   var R = 6371;
   var dLat = (lat2-lat1)*Math.PI/180;
@@ -1666,109 +1397,35 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-// ── 路線輸入收合邏輯 ──────────────────────────────────────────────────────
+// 收合式路線輸入
 (function() {
   window.addEventListener('load', function() {
-    var toggleBtn  = document.getElementById('route-toggle');
-    var closeBtn   = document.getElementById('route-toggle-close');
-    var collapsed  = document.getElementById('route-collapsed');
-    var expanded   = document.getElementById('route-expanded');
-
-    function open() {
-      if (collapsed) collapsed.classList.add('hidden');
-      if (expanded)  expanded.classList.remove('hidden');
-    }
-    function close() {
-      if (collapsed) collapsed.classList.remove('hidden');
-      if (expanded)  expanded.classList.add('hidden');
-    }
-
-    if (toggleBtn) toggleBtn.addEventListener('click', open);
-    if (closeBtn)  closeBtn.addEventListener('click', close);
-
-    // 解析完成後自動收合，更新收合欄文字
+    var toggleBtn = document.getElementById('route-toggle');
+    var closeBtn  = document.getElementById('route-toggle-close');
+    var collapsed = document.getElementById('route-collapsed');
+    var expanded  = document.getElementById('route-expanded');
+    function openExp() { if (collapsed) collapsed.classList.add('hidden'); if (expanded) expanded.classList.remove('hidden'); }
+    function closeExp() { if (collapsed) collapsed.classList.remove('hidden'); if (expanded) expanded.classList.add('hidden'); }
+    if (toggleBtn) toggleBtn.addEventListener('click', openExp);
+    if (closeBtn)  closeBtn.addEventListener('click', closeExp);
     Bus.on('filter:changed', function() {
-      if (RouteMod.active) {
-        var txt = document.getElementById('route-collapsed-text');
-        var status = document.getElementById('js-route-status');
-        if (txt && status && status.textContent) {
-          txt.textContent = status.textContent;
-          txt.classList.add('text-orange-400');
-        }
-        close();
-        // 顯示清除按鈕
+      if (RouteMod && RouteMod.active) {
+        closeExp();
         var clearMini = document.getElementById('js-route-clear-small');
         if (clearMini) clearMini.classList.remove('hidden');
       }
     });
-
-    // 小清除按鈕
     var clearMini = document.getElementById('js-route-clear-small');
     if (clearMini) {
       clearMini.addEventListener('click', function() {
-        RouteMod.clear();
-        var txt = document.getElementById('route-collapsed-text');
-        if (txt) { txt.textContent = '設定起終點找沿途攝影機...'; txt.classList.remove('text-orange-400'); }
+        if (RouteMod) RouteMod.clear();
         clearMini.classList.add('hidden');
       });
     }
   });
 })();
 
-// ── 路線網址自動帶入 ──────────────────────────────────────────────────────
-(function() {
-  window.addEventListener('load', function() {
-    var startEl = document.getElementById('js-route-start');
-    var endEl   = document.getElementById('js-route-end');
-
-    // 監聽起點貼上 — 如果是完整路線網址，自動填終點
-    if (startEl) {
-      startEl.addEventListener('paste', function(e) {
-        setTimeout(function() {
-          var val = startEl.value.trim();
-          var filled = autoFillRoute(val, function(start, end) {
-            startEl.value = start;
-            if (endEl) endEl.value = end;
-            Toast.show('\u8d77\u7d42\u9ede\u5df2\u81ea\u52d5\u5e36\u5165\uff01');
-            // 自動展開輸入框
-            var expanded = document.getElementById('route-expanded');
-            var collapsed = document.getElementById('route-collapsed');
-            if (expanded)  expanded.classList.remove('hidden');
-            if (collapsed) collapsed.classList.add('hidden');
-          });
-        }, 50);
-      });
-    }
-
-    // 也監聽收合欄的貼上事件
-    var toggleBtn = document.getElementById('route-toggle');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('paste', function(e) {
-        var text = (e.clipboardData || window.clipboardData).getData('text');
-        setTimeout(function() {
-          var filled = autoFillRoute(text, function(start, end) {
-            if (startEl) startEl.value = start;
-            if (endEl)   endEl.value   = end;
-            Toast.show('\u8d77\u7d42\u9ede\u5df2\u81ea\u52d5\u5e36\u5165\uff01');
-            var expanded = document.getElementById('route-expanded');
-            var collapsed = document.getElementById('route-collapsed');
-            if (expanded)  expanded.classList.remove('hidden');
-            if (collapsed) collapsed.classList.add('hidden');
-          });
-        }, 50);
-      });
-    }
-
-    // 收合欄文字框也支援貼上路線網址
-    var collapsedText = document.getElementById('route-collapsed-text');
-    if (collapsedText) {
-      // 把收合欄的 span 改成可輸入的 input
-      // 讓使用者可以直接貼網址到收合欄
-    }
-  });
-})();
-
-// ── 收合欄直接貼網址處理 ───────────────────────────────────────────────────
+// 收合欄貼上處理
 (function() {
   window.addEventListener('load', function() {
     var pasteInput = document.getElementById('route-paste-input');
@@ -1776,17 +1433,12 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     var endEl      = document.getElementById('js-route-end');
     var expanded   = document.getElementById('route-expanded');
     var collapsed  = document.getElementById('route-collapsed');
-
     function doExpand() {
       if (expanded)  expanded.classList.remove('hidden');
       if (collapsed) collapsed.classList.add('hidden');
     }
-
     if (pasteInput) {
-      // 點擊展開
       pasteInput.addEventListener('focus', doExpand);
-
-      // 貼上自動解析
       pasteInput.addEventListener('paste', function(e) {
         var text = (e.clipboardData || window.clipboardData).getData('text');
         setTimeout(function() {
@@ -1800,72 +1452,51 @@ function haversineKm(lat1, lon1, lat2, lon2) {
           if (!filled) doExpand();
         }, 50);
       });
-
-      // 輸入任何文字也展開
-      pasteInput.addEventListener('input', function() {
-        if (pasteInput.value.length > 3) doExpand();
-      });
+      pasteInput.addEventListener('input', function() { if (pasteInput.value.length > 3) doExpand(); });
     }
   });
 })();
 
-// ── YouTube 路線搜尋模組（方案 A）────────────────────────────────────────
+// YouTube 路線搜尋模組
 var YoutubeMod = {
-
-  // 根據路線座標判斷經過哪些縣市
   getRouteCities: function(coords) {
     if (!coords || coords.length < 2) return [];
     var cities = [];
     var centers = window.COUNTY_CENTERS || {};
-
     Object.keys(centers).forEach(function(county) {
       var c = centers[county];
-      // 判斷縣市中心點是否在路線 25km 內
       for (var i = 0; i < coords.length - 1; i++) {
-        var d = distToSegKm(c[0], c[1], coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1]);
-        if (d <= 25) { cities.push(county); break; }
+        if (distToSegKm(c[0], c[1], coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1]) <= 25) {
+          cities.push(county); break;
+        }
       }
     });
     return cities;
   },
-
-  // 根據縣市產生 YouTube 搜尋關鍵字
   getSearchKeyword: function(cities) {
-    // 取前三個縣市
-    var names = cities.slice(0, 3).map(function(c) {
-      return c.replace('市','').replace('縣','');
-    });
-    return names.join(' ') + ' 路況 直播';
+    var names = cities.slice(0, 3).map(function(c) { return c.replace('\u5e02','').replace('\u7e23',''); });
+    return names.join(' ') + ' \u8def\u6cc1 \u76f4\u64ad';
   },
-
-  // 顯示 YouTube 搜尋 Panel
   showRouteSearch: function(coords) {
     var panel = document.getElementById('yt-route-panel');
-    if (!panel) {
-      console.warn('yt-route-panel not found');
-      return;
-    }
+    if (!panel) return;
 
     var cities = YoutubeMod.getRouteCities(coords || []);
-    console.log('Route cities:', cities);
-
-    // 就算沒找到縣市也顯示 panel，用通用搜尋
-    if (cities.length === 0) {
-      cities = ['台灣'];
-    }
+    if (cities.length === 0) cities = ['\u53f0\u7063'];
 
     var keyword = YoutubeMod.getSearchKeyword(cities);
     var searches = [
       keyword + ' live',
-      cities.slice(0,2).join('') + ' 國道 路況',
-      cities.slice(0,2).join('') + ' 省道 直播'
+      cities.slice(0,2).join('') + ' \u570b\u9053 \u8def\u6cc1',
+      cities.slice(0,2).join('') + ' \u7701\u9053 \u76f4\u64ad'
     ];
 
     var links = '';
     searches.forEach(function(q) {
       var url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
       links += '<a href="' + url + '" target="_blank" ' +
-        'style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:rgba(30,41,59,0.8);margin-bottom:6px;text-decoration:none;color:inherit;">' +
+        'style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;' +
+        'background:rgba(30,41,59,0.8);margin-bottom:6px;text-decoration:none;color:inherit;">' +
         '<i class="fa-brands fa-youtube" style="color:#ef4444;flex-shrink:0;font-size:14px;"></i>' +
         '<span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + q + '</span>' +
         '<i class="fa-solid fa-arrow-up-right-from-square" style="color:#64748b;font-size:10px;flex-shrink:0;"></i>' +
@@ -1874,21 +1505,18 @@ var YoutubeMod = {
 
     var cityEl = document.getElementById('yt-route-cities');
     var linkEl = document.getElementById('yt-route-links');
-    if (cityEl) cityEl.textContent = cities.slice(0,5).join(' → ');
+    if (cityEl) cityEl.textContent = cities.slice(0,5).join(' \u2192 ');
     if (linkEl) linkEl.innerHTML = links;
 
-    // 強制顯示
+    // 用 class 控制顯示（CSS 已定義 #yt-route-panel.visible { display:block }）
+    panel.classList.add('visible');
     panel.style.display = 'block';
-    panel.classList.remove('hidden');
-    console.log('YouTube panel shown');
   },
-
   hide: function() {
     var panel = document.getElementById('yt-route-panel');
-    if (panel) { panel.style.display = 'none'; panel.classList.add('hidden'); }
+    if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
   }
 };
-
 </script>
 
 <script>
