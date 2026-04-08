@@ -572,8 +572,8 @@
           return;
         }
         // 除錯：顯示展開後 URL（方便回報問題）
-        var dbg = fullUrl.slice(0, 80);
-        Toast.show('展開結果：' + dbg, 6000);
+        var dbg = window._workerDebug ? window._workerDebug.slice(0,80) : fullUrl.slice(0,80);
+        Toast.show('Worker資訊：' + dbg, 8000);
       });
       return true;
     }
@@ -666,6 +666,8 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         var finalUrl = data.finalUrl || '';
+        // 有 debug 資訊時儲存供除錯
+        if (data.debug) window._workerDebug = data.debug;
         if (finalUrl && finalUrl.indexOf('google.com/maps') !== -1) {
           return finalUrl;
         }
