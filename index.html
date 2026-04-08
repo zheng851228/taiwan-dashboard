@@ -552,18 +552,38 @@
 
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
     var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
-    var url = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson';
-    return fetch(url)
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (!data.routes || !data.routes[0]) return [startLatLng, endLatLng];
-        var geom = data.routes[0].geometry;
-        if (!geom || !geom.coordinates) return [startLatLng, endLatLng];
-        window._lastRouteInfo = {
-          distance: Math.round(data.routes[0].distance / 1000),
-          duration: Math.round(data.routes[0].duration / 60)
-        };
-        return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
+    // 機車模式：用 OSRM driving + exclude motorway/trunk（避開國道/快速道路）
+    // 汽車模式：預設 driving（不排除）
+    var baseUrl = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson&alternatives=false';
+    var url = (mode === 'motorcycle')
+      ? baseUrl + '&exclude=motorway,trunk'
+      : baseUrl;
+
+    function doFetch(fetchUrl) {
+      return fetch(fetchUrl)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.routes || !data.routes[0]) return null;
+          var geom = data.routes[0].geometry;
+          if (!geom || !geom.coordinates) return null;
+          window._lastRouteInfo = {
+            distance: Math.round(data.routes[0].distance / 1000),
+            duration: Math.round(data.routes[0].duration / 60)
+          };
+          return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
+        });
+    }
+
+    return doFetch(url)
+      .then(function(result) {
+        // 如果 exclude 失敗（某些路線無替代道路），降級為一般路徑
+        if (!result && mode === 'motorcycle') {
+          return doFetch(baseUrl);
+        }
+        return result;
+      })
+      .then(function(result) {
+        return result || [startLatLng, endLatLng];
       })
       .catch(function() { return [startLatLng, endLatLng]; });
   };
@@ -586,32 +606,47 @@
   };
 
   window.expandGoogleUrl = function(url) {
-    if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) return Promise.resolve(url);
-    // 策略 1: allorigins JSON API — 回傳最終 HTML，從中抽取真實 URL
-    var ao = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
-    return fetch(ao)
-      .then(function(r) { return r.json(); })
-      .then(function(j) {
-        var html = j.contents || '';
-        // 找 canonical URL 或 og:url
-        var m1 = html.match(/rel="canonical"\s+href="([^"]+)"/);
-        if (m1 && m1[1].indexOf('google.com/maps') !== -1) return m1[1];
-        var m2 = html.match(/property="og:url"\s+content="([^"]+)"/);
-        if (m2 && m2[1].indexOf('google.com/maps') !== -1) return m2[1];
-        // 找任何 google maps dir URL
-        var m3 = html.match(/https:\/\/(?:www\.)?google\.com\/maps\/dir\/[^"'\s<>\\]+/);
-        if (m3) return m3[0];
-        // 找 /maps/ 任何路徑
-        var m4 = html.match(/https:\/\/(?:www\.)?google\.com\/maps\/[^"'\s<>\\]+/);
-        if (m4) return m4[0];
-        return url;
-      })
-      .catch(function() {
-        // 備援: corsproxy.io
-        return fetch('https://corsproxy.io/?' + encodeURIComponent(url), { redirect: 'follow' })
-          .then(function(r) { return r.url && r.url.indexOf('google.com/maps') !== -1 ? r.url : url; })
-          .catch(function() { return url; });
-      });
+    if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) {
+      return Promise.resolve(url);
+    }
+    // 策略 A: corsproxy.io — 跟隨 redirect，取最終 URL
+    function tryCorsproxy() {
+      return fetch('https://corsproxy.io/?' + encodeURIComponent(url), {
+        method: 'GET', redirect: 'follow'
+      }).then(function(r) {
+        var finalUrl = r.url || '';
+        if (finalUrl.indexOf('google.com/maps') !== -1) return finalUrl;
+        // corsproxy 有時回傳 proxy URL，從 body 抽取
+        return r.text().then(function(body) {
+          var m = body.match(/https:\/\/(?:www\.)?google\.com\/maps\/[^"'\s<>\\]+/);
+          return m ? m[0] : '';
+        });
+      }).catch(function() { return ''; });
+    }
+    // 策略 B: allorigins JSON
+    function tryAllorigins() {
+      return fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url))
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+          var html = j.contents || '';
+          var m1 = html.match(/rel="canonical"[^>]*href="([^"]+)"/);
+          if (m1 && m1[1].indexOf('google.com/maps') !== -1) return m1[1];
+          var m2 = html.match(/content="(https:\/\/(?:www\.)?google\.com\/maps\/[^"]+)"/);
+          if (m2) return m2[1];
+          var m3 = html.match(/https:\/\/(?:www\.)?google\.com\/maps\/dir\/[^"'\s<>\\]+/);
+          if (m3) return m3[0];
+          var m4 = html.match(/https:\/\/(?:www\.)?google\.com\/maps\/[^"'\s<>\\]+/);
+          if (m4) return m4[0];
+          return '';
+        }).catch(function() { return ''; });
+    }
+    // 依序嘗試
+    return tryCorsproxy().then(function(result) {
+      if (result && result.indexOf('google.com/maps') !== -1) return result;
+      return tryAllorigins();
+    }).then(function(result) {
+      return (result && result.indexOf('google.com/maps') !== -1) ? result : url;
+    }).catch(function() { return url; });
   };
 
   window.parseGoogleMapsCoords = function(url) {
@@ -1010,10 +1045,8 @@
       });
       var btn      = document.getElementById('js-route-btn');
       var clearBtn = document.getElementById('js-rb-clear');
-      var locBtn   = document.getElementById('js-loc');
       if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
       if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
-      if (locBtn)   locBtn.addEventListener('click', function() { if (window.NearbyMod) NearbyMod.locate(); });
       ['js-route-start','js-route-end'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') RouteMod.analyze(); });
@@ -1330,8 +1363,10 @@ var StatusBar = {
 var NearbyMod = {
   userLat: null, userLng: null, radius: 5, marker: null, circle: null,
   init: function() {
+    var locBtn     = document.getElementById('js-loc');
     var closeBtn   = document.getElementById('nearby-close');
     var radiusBtns = document.querySelectorAll('.nearby-r-btn');
+    if (locBtn)   locBtn.addEventListener('click', function() { NearbyMod.locate(); });
     if (closeBtn) closeBtn.addEventListener('click', function() { NearbyMod.hide(); });
     radiusBtns.forEach(function(btn) {
       btn.addEventListener('click', function() {
