@@ -490,12 +490,33 @@
   window.autoFillRoute = function(text, onFill) {
     text = text.trim();
     if (!text) return false;
+    // 直接是長網址，先試解析
     var result = parseRouteStartEnd(text);
     if (result) { onFill(result.start, result.end); return true; }
-    if (text.indexOf('maps.app.goo.gl') !== -1 || text.indexOf('goo.gl/maps') !== -1) {
+    // 短網址或任何含 goo.gl / maps.app 的連結
+    var isShort = text.indexOf('maps.app.goo.gl') !== -1 ||
+                  text.indexOf('goo.gl/maps') !== -1 ||
+                  text.indexOf('maps.google') !== -1;
+    if (isShort || text.indexOf('http') === 0) {
       expandGoogleUrl(text).then(function(fullUrl) {
+        // 嘗試從展開後 URL 抓起終點
         var r = parseRouteStartEnd(fullUrl);
-        if (r) onFill(r.start, r.end);
+        if (r) { onFill(r.start, r.end); return; }
+        // 嘗試抓座標
+        var coords = parseGoogleMapsCoords(fullUrl);
+        if (coords.length >= 2) {
+          onFill(coords[0][0] + ',' + coords[0][1],
+                 coords[coords.length-1][0] + ',' + coords[coords.length-1][1]);
+          return;
+        }
+        // 嘗試從 @ 座標抓單點（地點網址，非路線）
+        var mAt = fullUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        if (mAt) {
+          Toast.show('做為起點帶入，請輸入終點');
+          onFill(parseFloat(mAt[1]) + ',' + parseFloat(mAt[2]), '');
+          return;
+        }
+        Toast.show('無法解析此連結，請手動輸入起終點');
       });
       return true;
     }
@@ -560,9 +581,30 @@
 
   window.expandGoogleUrl = function(url) {
     if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) return Promise.resolve(url);
-    return fetch('https://corsproxy.io/?' + encodeURIComponent(url), { method: 'GET', redirect: 'follow' })
-      .then(function(r) { return r.url || url; })
-      .catch(function() { return url; });
+    // 多重展開策略
+    var proxies = [
+      'https://corsproxy.io/?' + encodeURIComponent(url),
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
+    ];
+    function tryProxy(i) {
+      if (i >= proxies.length) return Promise.resolve(url);
+      return fetch(proxies[i], { method: 'GET', redirect: 'follow' })
+        .then(function(r) {
+          // 取最終 URL（redirect 後）
+          var finalUrl = r.url || url;
+          // allorigins 會回傳 HTML，從 Location header 或 body 抽取真實 URL
+          if (finalUrl.indexOf('allorigins') !== -1) {
+            return r.text().then(function(body) {
+              // 從 body 找 google maps URL
+              var m = body.match(/https:\/\/www\.google\.com\/maps\/[^\s"'<>]+/);
+              return m ? m[0] : url;
+            });
+          }
+          return finalUrl;
+        })
+        .catch(function() { return tryProxy(i + 1); });
+    }
+    return tryProxy(0);
   };
 
   window.parseGoogleMapsCoords = function(url) {
@@ -880,7 +922,7 @@
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
     init: function() {
-      MapMod.map = L.map('map', { center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM, zoomControl: true });
+      MapMod.map = L.map('map', { center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM, zoomControl: false });
       MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
     },
     setTile: function(url) { if (MapMod.tileLayer) MapMod.tileLayer.setUrl(url); },
@@ -964,7 +1006,7 @@
       var locBtn   = document.getElementById('js-loc');
       if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
       if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
-      if (locBtn)   locBtn.addEventListener('click', function() { NearbyMod.locate(); });
+      if (locBtn)   locBtn.addEventListener('click', function() { if (window.NearbyMod) NearbyMod.locate(); });
       ['js-route-start','js-route-end'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') RouteMod.analyze(); });
@@ -1439,14 +1481,20 @@ function haversineKm(lat1, lon1, lat2, lon2) {
       pasteInput.addEventListener('paste', function(e) {
         var text = (e.clipboardData || window.clipboardData).getData('text');
         setTimeout(function() {
+          pasteInput.value = '';
+          // 先展開讓使用者看到進度
+          doExpand();
+          var status = document.getElementById('js-route-status');
+          if (status) status.textContent = '\u89e3\u6790\u9023\u7d50\u4e2d...';
           var filled = autoFillRoute(text, function(start, end) {
             if (startEl) startEl.value = start;
-            if (endEl)   endEl.value   = end;
-            pasteInput.value = '';
-            Toast.show('\u8d77\u7d42\u9ede\u5df2\u5e36\u5165\uff0c\u8acb\u6309\u89e3\u6790');
-            doExpand();
+            if (endEl && end)   endEl.value = end;
+            if (status) status.textContent = '';
+            Toast.show(end ? '\u8d77\u7d42\u9ede\u5df2\u5e36\u5165\uff01' : '\u8d77\u9ede\u5df2\u5e36\u5165');
           });
-          if (!filled) doExpand();
+          if (!filled) {
+            if (status) status.textContent = '';
+          }
         }, 50);
       });
       pasteInput.addEventListener('input', function() { if (pasteInput.value.length > 3) doExpand(); });
