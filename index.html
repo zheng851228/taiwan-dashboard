@@ -106,17 +106,20 @@
     </div>
     <!-- 展開狀態 -->
     <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
-      <!-- 貼路線網址區塊 -->
+      <!-- 貼路線網址 -->
       <div class="bg-slate-800/60 rounded-xl px-3 py-2 flex items-center gap-2">
         <i class="fa-brands fa-google text-blue-400 text-xs shrink-0"></i>
         <input type="text" id="js-gmaps-url"
           class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
-          placeholder="貼上 Google Maps 路線網址（自動填入起終點）" />
+          placeholder="貼上 Google Maps 路線網址（自動填入）" />
         <button id="js-gmaps-parse" class="text-[10px] text-orange-400 font-black shrink-0 hover:text-orange-300">帶入</button>
       </div>
       <div id="js-gmaps-status" class="text-[10px] text-blue-400 px-1 hidden"></div>
+      <!-- 起點 A -->
       <div class="flex gap-2 items-center">
-        <span class="text-green-400 text-xs font-black shrink-0 w-6">起</span>
+        <div class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+          <span class="text-white text-[10px] font-black">A</span>
+        </div>
         <div class="flex-1 relative">
           <input type="text" id="js-route-start"
             class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -124,8 +127,13 @@
           <button id="clear-start" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
         </div>
       </div>
+      <!-- 動態停靠點區域 -->
+      <div id="waypoints-container" class="space-y-2"></div>
+      <!-- 終點（動態字母） -->
       <div class="flex gap-2 items-center">
-        <span class="text-red-400 text-xs font-black shrink-0 w-6">終</span>
+        <div id="end-label" class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+          <span class="text-white text-[10px] font-black">B</span>
+        </div>
         <div class="flex-1 relative">
           <input type="text" id="js-route-end"
             class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -1138,20 +1146,22 @@
           })(allPoints[si], allPoints[si+1]);
         }
 
+        // 從 UI 取最新停靠點值（使用者可能手動修改過）
+        var uiWaypoints = (window.WaypointsMod ? WaypointsMod.getWaypoints() : waypoints);
         return Promise.all(
-          // 停靠點先 geocode 再計算路線
-          waypoints.length > 0
-            ? [Promise.all(waypoints.map(function(wp) { return extractPointFromUrl(simplifyAddress(wp)); }))]
+          uiWaypoints.length > 0
+            ? [Promise.all(uiWaypoints.map(function(wp) { return extractPointFromUrl(simplifyAddress(wp)); }))]
             : [Promise.resolve([])]
         ).then(function(res) {
           var wpPts = res[0].filter(function(p) { return p; });
           var finalPoints = [startPt].concat(wpPts).concat([endPt]);
+          // 儲存所有點座標供 A/B/C 標記使用
+          window._routeAllPoints = finalPoints;
           var segs = [];
           for (var fi = 0; fi < finalPoints.length - 1; fi++) {
             segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
           }
           return Promise.all(segs).then(function(segCoords) {
-            // 合併所有段落座標
             var merged = [];
             segCoords.forEach(function(seg) { merged = merged.concat(seg); });
             return merged;
@@ -1197,13 +1207,18 @@
       if (cnt)  cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + RouteMod.filteredCams.length + ' \u652f';
       Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
       Bus.emit('filter:changed');
-      // 延遲顯示 YouTube panel，確保 DOM 已穩定
+      // 畫 A/B/C 地圖標記
+      setTimeout(function() { if (window.WaypointsMod) WaypointsMod.drawRouteLabels(); }, 200);
+      // 延遲顯示 YouTube panel
       setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 400);
     },
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
       MapMod.clearRoute();
       YoutubeMod.hide();
+      WaypointsMod && WaypointsMod.clearMarkers();
+      window._pendingWaypoints = [];
+      WaypointsMod && WaypointsMod.render([]);
       var startEl = document.getElementById('js-route-start');
       var endEl   = document.getElementById('js-route-end');
       var st      = document.getElementById('js-route-status');
@@ -1606,8 +1621,10 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         if (endEl2)   endEl2.value   = end   || '';
         if (gmapsInput) gmapsInput.value = '';
         if (gmapsStatus) { gmapsStatus.classList.add('hidden'); }
-        // 停靠點存起來，解析路線時一起帶入
+        // 停靠點
         window._pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
+        // 渲染停靠點輸入框
+        WaypointsMod.render(window._pendingWaypoints);
         // 清除按鈕
         var cs = document.getElementById('clear-start');
         var ce = document.getElementById('clear-end');
@@ -1616,7 +1633,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         // 提示訊息
         var wpCount = window._pendingWaypoints.length;
         if (start && end && wpCount > 0) {
-          Toast.show('起點→' + wpCount + '停靠點→終點 已帶入', 3500);
+          Toast.show('起點→' + wpCount + '個停靠點→終點 已帶入', 3500);
         } else if (start && end) {
           Toast.show('起：' + start.slice(0,10) + ' → 終：' + end.slice(0,10), 3500);
         } else if (end && !start) {
@@ -1714,6 +1731,109 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     }
   });
 })();
+
+// ── 停靠點模組 ──────────────────────────────────────────────────────────
+var WaypointsMod = {
+  // 字母標籤：A=起點，B/C/D...=停靠點，最後一個=終點
+  LETTERS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  COLORS: ['#22c55e','#f97316','#3b82f6','#a855f7','#ec4899','#14b8a6','#f59e0b','#ef4444'],
+
+  // 渲染停靠點輸入框（在起點和終點之間）
+  render: function(waypoints) {
+    var container = document.getElementById('waypoints-container');
+    if (!container) return;
+    container.innerHTML = '';
+    var wps = waypoints || window._pendingWaypoints || [];
+    wps.forEach(function(wp, idx) {
+      var letter = WaypointsMod.LETTERS[idx + 1] || (idx + 2).toString();
+      var color  = WaypointsMod.COLORS[(idx + 1) % WaypointsMod.COLORS.length];
+      var div = document.createElement('div');
+      div.className = 'flex gap-2 items-center';
+      div.innerHTML =
+        '<div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style="background:' + color + '">' +
+          '<span class="text-white text-[10px] font-black">' + letter + '</span>' +
+        '</div>' +
+        '<div class="flex-1 relative">' +
+          '<input type="text" class="wp-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + (wp || '') + '" placeholder="停靠點 ' + letter + '" />' +
+          '<button class="wp-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 text-xs leading-none" data-idx="' + idx + '">&#10005;</button>' +
+        '</div>';
+      container.appendChild(div);
+      // 清除按鈕
+      div.querySelector('.wp-clear').addEventListener('click', function() {
+        var i = parseInt(this.dataset.idx);
+        window._pendingWaypoints.splice(i, 1);
+        WaypointsMod.render(window._pendingWaypoints);
+        WaypointsMod.updateEndLabel();
+      });
+      // 輸入同步
+      div.querySelector('.wp-input').addEventListener('input', function() {
+        var i = parseInt(this.dataset.idx);
+        window._pendingWaypoints[i] = this.value;
+      });
+    });
+    WaypointsMod.updateEndLabel();
+  },
+
+  // 更新終點字母標籤
+  updateEndLabel: function() {
+    var wps = window._pendingWaypoints || [];
+    var endIdx = wps.length + 1; // A=0, 停靠點, 終點
+    var letter = WaypointsMod.LETTERS[endIdx] || (endIdx + 1).toString();
+    var endLabel = document.getElementById('end-label');
+    if (endLabel) endLabel.querySelector('span').textContent = letter;
+  },
+
+  // 取得目前所有停靠點值
+  getWaypoints: function() {
+    var inputs = document.querySelectorAll('.wp-input');
+    var result = [];
+    inputs.forEach(function(inp) { if (inp.value.trim()) result.push(inp.value.trim()); });
+    return result;
+  },
+
+  // 在地圖上畫 A/B/C 標記
+  drawMarkers: function(points) {
+    // points: [{lat, lng, label, color}, ...]
+    if (!window._waypointMapMarkers) window._waypointMapMarkers = [];
+    // 清除舊標記
+    window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
+    window._waypointMapMarkers = [];
+    points.forEach(function(pt) {
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="width:26px;height:26px;border-radius:50%;background:' + pt.color + ';border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,0.5)">' + pt.label + '</div>',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
+      });
+      var m = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(MapMod.map);
+      window._waypointMapMarkers.push(m);
+    });
+  },
+
+  // 清除地圖標記
+  clearMarkers: function() {
+    if (window._waypointMapMarkers) {
+      window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
+      window._waypointMapMarkers = [];
+    }
+  },
+
+  // 依據 _routeAllPoints 畫 A/B/C 標記
+  drawRouteLabels: function() {
+    var pts = window._routeAllPoints;
+    if (!pts || pts.length < 2) return;
+    var labels = WaypointsMod.LETTERS;
+    var mapPoints = pts.map(function(pt, i) {
+      return {
+        lat:   pt[0],
+        lng:   pt[1],
+        label: labels[i] || (i+1).toString(),
+        color: WaypointsMod.COLORS[i % WaypointsMod.COLORS.length]
+      };
+    });
+    WaypointsMod.drawMarkers(mapPoints);
+  }
+};
 
 // YouTube 路線搜尋模組
 var YoutubeMod = {
