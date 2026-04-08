@@ -418,6 +418,60 @@
   };
 
 
+
+  // 用 Nominatim 把地名轉成座標，回傳 Promise<[lat,lng] | null>
+  window.geocodeName = function(name) {
+    var q = encodeURIComponent(name.trim());
+    var url = 'https://nominatim.openstreetmap.org/search?q=' + q +
+              '&format=json&limit=1&countrycodes=tw';
+    return fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.length > 0) {
+          return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+        return null;
+      })
+      .catch(function() { return null; });
+  };
+
+  // 解析 Google Maps /dir/ 網址中的地名或座標，回傳 Promise<[[lat,lng],...]>
+  window.parseRouteFromUrl = function(url) {
+    // 先試用現有的座標解析
+    var coords = parseGoogleMapsCoords(url);
+    if (coords.length >= 2) {
+      return Promise.resolve(coords);
+    }
+
+    // 嘗試從 /dir/地名A/地名B/ 解析地名
+    var dirMatch = url.match(/\/dir\/([^@?#]+)/);
+    if (!dirMatch) return Promise.resolve([]);
+
+    var parts = dirMatch[1].split('/').map(function(p) {
+      return decodeURIComponent(p.replace(/\+/g, ' ')).trim();
+    }).filter(function(p) {
+      return p.length > 0 && p !== '';
+    });
+
+    if (parts.length < 2) return Promise.resolve([]);
+
+    // 取起點和終點（忽略中間路線點）
+    var waypoints = [parts[0], parts[parts.length - 1]];
+
+    // 逐一 geocode
+    var promises = waypoints.map(function(name) {
+      // 先試座標格式
+      var m = name.match(/^(-?\d+\.?\d*),(-?\d+\.?\d*)$/);
+      if (m) return Promise.resolve([parseFloat(m[1]), parseFloat(m[2])]);
+      // 地名 geocode
+      return geocodeName(name);
+    });
+
+    return Promise.all(promises).then(function(results) {
+      return results.filter(function(r) { return r !== null; });
+    });
+  };
+
   // 展開 Google Maps 短網址，回傳 Promise<string>
   window.expandGoogleUrl = function(url) {
     // 已經是長網址直接回傳
@@ -750,11 +804,23 @@
       if (!url) { Toast.show('\u8acb\u8cbc\u4e0a Google Maps \u7db2\u5740'); return; }
       var btn = document.getElementById('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
+
+      // 先展開短網址，再解析路線
       expandGoogleUrl(url).then(function(fullUrl) {
+        return parseRouteFromUrl(fullUrl);
+      }).then(function(coords) {
+        var btn = document.getElementById('js-route-btn');
         if (btn) { btn.textContent = '\u89e3\u6790'; btn.disabled = false; }
-        var coords = parseGoogleMapsCoords(fullUrl);
-        if (coords.length < 2) { Toast.show('\u7121\u6cd5\u89e3\u6790\u5ea7\u6a19\uff0c\u8acb\u78ba\u8a8d\u7db2\u5740\u683c\u5f0f'); return; }
-        RouteMod._doFilter(fullUrl, coords);
+        if (!coords || coords.length < 2) {
+          Toast.show('\u7121\u6cd5\u89e3\u6790\u8def\u7dda\uff0c\u8acb\u78ba\u8a8d\u70ba\u300c\u5206\u4eab\u8def\u7dda\u300d\u7db2\u5740');
+          return;
+        }
+        Toast.show('\u8def\u7dda\u89e3\u6790\u5b8c\u6210\uff0c\u5171 ' + coords.length + ' \u500b\u9ede');
+        RouteMod._doFilter(url, coords);
+      }).catch(function() {
+        var btn = document.getElementById('js-route-btn');
+        if (btn) { btn.textContent = '\u89e3\u6790'; btn.disabled = false; }
+        Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
       });
     },
     _doFilter: function(url, coords) {
