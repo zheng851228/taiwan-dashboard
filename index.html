@@ -546,34 +546,42 @@
     // 直接長網址含 /dir/
     if (text.indexOf('google.com/maps/dir') !== -1) {
       var result = parseRouteStartEnd(text);
-      if (result) { onFill(result.start || '', result.end || ''); return true; }
+      if (result && (result.start || result.end)) {
+        onFill(result.start || '', result.end || '');
+        return true;
+      }
     }
 
-    // 任何 http 連結 — 展開後解析
+    // 任何 http 連結
     if (text.indexOf('http') === 0) {
+      window._workerResult = null;
       expandGoogleUrl(text).then(function(fullUrl) {
-        // 1. /dir/ 路線格式（有起終點）
+        // 優先使用 Worker 直接解析的起終點
+        if (window._workerResult && window._workerResult.start) {
+          onFill(window._workerResult.start, window._workerResult.end || '');
+          window._workerResult = null;
+          return;
+        }
+        // /dir/ 格式
         var r = parseRouteStartEnd(fullUrl);
         if (r && (r.start || r.end)) {
           onFill(r.start || '', r.end || '');
           return;
         }
-        // 2. data= 座標序列
+        // data= 座標序列
         var coords = parseGoogleMapsCoords(fullUrl);
         if (coords.length >= 2) {
           onFill(coords[0][0]+','+coords[0][1], coords[coords.length-1][0]+','+coords[coords.length-1][1]);
           return;
         }
-        // 3. 單點座標（place 頁面）當作起點
+        // 單點座標
         var mAt = fullUrl.match(/@(-?[0-9]+\.[0-9]+),(-?[0-9]+\.[0-9]+)/);
         if (mAt) {
           onFill(mAt[1]+','+mAt[2], '');
           Toast.show('地點帶入為起點，請補充終點');
           return;
         }
-        // 除錯：顯示展開後 URL（方便回報問題）
-        var dbg = window._workerDebug ? window._workerDebug.slice(0,80) : fullUrl.slice(0,80);
-        Toast.show('Worker資訊：' + dbg, 8000);
+        Toast.show('無法解析，請手動輸入起終點');
       });
       return true;
     }
@@ -660,18 +668,15 @@
     if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) {
       return Promise.resolve(url);
     }
-    // 使用 Cloudflare Worker 展開短網址（繞過 CORS）
     var workerUrl = 'https://url-expander.lucky851228.workers.dev/?url=' + encodeURIComponent(url);
     return fetch(workerUrl)
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var finalUrl = data.finalUrl || '';
-        // 有 debug 資訊時儲存供除錯
-        if (data.debug) window._workerDebug = data.debug;
-        if (finalUrl && finalUrl.indexOf('google.com/maps') !== -1) {
-          return finalUrl;
+        // Worker 直接解析好起終點，存到全域變數給 autoFillRoute 使用
+        if (data.start && data.end) {
+          window._workerResult = { start: data.start, end: data.end };
         }
-        return url;
+        return data.finalUrl || url;
       })
       .catch(function() { return url; });
   };
