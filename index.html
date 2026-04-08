@@ -435,7 +435,6 @@
 (function() {
   'use strict';
 
-  // 全台縣市中心座標
   window.COUNTY_CENTERS = {
     '台北市':[25.0330,121.5654],'新北市':[25.0120,121.4653],'基隆市':[25.1283,121.7419],
     '桃園市':[24.9937,121.3010],'新竹市':[24.8138,120.9675],'新竹縣':[24.6877,121.1565],
@@ -447,133 +446,63 @@
     '連江縣':[26.1971,119.9395]
   };
 
-  // YouTube 固定直播頻道
-  window.YT_CHANNELS = [
-    { id: 'yt001', name: '高速公路局 - 國道即時影像', county: '全台', videoId: 'live_stream', channelId: 'UCFreewayTW', type: 'youtube', lat: 25.0330, lng: 121.5654, status: 'unknown' },
-    { id: 'yt002', name: '交通部 - 省道即時路況', county: '全台', videoId: 'live_stream', channelId: 'MOTCTW', type: 'youtube', lat: 25.0478, lng: 121.5319, status: 'unknown' },
-    { id: 'yt003', name: '北部路況直播', county: '台北市', videoId: 'JqhZnMm7bV4', type: 'youtube', lat: 25.0330, lng: 121.5654, status: 'unknown' },
-    { id: 'yt004', name: '雪隧即時影像', county: '宜蘭縣', videoId: 'xR3oHBnMoKQ', type: 'youtube', lat: 24.8622, lng: 121.8192, status: 'unknown' }
+  // twipcam HTTPS 圖片快照（每30秒更新）
+  var BASE = 'https://c01.twipcam.com/cam/snapshot/';
+
+  var STATIC_CAMS = [
+    // 國道1號 北部
+    { id:'n1s000', name:'國1 基隆端（南下）', county:'基隆市', lat:25.1190, lng:121.7218, snap:'n1-s-0k-000.jpg' },
+    { id:'n1s008', name:'國1 汐止（南下）',   county:'新北市', lat:25.0720, lng:121.6590, snap:'n1-s-8k-000.jpg' },
+    { id:'n1s020', name:'國1 五股（南下）',   county:'新北市', lat:25.0700, lng:121.4700, snap:'n1-s-20k-000.jpg' },
+    { id:'n1s030', name:'國1 林口（南下）',   county:'新北市', lat:25.0600, lng:121.3800, snap:'n1-s-30k-000.jpg' },
+    { id:'n1s040', name:'國1 桃園（南下）',   county:'桃園市', lat:25.0000, lng:121.3000, snap:'n1-s-40k-000.jpg' },
+    { id:'n1s060', name:'國1 中壢（南下）',   county:'桃園市', lat:24.9600, lng:121.2300, snap:'n1-s-60k-000.jpg' },
+    { id:'n1s080', name:'國1 新竹（南下）',   county:'新竹市', lat:24.8200, lng:121.0900, snap:'n1-s-80k-000.jpg' },
+    { id:'n1s120', name:'國1 苗栗（南下）',   county:'苗栗縣', lat:24.5600, lng:120.8200, snap:'n1-s-120k-000.jpg' },
+    { id:'n1s160', name:'國1 台中（南下）',   county:'台中市', lat:24.2000, lng:120.6500, snap:'n1-s-160k-000.jpg' },
+    { id:'n1s180', name:'國1 彰化（南下）',   county:'彰化縣', lat:24.0700, lng:120.5400, snap:'n1-s-180k-000.jpg' },
+    { id:'n1s200', name:'國1 雲林（南下）',   county:'雲林縣', lat:23.7000, lng:120.4700, snap:'n1-s-200k-000.jpg' },
+    { id:'n1s230', name:'國1 嘉義（南下）',   county:'嘉義縣', lat:23.4500, lng:120.3800, snap:'n1-s-230k-000.jpg' },
+    { id:'n1s280', name:'國1 台南（南下）',   county:'台南市', lat:23.0500, lng:120.2900, snap:'n1-s-280k-000.jpg' },
+    { id:'n1s330', name:'國1 高雄（南下）',   county:'高雄市', lat:22.7000, lng:120.2900, snap:'n1-s-330k-000.jpg' },
+    // 國道3號
+    { id:'n3s010', name:'國3 木柵（南下）',   county:'台北市', lat:24.9900, lng:121.5700, snap:'n3-s-10k-000.jpg' },
+    { id:'n3s030', name:'國3 新店（南下）',   county:'新北市', lat:24.9500, lng:121.5300, snap:'n3-s-30k-000.jpg' },
+    { id:'n3s100', name:'國3 關西（南下）',   county:'新竹縣', lat:24.7900, lng:121.1700, snap:'n3-s-100k-000.jpg' },
+    { id:'n3s180', name:'國3 台中（南下）',   county:'台中市', lat:24.1500, lng:120.6700, snap:'n3-s-180k-000.jpg' },
+    { id:'n3s280', name:'國3 台南（南下）',   county:'台南市', lat:22.9800, lng:120.2300, snap:'n3-s-280k-000.jpg' },
+    // 國道5號（雪隧）
+    { id:'n5s000', name:'國5 石碇（南下）',   county:'新北市', lat:24.9900, lng:121.6900, snap:'n5-s-0k-000.jpg' },
+    { id:'n5s010', name:'國5 坪林（南下）',   county:'新北市', lat:24.9400, lng:121.7200, snap:'n5-s-10k-000.jpg' },
+    { id:'n5s030', name:'國5 宜蘭（南下）',   county:'宜蘭縣', lat:24.7800, lng:121.7500, snap:'n5-s-30k-000.jpg' },
+    { id:'n5s050', name:'國5 蘇澳（南下）',   county:'宜蘭縣', lat:24.6000, lng:121.8400, snap:'n5-s-50k-000.jpg' },
+    // 北上補充
+    { id:'n1n000', name:'國1 基隆端（北上）', county:'基隆市', lat:25.1200, lng:121.7230, snap:'n1-n-0k-000.jpg' },
+    { id:'n1n160', name:'國1 台中（北上）',   county:'台中市', lat:24.2100, lng:120.6600, snap:'n1-n-160k-000.jpg' },
+    { id:'n1n330', name:'國1 高雄（北上）',   county:'高雄市', lat:22.7100, lng:120.2800, snap:'n1-n-330k-000.jpg' }
   ];
 
-  var _cams = [];
-  var _loaded = false;
-
-  // 解析縣市
-  function parseCounty(str) {
-    if (!str) return '未知';
-    var map = {
-      '台北':'台北市','臺北':'台北市','新北':'新北市','基隆':'基隆市','桃園':'桃園市',
-      '新竹市':'新竹市','新竹縣':'新竹縣','新竹':'新竹市','苗栗':'苗栗縣',
-      '台中':'台中市','臺中':'台中市','彰化':'彰化縣','南投':'南投縣','雲林':'雲林縣',
-      '嘉義市':'嘉義市','嘉義縣':'嘉義縣','嘉義':'嘉義縣',
-      '台南':'台南市','臺南':'台南市','高雄':'高雄市','屏東':'屏東縣',
-      '宜蘭':'宜蘭縣','花蓮':'花蓮縣','台東':'台東縣','臺東':'台東縣',
-      '澎湖':'澎湖縣','金門':'金門縣','馬祖':'連江縣','連江':'連江縣'
+  // 加上完整 HTTPS 圖片網址
+  var _cams = STATIC_CAMS.map(function(c) {
+    return {
+      id:     c.id,
+      name:   c.name,
+      county: c.county,
+      lat:    c.lat,
+      lng:    c.lng,
+      url:    BASE + c.snap,
+      type:   'cctv',
+      status: 'unknown'
     };
-    for (var k in map) {
-      if (str.indexOf(k) !== -1) return map[k];
-    }
-    return '未知';
-  }
-
-  // 解析高速公路局 CCTV XML
-  function parseFreewayXML(xmlText) {
-    var parser = new DOMParser();
-    var doc = parser.parseFromString(xmlText, 'text/xml');
-    var items = doc.querySelectorAll('CCTV, CCTVInfo');
-    if (!items || items.length === 0) {
-      items = doc.getElementsByTagName('CCTV');
-    }
-    var result = [];
-    Array.prototype.forEach.call(items, function(el) {
-      var getId   = function(t) { var n = el.querySelector(t) || el.getElementsByTagName(t)[0]; return n ? n.textContent.trim() : ''; };
-      var id      = getId('CCTVId') || getId('Id');
-      var name    = getId('CCTVName') || getId('Name') || id;
-      var lat     = parseFloat(getId('PositionLat') || getId('Lat') || '0');
-      var lng     = parseFloat(getId('PositionLon') || getId('PositionLng') || getId('Lon') || '0');
-      var url     = getId('VideoStreamURL') || getId('Url') || '';
-      var road    = getId('RoadName') || getId('LocationDescription') || '';
-      if (!lat || !lng || lat < 21 || lat > 27) return;
-      result.push({
-        id:     'fw_' + (id || Math.random()),
-        name:   name || road || '國道攝影機',
-        county: parseCounty(road + name),
-        lat:    lat,
-        lng:    lng,
-        url:    url,
-        type:   'cctv',
-        status: 'unknown'
-      });
-    });
-    return result;
-  }
+  });
 
   window.Data = {
     weather: {},
-
-    allCams: function() {
-      return _cams;
-    },
-
+    allCams: function() { return _cams; },
     loadDynamic: function() {
-      // 高速公路局公開 XML（無需 token）
-      var urls = [
-        'https://tisvcloud.freeway.gov.tw/history/motc31/CCTV.xml',
-        'https://tisvcloud.freeway.gov.tw/CCTV.xml'
-      ];
-
-      function tryFetch(index) {
-        if (index >= urls.length) {
-          console.warn('高公局 CCTV 載入失敗，使用備援資料');
-          useFallback();
-          return;
-        }
-        fetch(urls[index])
-          .then(function(r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.text();
-          })
-          .then(function(xml) {
-            var parsed = parseFreewayXML(xml);
-            console.log('高公局 CCTV 載入:', parsed.length, '支');
-            _cams = parsed;
-            _loaded = true;
-            Bus.emit('cams:updated');
-          })
-          .catch(function() {
-            tryFetch(index + 1);
-          });
-      }
-
-      function useFallback() {
-        // 備援靜態資料（確保畫面不空白）
-        _cams = [
-          { id:'f001', name:'國道1號-基隆端', county:'基隆市', lat:25.1190, lng:121.7218, url:'', type:'cctv', status:'unknown' },
-          { id:'f002', name:'國道1號-台北交流道', county:'台北市', lat:25.0500, lng:121.5200, url:'', type:'cctv', status:'unknown' },
-          { id:'f003', name:'國道1號-板橋', county:'新北市', lat:25.0138, lng:121.4635, url:'', type:'cctv', status:'unknown' },
-          { id:'f004', name:'國道1號-桃園', county:'桃園市', lat:25.0610, lng:121.2993, url:'', type:'cctv', status:'unknown' },
-          { id:'f005', name:'國道1號-新竹', county:'新竹市', lat:24.7946, lng:121.1740, url:'', type:'cctv', status:'unknown' },
-          { id:'f006', name:'國道1號-苗栗三義', county:'苗栗縣', lat:24.3997, lng:120.7576, url:'', type:'cctv', status:'unknown' },
-          { id:'f007', name:'國道1號-台中', county:'台中市', lat:24.1801, lng:120.6200, url:'', type:'cctv', status:'unknown' },
-          { id:'f008', name:'國道1號-彰化', county:'彰化縣', lat:24.0739, lng:120.5372, url:'', type:'cctv', status:'unknown' },
-          { id:'f009', name:'國道1號-雲林', county:'雲林縣', lat:23.6787, lng:120.4785, url:'', type:'cctv', status:'unknown' },
-          { id:'f010', name:'國道1號-嘉義', county:'嘉義縣', lat:23.4589, lng:120.3912, url:'', type:'cctv', status:'unknown' },
-          { id:'f011', name:'國道1號-台南', county:'台南市', lat:23.0740, lng:120.3123, url:'', type:'cctv', status:'unknown' },
-          { id:'f012', name:'國道1號-高雄', county:'高雄市', lat:22.7965, lng:120.2956, url:'', type:'cctv', status:'unknown' },
-          { id:'f013', name:'國道3號-木柵', county:'台北市', lat:24.9941, lng:121.5729, url:'', type:'cctv', status:'unknown' },
-          { id:'f014', name:'國道3號-新店', county:'新北市', lat:24.9600, lng:121.5400, url:'', type:'cctv', status:'unknown' },
-          { id:'f015', name:'雪山隧道北口', county:'新北市', lat:25.0234, lng:121.7609, url:'', type:'cctv', status:'unknown' },
-          { id:'f016', name:'雪山隧道南口', county:'宜蘭縣', lat:24.8700, lng:121.7900, url:'', type:'cctv', status:'unknown' },
-          { id:'f017', name:'國道5號-宜蘭', county:'宜蘭縣', lat:24.6941, lng:121.7378, url:'', type:'cctv', status:'unknown' },
-          { id:'f018', name:'國道10號-高雄', county:'高雄市', lat:22.6400, lng:120.3200, url:'', type:'cctv', status:'unknown' }
-        ];
-        _loaded = true;
-        Bus.emit('cams:updated');
-      }
-
-      tryFetch(0);
+      // 靜態資料已載入，直接通知
+      setTimeout(function() { Bus.emit('cams:updated'); }, 100);
     },
-
     fetchWeather: function() {
       var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
                 '?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100';
@@ -938,6 +867,36 @@
     Bus.on('cams:updated',    function() { ListMod.render(); });
     Bus.on('weather:updated', function() { ListMod.render(); });
     ListMod.render();
+  });
+})();
+
+// YouTube 自訂播放器（環島助手頁）
+(function() {
+  function extractYTId(url) {
+    var m = url.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+  window.addEventListener('load', function() {
+    var btn   = document.getElementById('yt-play-btn');
+    var input = document.getElementById('yt-input');
+    var wrap  = document.getElementById('yt-player-wrap');
+    var frame = document.getElementById('yt-player');
+    function play(url) {
+      var id = extractYTId(url);
+      if (!id) { Toast.show('無法解析 YouTube 網址'); return; }
+      frame.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+      wrap.classList.remove('hidden');
+    }
+    if (btn && input) {
+      btn.addEventListener('click', function() { play(input.value.trim()); });
+    }
+    document.querySelectorAll('.yt-suggest').forEach(function(el) {
+      el.addEventListener('click', function() {
+        if (input) input.value = el.dataset.url;
+        play(el.dataset.url);
+        NavMod.go('tools');
+      });
+    });
   });
 })();
 
