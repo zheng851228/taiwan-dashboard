@@ -78,13 +78,22 @@
 
   <!-- 路徑解析 -->
   <div class="absolute top-[calc(var(--safe-top)+5rem)] left-4 right-4 z-[500] max-w-lg">
-    <div class="glass p-3 rounded-2xl shadow-xl flex gap-2">
-      <input type="text" id="js-route-input"
-        class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-        placeholder="貼上 Google Maps 路徑長網址..." />
+    <div class="glass p-3 rounded-2xl shadow-xl space-y-2">
+      <div class="flex gap-2 items-center">
+        <span class="text-green-400 text-xs font-black shrink-0">起點</span>
+        <input type="text" id="js-route-start"
+          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
+          placeholder="貼上起點 Google Maps 網址或地名..." />
+      </div>
+      <div class="flex gap-2 items-center">
+        <span class="text-red-400 text-xs font-black shrink-0">終點</span>
+        <input type="text" id="js-route-end"
+          class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+          placeholder="貼上終點 Google Maps 網址或地名..." />
+      </div>
       <button id="js-route-btn"
-        class="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-95">
-        解析
+        class="w-full bg-orange-500 hover:bg-orange-600 py-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-95">
+        🔍 解析路線，找沿途攝影機
       </button>
     </div>
     <div id="js-route-status" class="mt-2 text-[11px] px-2 font-bold text-orange-400 drop-shadow-md"></div>
@@ -433,6 +442,42 @@
         return null;
       })
       .catch(function() { return null; });
+  };
+
+
+  // 從 Google Maps 地點網址抽取單一座標
+  window.extractPointFromUrl = function(input) {
+    if (!input || !input.trim()) return Promise.resolve(null);
+    var s = input.trim();
+
+    // 1. 直接是座標格式 "25.03,121.36"
+    var coordM = s.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
+    if (coordM) return Promise.resolve([parseFloat(coordM[1]), parseFloat(coordM[2])]);
+
+    // 2. 是網址，先展開短網址
+    if (s.indexOf('http') === 0) {
+      return expandGoogleUrl(s).then(function(fullUrl) {
+        // 從 @ 抓座標
+        var m = fullUrl.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        if (m) return [parseFloat(m[1]), parseFloat(m[2])];
+        // 從 query= 抓座標
+        var m2 = fullUrl.match(/query=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        if (m2) return [parseFloat(m2[1]), parseFloat(m2[2])];
+        // 從 ll= 抓座標
+        var m3 = fullUrl.match(/ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        if (m3) return [parseFloat(m3[1]), parseFloat(m3[2])];
+        // 抓不到座標，嘗試從地名 geocode
+        var placeM = fullUrl.match(/\/place\/([^/@]+)/);
+        if (placeM) {
+          var name = decodeURIComponent(placeM[1].replace(/\+/g, ' '));
+          return geocodeName(name);
+        }
+        return null;
+      });
+    }
+
+    // 3. 純文字地名，直接 geocode
+    return geocodeName(s);
   };
 
   // 解析 Google Maps /dir/ 網址中的地名或座標，回傳 Promise<[[lat,lng],...]>
@@ -796,30 +841,40 @@
       if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
       if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
       if (locBtn)   locBtn.addEventListener('click', function() { RouteMod.locate(); });
+      // Enter 鍵觸發解析
+      ['js-route-start','js-route-end'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') RouteMod.analyze(); });
+      });
     },
     analyze: function() {
-      var input = document.getElementById('js-route-input');
-      if (!input) return;
-      var url = input.value.trim();
-      if (!url) { Toast.show('\u8acb\u8cbc\u4e0a Google Maps \u7db2\u5740'); return; }
+      var startEl = document.getElementById('js-route-start');
+      var endEl   = document.getElementById('js-route-end');
+      var startVal = startEl ? startEl.value.trim() : '';
+      var endVal   = endEl   ? endEl.value.trim()   : '';
+      if (!startVal || !endVal) {
+        Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede');
+        return;
+      }
       var btn = document.getElementById('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
 
-      // 先展開短網址，再解析路線
-      expandGoogleUrl(url).then(function(fullUrl) {
-        return parseRouteFromUrl(fullUrl);
-      }).then(function(coords) {
-        var btn = document.getElementById('js-route-btn');
-        if (btn) { btn.textContent = '\u89e3\u6790'; btn.disabled = false; }
-        if (!coords || coords.length < 2) {
-          Toast.show('\u7121\u6cd5\u89e3\u6790\u8def\u7dda\uff0c\u8acb\u78ba\u8a8d\u70ba\u300c\u5206\u4eab\u8def\u7dda\u300d\u7db2\u5740');
+      Promise.all([
+        extractPointFromUrl(startVal),
+        extractPointFromUrl(endVal)
+      ]).then(function(results) {
+        if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+        var startPt = results[0];
+        var endPt   = results[1];
+        if (!startPt || !endPt) {
+          Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
           return;
         }
-        Toast.show('\u8def\u7dda\u89e3\u6790\u5b8c\u6210\uff0c\u5171 ' + coords.length + ' \u500b\u9ede');
-        RouteMod._doFilter(url, coords);
+        var coords = [startPt, endPt];
+        Toast.show('\u8d77\u9ede\u2192\u7d42\u9ede\u89e3\u6790\u5b8c\u6210');
+        RouteMod._doFilter('', coords);
       }).catch(function() {
-        var btn = document.getElementById('js-route-btn');
-        if (btn) { btn.textContent = '\u89e3\u6790'; btn.disabled = false; }
+        if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
         Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
       });
     },
@@ -847,12 +902,14 @@
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = [];
       MapMod.clearRoute();
-      var input = document.getElementById('js-route-input');
+      var startEl = document.getElementById('js-route-start');
+      var endEl   = document.getElementById('js-route-end');
       var st    = document.getElementById('js-route-status');
+      if (startEl) startEl.value = '';
+      if (endEl)   endEl.value   = '';
       var banner= document.getElementById('js-route-banner');
       var info  = document.getElementById('js-list-route-info');
-      if (input)  input.value = '';
-      if (st)     st.textContent = '';
+      if (st) st.textContent = '';
       if (banner) { banner.classList.add('hidden'); banner.classList.remove('flex'); }
       if (info)   { info.classList.add('hidden');   info.classList.remove('flex'); }
       Bus.emit('filter:changed');
