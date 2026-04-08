@@ -39,6 +39,7 @@
     body.light .text-slate-100 { color: #1e293b; }
     body.light .text-slate-400 { color: #64748b; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
 
   </style>
 </head>
@@ -115,6 +116,29 @@
       class="w-14 h-14 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 hover:scale-110 active:scale-90 transition-all">
       <i class="fa-solid fa-location-crosshairs text-2xl"></i>
     </button>
+  </div>
+
+  <!-- 附近攝影機 Panel -->
+  <div id="nearby-panel" class="hidden absolute bottom-24 right-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div class="flex items-center gap-2">
+        <span class="text-orange-500 text-sm">📍</span>
+        <span class="font-black text-sm">附近攝影機</span>
+        <span id="nearby-count" class="text-[10px] text-slate-400"></span>
+      </div>
+      <button id="nearby-close" class="w-6 h-6 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
+        <i class="fa-solid fa-xmark text-xs"></i>
+      </button>
+    </div>
+    <div id="nearby-list" class="overflow-y-auto max-h-64 divide-y divide-white/5"></div>
+    <div class="px-4 py-2 text-[10px] text-slate-500 border-t border-white/10" id="nearby-radius-row">
+      <span>顯示半徑：</span>
+      <button class="nearby-r-btn font-bold text-orange-400" data-r="5">5km</button>
+      <span class="mx-1 text-slate-600">|</span>
+      <button class="nearby-r-btn text-slate-400" data-r="10">10km</button>
+      <span class="mx-1 text-slate-600">|</span>
+      <button class="nearby-r-btn text-slate-400" data-r="20">20km</button>
+    </div>
   </div>
 
   <!-- 路線過濾 Banner -->
@@ -1252,6 +1276,7 @@
     Bus.on('status:updated',  function() { ListMod.render(); StatusBar.update(); });
     ListMod.render();
     StatusBar.init();
+    NearbyMod.init();
   });
 })();
 
@@ -1414,6 +1439,170 @@ var StatusBar = {
     }
   }
 };
+
+// ── GPS 定位 + 附近攝影機模組 ────────────────────────────────────────────
+var NearbyMod = {
+  userLat: null,
+  userLng: null,
+  radius: 5,
+  marker: null,
+
+  init: function() {
+    var locBtn      = document.getElementById('js-loc');
+    var closeBtn    = document.getElementById('nearby-close');
+    var radiusBtns  = document.querySelectorAll('.nearby-r-btn');
+
+    if (locBtn) locBtn.addEventListener('click', function() { NearbyMod.locate(); });
+    if (closeBtn) closeBtn.addEventListener('click', function() { NearbyMod.hide(); });
+
+    radiusBtns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        radiusBtns.forEach(function(b) { b.classList.remove('text-orange-400','font-bold'); b.classList.add('text-slate-400'); });
+        btn.classList.add('text-orange-400','font-bold');
+        btn.classList.remove('text-slate-400');
+        NearbyMod.radius = parseInt(btn.dataset.r);
+        if (NearbyMod.userLat !== null) NearbyMod.render();
+      });
+    });
+  },
+
+  locate: function() {
+    if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
+    var btn = document.getElementById('js-loc');
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-2xl"></i>';
+
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
+        NearbyMod.userLat = pos.coords.latitude;
+        NearbyMod.userLng = pos.coords.longitude;
+        NearbyMod.showOnMap();
+        NearbyMod.render();
+        NearbyMod.show();
+      },
+      function(err) {
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
+        var msg = err.code === 1 ? '\u5b9a\u4f4d\u6b0a\u9650\u88ab\u62d2\u7d55' :
+                  err.code === 2 ? '\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e' : '\u5b9a\u4f4d\u903e\u6642';
+        Toast.show(msg);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  },
+
+  showOnMap: function() {
+    if (!NearbyMod.userLat) return;
+    // 移除舊標記
+    if (NearbyMod.marker) MapMod.map.removeLayer(NearbyMod.marker);
+
+    // 使用者位置標記（藍色脈衝）
+    var icon = L.divIcon({
+      className: '',
+      html: '<div style="position:relative;width:20px;height:20px">' +
+            '<div style="position:absolute;inset:0;border-radius:50%;background:#3b82f6;opacity:0.3;animation:ping 1.5s ease-in-out infinite"></div>' +
+            '<div style="position:absolute;inset:3px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 0 8px #3b82f6"></div>' +
+            '</div>',
+      iconSize: [20,20], iconAnchor: [10,10]
+    });
+    NearbyMod.marker = L.marker([NearbyMod.userLat, NearbyMod.userLng], { icon: icon })
+      .addTo(MapMod.map)
+      .bindTooltip('\u{1F4CD} \u6211\u7684\u4f4d\u7f6e', { direction:'top', permanent: false });
+
+    // 顯示半徑圓圈
+    if (NearbyMod.circle) MapMod.map.removeLayer(NearbyMod.circle);
+    NearbyMod.circle = L.circle([NearbyMod.userLat, NearbyMod.userLng], {
+      radius: NearbyMod.radius * 1000,
+      color: '#3b82f6', fillColor: '#3b82f6',
+      fillOpacity: 0.05, weight: 1.5, dashArray: '6,4'
+    }).addTo(MapMod.map);
+
+    MapMod.map.setView([NearbyMod.userLat, NearbyMod.userLng], 12);
+  },
+
+  getNearby: function() {
+    if (NearbyMod.userLat === null) return [];
+    return Data.allCams().filter(function(cam) {
+      var d = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng);
+      cam._dist = d;
+      return d <= NearbyMod.radius;
+    }).sort(function(a, b) { return a._dist - b._dist; });
+  },
+
+  render: function() {
+    var list  = document.getElementById('nearby-list');
+    var count = document.getElementById('nearby-count');
+    if (!list) return;
+
+    // 更新圓圈半徑
+    if (NearbyMod.circle) {
+      NearbyMod.circle.setRadius(NearbyMod.radius * 1000);
+    }
+
+    var cams = NearbyMod.getNearby();
+    if (count) count.textContent = cams.length + ' \u652f';
+
+    if (cams.length === 0) {
+      list.innerHTML = '<div class="px-4 py-6 text-center text-slate-500 text-xs">' +
+        NearbyMod.radius + 'km \u5167\u7121\u653d\u5f71\u6a5f</div>';
+      return;
+    }
+
+    var html = '';
+    cams.slice(0, 15).forEach(function(cam) {
+      var color  = Config.STATUS_COLOR[cam.status] || Config.STATUS_COLOR.unknown;
+      var distTx = cam._dist < 1
+        ? Math.round(cam._dist * 1000) + 'm'
+        : cam._dist.toFixed(1) + 'km';
+      html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors nearby-cam-item" data-id="' + cam.id + '">' +
+        '<div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style="background:' + color + '22">' +
+        '<span class="w-2.5 h-2.5 rounded-full inline-block" style="background:' + color + '"></span></div>' +
+        '<div class="flex-1 min-w-0">' +
+        '<div class="text-xs font-bold truncate">' + cam.name + '</div>' +
+        '<div class="text-[10px] text-slate-400">' + cam.county + '</div>' +
+        '</div>' +
+        '<div class="text-[11px] font-bold text-blue-400 shrink-0">' + distTx + '</div>' +
+        '</div>';
+    });
+    list.innerHTML = html;
+
+    var camMap = {};
+    Data.allCams().forEach(function(c) { camMap[c.id] = c; });
+    list.querySelectorAll('.nearby-cam-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        var cam = camMap[item.dataset.id];
+        if (cam) {
+          InfoMod.open(cam);
+          MapMod.map.setView([cam.lat, cam.lng], 14);
+        }
+      });
+    });
+  },
+
+  show: function() {
+    var panel = document.getElementById('nearby-panel');
+    if (panel) { panel.classList.remove('hidden'); panel.classList.add('flex','flex-col'); }
+  },
+
+  hide: function() {
+    var panel = document.getElementById('nearby-panel');
+    if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex','flex-col'); }
+    if (NearbyMod.marker) { MapMod.map.removeLayer(NearbyMod.marker); NearbyMod.marker = null; }
+    if (NearbyMod.circle) { MapMod.map.removeLayer(NearbyMod.circle); NearbyMod.circle = null; }
+    NearbyMod.userLat = null;
+    NearbyMod.userLng = null;
+  }
+};
+
+// Haversine 距離（km）
+function haversineKm(lat1, lon1, lat2, lon2) {
+  var R = 6371;
+  var dLat = (lat2-lat1)*Math.PI/180;
+  var dLon = (lon2-lon1)*Math.PI/180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+          Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+          Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
 </script>
 
