@@ -416,6 +416,32 @@
 (function() {
   'use strict';
 
+  var TDX_CLIENT_ID     = 'lucky851228-134439b0-5aa3-4d73';
+  var TDX_CLIENT_SECRET = '44bde7f0-94f2-49ec-8b9b-ba071af71a71';
+  var _token = null;
+  var _tokenExpiry = 0;
+
+  // 取得 TDX Token
+  function getTDXToken(callback) {
+    var now = Date.now();
+    if (_token && now < _tokenExpiry) { callback(_token); return; }
+    var body = 'grant_type=client_credentials&client_id=' +
+               encodeURIComponent(TDX_CLIENT_ID) +
+               '&client_secret=' + encodeURIComponent(TDX_CLIENT_SECRET);
+    fetch('https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(j) {
+      _token = j.access_token;
+      _tokenExpiry = now + (j.expires_in - 60) * 1000;
+      callback(_token);
+    })
+    .catch(function(e) { console.error('TDX token error', e); callback(null); });
+  }
+
   // 全台縣市中心座標
   window.COUNTY_CENTERS = {
     '台北市':   [25.0330, 121.5654],
@@ -442,81 +468,86 @@
     '連江縣':   [26.1971, 119.9395]
   };
 
-  // 靜態 CCTV 資料（主要路段範例，可自行擴充）
-  var STATIC_CAMS = [
-    // 北部
-    { id: 's001', name: '國道1號-基隆端', county: '基隆市', lat: 25.1190, lng: 121.7218, url: 'https://cctv.thb.gov.tw/001.jpg', status: 'smooth' },
-    { id: 's002', name: '台北交流道', county: '台北市', lat: 25.0500, lng: 121.5200, url: 'https://cctv.thb.gov.tw/002.jpg', status: 'smooth' },
-    { id: 's003', name: '新北板橋', county: '新北市', lat: 25.0138, lng: 121.4635, url: 'https://cctv.thb.gov.tw/003.jpg', status: 'slow' },
-    { id: 's004', name: '桃園南崁', county: '桃園市', lat: 25.0610, lng: 121.2993, url: 'https://cctv.thb.gov.tw/004.jpg', status: 'smooth' },
-    { id: 's005', name: '新竹關西', county: '新竹縣', lat: 24.7946, lng: 121.1740, url: 'https://cctv.thb.gov.tw/005.jpg', status: 'smooth' },
-    // 中部
-    { id: 's006', name: '苗栗三義', county: '苗栗縣', lat: 24.3997, lng: 120.7576, url: 'https://cctv.thb.gov.tw/006.jpg', status: 'smooth' },
-    { id: 's007', name: '台中清水', county: '台中市', lat: 24.3601, lng: 120.5678, url: 'https://cctv.thb.gov.tw/007.jpg', status: 'jam' },
-    { id: 's008', name: '彰化交流道', county: '彰化縣', lat: 24.0739, lng: 120.5372, url: 'https://cctv.thb.gov.tw/008.jpg', status: 'slow' },
-    { id: 's009', name: '雲林斗南', county: '雲林縣', lat: 23.6787, lng: 120.4785, url: 'https://cctv.thb.gov.tw/009.jpg', status: 'smooth' },
-    // 南部
-    { id: 's010', name: '嘉義水上', county: '嘉義縣', lat: 23.4589, lng: 120.3912, url: 'https://cctv.thb.gov.tw/010.jpg', status: 'smooth' },
-    { id: 's011', name: '台南新市', county: '台南市', lat: 23.0740, lng: 120.3123, url: 'https://cctv.thb.gov.tw/011.jpg', status: 'smooth' },
-    { id: 's012', name: '高雄岡山', county: '高雄市', lat: 22.7965, lng: 120.2956, url: 'https://cctv.thb.gov.tw/012.jpg', status: 'slow' },
-    { id: 's013', name: '屏東九如', county: '屏東縣', lat: 22.7263, lng: 120.4817, url: 'https://cctv.thb.gov.tw/013.jpg', status: 'smooth' },
-    // 東部
-    { id: 's014', name: '宜蘭頭城', county: '宜蘭縣', lat: 24.8622, lng: 121.8192, url: 'https://cctv.thb.gov.tw/014.jpg', status: 'smooth' },
-    { id: 's015', name: '花蓮北埔', county: '花蓮縣', lat: 24.1326, lng: 121.6298, url: 'https://cctv.thb.gov.tw/015.jpg', status: 'smooth' },
-    { id: 's016', name: '台東卑南', county: '台東縣', lat: 22.7423, lng: 121.1416, url: 'https://cctv.thb.gov.tw/016.jpg', status: 'smooth' },
-    // 交通部 CCTV (外部 API 示範補充)
-    { id: 's017', name: '雪山隧道北口', county: '新北市', lat: 25.0234, lng: 121.7609, url: 'https://tisvcloud.freeway.gov.tw/cctv/01.jpg', status: 'unknown' },
-    { id: 's018', name: '國道3號木柵', county: '台北市', lat: 24.9941, lng: 121.5729, url: 'https://tisvcloud.freeway.gov.tw/cctv/02.jpg', status: 'unknown' },
-    { id: 's019', name: '台9線南迴', county: '台東縣', lat: 22.3219, lng: 120.8784, url: 'https://cctv.thb.gov.tw/019.jpg', status: 'smooth' },
-    { id: 's020', name: '蘇花公路', county: '花蓮縣', lat: 24.0890, lng: 121.7012, url: 'https://cctv.thb.gov.tw/020.jpg', status: 'smooth' }
-  ];
-
-  // 交通部高速公路 CCTV API (動態)
-  var THB_CCTV_API = 'https://tisvcloud.freeway.gov.tw/history/TDCS_M04A/latest.xml';
-
-  // 取得所有攝影機 (靜態 + 快取動態)
   var _dynamicCams = [];
-  var _loaded = false;
+
+  // 解析縣市名稱
+  function parseCounty(name) {
+    if (!name) return '未知';
+    var counties = Object.keys(window.COUNTY_CENTERS);
+    for (var i = 0; i < counties.length; i++) {
+      if (name.indexOf(counties[i].replace('台','台')) !== -1 ||
+          name.indexOf(counties[i].replace('台','臺')) !== -1 ||
+          name.indexOf(counties[i]) !== -1) return counties[i];
+    }
+    // 簡碼對應
+    var map = {
+      '北市':'台北市','新北':'新北市','基隆':'基隆市','桃園':'桃園市',
+      '新竹市':'新竹市','新竹縣':'新竹縣','苗栗':'苗栗縣','中市':'台中市',
+      '台中':'台中市','彰化':'彰化縣','南投':'南投縣','雲林':'雲林縣',
+      '嘉市':'嘉義市','嘉縣':'嘉義縣','嘉義':'嘉義縣','南市':'台南市',
+      '台南':'台南市','高市':'高雄市','高雄':'高雄市','屏東':'屏東縣',
+      '宜蘭':'宜蘭縣','花蓮':'花蓮縣','台東':'台東縣','澎湖':'澎湖縣',
+      '金門':'金門縣','馬祖':'連江縣'
+    };
+    for (var k in map) {
+      if (name.indexOf(k) !== -1) return map[k];
+    }
+    return '未知';
+  }
 
   window.Data = {
-    getCams: function() {
-      return STATIC_CAMS.concat(_dynamicCams);
-    },
+    weather: {},
+
     allCams: function() {
-      return STATIC_CAMS.concat(_dynamicCams);
+      return _dynamicCams;
     },
+
+    // 載入 TDX 省道 CCTV
     loadDynamic: function() {
-      // 嘗試載入交通部動態資料（HTTPS OK）
-      fetch('https://ptx.transportdata.tw/MOTC/v2/Road/Traffic/Live?%24top=50&%24format=JSON')
+      getTDXToken(function(token) {
+        if (!token) { Bus.emit('cams:updated'); return; }
+        // 省道 CCTV（最多 1000 筆）
+        fetch('https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CCTV?$top=1000&$format=JSON', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        })
         .then(function(r) { return r.json(); })
         .then(function(arr) {
-          if (!Array.isArray(arr)) return;
+          if (!Array.isArray(arr)) { Bus.emit('cams:updated'); return; }
+          _dynamicCams = [];
           arr.forEach(function(item) {
-            if (item.PositionLat && item.PositionLon) {
-              _dynamicCams.push({
-                id: 'dyn_' + item.CCTVId,
-                name: item.CCTVName || item.CCTVId,
-                county: item.County || '未知',
-                lat: parseFloat(item.PositionLat),
-                lng: parseFloat(item.PositionLon),
-                url: item.VideoStreamURL || '',
-                status: 'unknown'
-              });
-            }
+            var pos = item.PositionLon !== undefined
+              ? { lat: item.PositionLat, lng: item.PositionLon }
+              : (item.GeoInfo && item.GeoInfo.Coordinates && item.GeoInfo.Coordinates[0]
+                ? { lat: item.GeoInfo.Coordinates[0].PositionLat, lng: item.GeoInfo.Coordinates[0].PositionLon }
+                : null);
+            if (!pos) return;
+            var name   = item.CCTVName || item.CCTVId || '未知';
+            var county = parseCounty(item.RoadName || item.LocationDescription || name);
+            var url    = item.VideoStreamURL || item.CCTVVideoStreamURL || '';
+            _dynamicCams.push({
+              id:     'tdx_' + (item.CCTVId || Math.random()),
+              name:   name,
+              county: county,
+              lat:    parseFloat(pos.lat),
+              lng:    parseFloat(pos.lng),
+              url:    url,
+              status: 'unknown'
+            });
           });
-          _loaded = true;
+          console.log('TDX CCTV 載入:', _dynamicCams.length, '支');
           Bus.emit('cams:updated');
         })
-        .catch(function() {
-          _loaded = true;
+        .catch(function(e) {
+          console.error('TDX CCTV error', e);
           Bus.emit('cams:updated');
         });
+      });
     },
-    // 氣象資料
-    weather: {},
+
+    // CWA 氣象
     fetchWeather: function() {
-      var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=' +
-                Config.CWA_KEY + '&format=JSON&limit=50';
+      var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
+                '?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100';
       fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(json) {
@@ -528,9 +559,9 @@
             var obs = s.WeatherElement;
             if (!Data.weather[county]) {
               Data.weather[county] = {
-                temp: obs && obs.AirTemperature,
+                temp:    obs && obs.AirTemperature,
                 weather: obs && obs.Weather,
-                rain: obs && obs.Now && obs.Now.Precipitation
+                rain:    obs && obs.Now && obs.Now.Precipitation
               };
             }
           });
