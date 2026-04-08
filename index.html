@@ -29,6 +29,7 @@
     .dot-jam     { background: #da3633; }
     .dot-unknown { background: #8b949e; }
     .cam-card { transition: border-color 0.2s; }
+    .route-mode-btn.active { background: #f97316 !important; color: #fff !important; border-color: #f97316 !important; }
     .cam-card:hover { border-color: rgba(249,115,22,0.5) !important; }
     body.light { background: #f1f5f9; color: #1e293b; }
     body.light .glass { background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); }
@@ -91,6 +92,15 @@
           class="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
           placeholder="貼上終點 Google Maps 網址或地名..." />
       </div>
+      <!-- 交通模式切換 -->
+      <div class="flex gap-2">
+        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-2 rounded-xl text-sm font-bold transition-all border border-white/10 bg-orange-500 text-white">
+          🏍️ 機車
+        </button>
+        <button data-mode="car" class="route-mode-btn flex-1 py-2 rounded-xl text-sm font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">
+          🚗 汽車
+        </button>
+      </div>
       <button id="js-route-btn"
         class="w-full bg-orange-500 hover:bg-orange-600 py-2 rounded-xl text-white font-bold text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-95">
         🔍 解析路線，找沿途攝影機
@@ -120,12 +130,22 @@
     <button id="js-rb-clear" class="text-xs bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full font-bold">清除</button>
   </div>
 
-  <!-- 圖例 -->
+  <!-- 圖例 + 路況統計 -->
   <div class="absolute bottom-24 left-4 z-[500] glass px-4 py-3 rounded-2xl text-xs space-y-1.5">
+    <div class="text-[10px] text-slate-400 font-bold mb-1">路況圖例</div>
     <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-smooth inline-block"></span>順暢</div>
     <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-slow   inline-block"></span>緩慢</div>
     <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-jam    inline-block"></span>壅塞</div>
     <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full dot-unknown inline-block"></span>未知</div>
+    <div class="border-t border-white/10 pt-1.5 mt-1">
+      <div class="text-[10px] text-slate-400 font-bold mb-1">即時統計</div>
+      <div id="status-summary" class="flex gap-2 text-[11px] font-bold">
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>--</div>
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>--</div>
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>--</div>
+      </div>
+      <div id="status-ts" class="text-[9px] text-slate-600 mt-1">載入中...</div>
+    </div>
   </div>
 </section>
 
@@ -482,11 +502,15 @@
 
 
   // 用 OSRM 取得真實道路路徑，回傳 Promise<[[lat,lng],...]>
-  window.getRoadRoute = function(startLatLng, endLatLng) {
-    // OSRM 格式是 lng,lat（注意與我們的 lat,lng 相反）
+  // mode: 'driving'（汽車）| 'motorcycle' → OSRM 統一用 driving，機車另外處理
+  window.getRoadRoute = function(startLatLng, endLatLng, mode) {
     var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
-    var url = 'https://router.project-osrm.org/route/v1/driving/' + coords +
-              '?overview=full&geometries=geojson';
+    // OSRM 公開 API 的模式：driving / cycling / foot
+    // motorcycle 用 driving（路線相似），但可加 avoid=motorway 走省道
+    var osrmMode = (mode === 'motorcycle') ? 'driving' : 'driving';
+    var avoid    = (mode === 'motorcycle') ? '' : '';
+    var url = 'https://router.project-osrm.org/route/v1/' + osrmMode + '/' + coords +
+              '?overview=full&geometries=geojson' + avoid;
     return fetch(url)
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -601,6 +625,30 @@
 (function() {
   'use strict';
 
+  var TDX_ID     = 'lucky851228-134439b0-5aa3-4d73';
+  var TDX_SECRET = '44bde7f0-94f2-49ec-8b9b-ba071af71a71';
+  var _token = null;
+  var _tokenExpiry = 0;
+
+  // TDX Token
+  function getTDXToken(cb) {
+    var now = Date.now();
+    if (_token && now < _tokenExpiry) { cb(_token); return; }
+    fetch('https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(TDX_ID) +
+            '&client_secret=' + encodeURIComponent(TDX_SECRET)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(j) {
+      _token = j.access_token;
+      _tokenExpiry = now + (j.expires_in - 60) * 1000;
+      cb(_token);
+    })
+    .catch(function() { cb(null); });
+  }
+
   window.COUNTY_CENTERS = {
     '台北市':[25.0330,121.5654],'新北市':[25.0120,121.4653],'基隆市':[25.1283,121.7419],
     '桃園市':[24.9937,121.3010],'新竹市':[24.8138,120.9675],'新竹縣':[24.6877,121.1565],
@@ -612,158 +660,184 @@
     '連江縣':[26.1971,119.9395]
   };
 
+  // TDX 縣市代碼對照
+  var CITY_CODES = {
+    '台北市':'Taipei','新北市':'NewTaipei','基隆市':'Keelung','桃園市':'Taoyuan',
+    '新竹市':'Hsinchu','新竹縣':'HsinchuCounty','苗栗縣':'MiaoliCounty',
+    '台中市':'Taichung','彰化縣':'ChanghuaCounty','南投縣':'NantouCounty',
+    '雲林縣':'YunlinCounty','嘉義市':'Chiayi','嘉義縣':'ChiayiCounty',
+    '台南市':'Tainan','高雄市':'Kaohsiung','屏東縣':'PingtungCounty',
+    '宜蘭縣':'YilanCounty','花蓮縣':'HualienCounty','台東縣':'TaitungCounty'
+  };
+
   var B = 'https://c01.twipcam.com/cam/snapshot/';
 
   var CAMS = [
-    // ════════════════════════════════════════════
-    // 國道1號（西部縱貫，南下）
-    // ════════════════════════════════════════════
-    {id:'n1s000',name:'國1 基隆端',      county:'基隆市',lat:25.1190,lng:121.7218,snap:'n1-s-0k-000.jpg'},
-    {id:'n1s008',name:'國1 汐止',        county:'新北市',lat:25.0720,lng:121.6590,snap:'n1-s-8k-000.jpg'},
-    {id:'n1s020',name:'國1 五股',        county:'新北市',lat:25.0700,lng:121.4700,snap:'n1-s-20k-000.jpg'},
-    {id:'n1s040',name:'國1 桃園',        county:'桃園市',lat:25.0000,lng:121.3000,snap:'n1-s-40k-000.jpg'},
-    {id:'n1s050',name:'國1 中壢南',      county:'桃園市',lat:24.9200,lng:121.2700,snap:'n1-s-50k-000.jpg'},
-    {id:'n1s060',name:'國1 中壢',        county:'桃園市',lat:24.9600,lng:121.2300,snap:'n1-s-60k-000.jpg'},
-    {id:'n1s080',name:'國1 新竹',        county:'新竹市',lat:24.8200,lng:121.0900,snap:'n1-s-80k-000.jpg'},
-    {id:'n1s100',name:'國1 苗栗三義',    county:'苗栗縣',lat:24.3997,lng:120.7576,snap:'n1-s-100k-000.jpg'},
-    {id:'n1s120',name:'國1 苗栗',        county:'苗栗縣',lat:24.5600,lng:120.8200,snap:'n1-s-120k-000.jpg'},
-    {id:'n1s160',name:'國1 台中',        county:'台中市',lat:24.2000,lng:120.6500,snap:'n1-s-160k-000.jpg'},
-    {id:'n1s180',name:'國1 彰化',        county:'彰化縣',lat:24.0700,lng:120.5400,snap:'n1-s-180k-000.jpg'},
-    {id:'n1s200',name:'國1 雲林',        county:'雲林縣',lat:23.7000,lng:120.4700,snap:'n1-s-200k-000.jpg'},
-    {id:'n1s230',name:'國1 嘉義',        county:'嘉義縣',lat:23.4500,lng:120.3800,snap:'n1-s-230k-000.jpg'},
-    {id:'n1s280',name:'國1 台南',        county:'台南市',lat:23.0500,lng:120.2900,snap:'n1-s-280k-000.jpg'},
-    {id:'n1s330',name:'國1 高雄',        county:'高雄市',lat:22.7000,lng:120.2900,snap:'n1-s-330k-000.jpg'},
-    // 北上
-    {id:'n1n000',name:'國1 基隆端(北)',  county:'基隆市',lat:25.1200,lng:121.7230,snap:'n1-n-0k-000.jpg'},
-    {id:'n1n040',name:'國1 桃園(北)',    county:'桃園市',lat:25.0100,lng:121.3100,snap:'n1-n-40k-000.jpg'},
-    {id:'n1n060',name:'國1 中壢(北)',    county:'桃園市',lat:24.9700,lng:121.2400,snap:'n1-n-60k-000.jpg'},
-    {id:'n1n080',name:'國1 新竹(北)',    county:'新竹市',lat:24.8300,lng:121.1000,snap:'n1-n-80k-000.jpg'},
-    {id:'n1n120',name:'國1 苗栗(北)',    county:'苗栗縣',lat:24.5700,lng:120.8300,snap:'n1-n-120k-000.jpg'},
-    {id:'n1n160',name:'國1 台中(北)',    county:'台中市',lat:24.2100,lng:120.6600,snap:'n1-n-160k-000.jpg'},
-    {id:'n1n330',name:'國1 高雄(北)',    county:'高雄市',lat:22.7100,lng:120.2800,snap:'n1-n-330k-000.jpg'},
-
-    // ════════════════════════════════════════════
-    // 國道3號（西部山線）
-    // ════════════════════════════════════════════
-    {id:'n3s010',name:'國3 木柵',        county:'台北市',lat:24.9900,lng:121.5700,snap:'n3-s-10k-000.jpg'},
-    {id:'n3s030',name:'國3 新店',        county:'新北市',lat:24.9500,lng:121.5300,snap:'n3-s-30k-000.jpg'},
-    {id:'n3s050',name:'國3 新竹',        county:'新竹市',lat:24.8000,lng:121.1200,snap:'n3-s-50k-000.jpg'},
-    {id:'n3s070',name:'國3 苗栗',        county:'苗栗縣',lat:24.5500,lng:120.8800,snap:'n3-s-70k-000.jpg'},
-    {id:'n3s100',name:'國3 關西',        county:'新竹縣',lat:24.7900,lng:121.1700,snap:'n3-s-100k-000.jpg'},
-    {id:'n3s140',name:'國3 台中霧峰',    county:'台中市',lat:24.0500,lng:120.7000,snap:'n3-s-140k-000.jpg'},
-    {id:'n3s180',name:'國3 台中',        county:'台中市',lat:24.1500,lng:120.6700,snap:'n3-s-180k-000.jpg'},
-    {id:'n3s280',name:'國3 台南',        county:'台南市',lat:22.9800,lng:120.2300,snap:'n3-s-280k-000.jpg'},
-    {id:'n3n050',name:'國3 新竹(北)',    county:'新竹市',lat:24.8100,lng:121.1300,snap:'n3-n-50k-000.jpg'},
-    {id:'n3n100',name:'國3 台中(北)',    county:'台中市',lat:24.1600,lng:120.6800,snap:'n3-n-100k-000.jpg'},
-
-    // ════════════════════════════════════════════
-    // 國道5號（雪山隧道）
-    // ════════════════════════════════════════════
-    {id:'n5s000',name:'國5 石碇',        county:'新北市',lat:24.9900,lng:121.6900,snap:'n5-s-0k-000.jpg'},
-    {id:'n5s030',name:'國5 宜蘭',        county:'宜蘭縣',lat:24.7800,lng:121.7500,snap:'n5-s-30k-000.jpg'},
-    {id:'n5s050',name:'國5 蘇澳',        county:'宜蘭縣',lat:24.6000,lng:121.8400,snap:'n5-s-50k-000.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台1線（西部縱貫省道）
-    // ════════════════════════════════════════════
-    {id:'t1-092',name:'台1線 苗栗頭份',  county:'苗栗縣',lat:24.6800,lng:120.9200,snap:'t1-92k-450.jpg'},
-    {id:'t1-112',name:'台1線 苗栗竹南',  county:'苗栗縣',lat:24.6900,lng:120.8800,snap:'t1-112k-750.jpg'},
-    {id:'t1-132',name:'台1線 苗栗通霄',  county:'苗栗縣',lat:24.4900,lng:120.6700,snap:'t1-132k-050.jpg'},
-    {id:'t1-394',name:'台1線 屏東九如',  county:'屏東縣',lat:22.7300,lng:120.4800,snap:'t1-394k-950.jpg'},
-    {id:'t1-399',name:'台1線 屏東市',    county:'屏東縣',lat:22.6700,lng:120.4900,snap:'t1-399k-700.jpg'},
-    {id:'t1-404',name:'台1線 屏東南州',  county:'屏東縣',lat:22.4900,lng:120.5400,snap:'t1-404k-450.jpg'},
-    {id:'t1-412',name:'台1線 屏東枋寮',  county:'屏東縣',lat:22.3600,lng:120.5800,snap:'t1-412k-450.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台3線（內山公路）
-    // ════════════════════════════════════════════
-    {id:'t3-095',name:'台3線 苗栗',      county:'苗栗縣',lat:24.5700,lng:120.8100,snap:'t3-94k-950.jpg'},
-    {id:'t3-107',name:'台3線 苗栗南庄',  county:'苗栗縣',lat:24.5200,lng:120.8000,snap:'t3-106k-950.jpg'},
-    {id:'t3-126',name:'台3線 苗栗大湖',  county:'苗栗縣',lat:24.4200,lng:120.8400,snap:'t3-126k-500.jpg'},
-    {id:'t3-148',name:'台3線 苗栗泰安',  county:'苗栗縣',lat:24.3800,lng:120.8100,snap:'t3-148k-760.jpg'},
-    {id:'t3-164',name:'台3線 台中東勢',  county:'台中市',lat:24.2500,lng:120.8400,snap:'t3-164k-350.jpg'},
-    {id:'t3-195',name:'台3線 台中霧峰',  county:'台中市',lat:24.0100,lng:120.7100,snap:'t3-195k-200.jpg'},
-    {id:'t3-216',name:'台3線 南投',      county:'南投縣',lat:23.9100,lng:120.6900,snap:'t3-216k-300.jpg'},
-    {id:'t3-224',name:'台3線 南投竹山',  county:'南投縣',lat:23.7600,lng:120.6500,snap:'t3-224k-700.jpg'},
-    {id:'t3-389',name:'台3線 台南楠西',  county:'台南市',lat:23.1600,lng:120.4900,snap:'t3-389k-000.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台9線（東部縱谷、北宜、蘇花、南迴）
-    // ════════════════════════════════════════════
-    {id:'t9-011',name:'台9線 北宜石碇',  county:'新北市',lat:25.0100,lng:121.6600,snap:'t9-11k-650.jpg'},
-    {id:'t9-023',name:'台9線 北宜坪林',  county:'新北市',lat:24.9400,lng:121.7100,snap:'t9-23k-050.jpg'},
-    {id:'t9-037',name:'台9線 頭城',      county:'宜蘭縣',lat:24.8600,lng:121.8000,snap:'t9-37k-100.jpg'},
-    {id:'t9-056',name:'台9線 宜蘭市',    county:'宜蘭縣',lat:24.7600,lng:121.7500,snap:'t9-56k-400.jpg'},
-    {id:'t9-069',name:'台9線 蘇澳',      county:'宜蘭縣',lat:24.6000,lng:121.8500,snap:'t9-69k-300.jpg'},
-    {id:'t9-113',name:'台9線 南澳蘇花',  county:'宜蘭縣',lat:24.4600,lng:121.8400,snap:'t9-113k-181.jpg'},
-    {id:'t9-328',name:'台9線 台東鹿野',  county:'台東縣',lat:22.9700,lng:121.1500,snap:'t9-328k-300.jpg'},
-    {id:'t9-375',name:'台9線 台東市',    county:'台東縣',lat:22.7600,lng:121.1200,snap:'t9-375k-000.jpg'},
-    {id:'t9-382',name:'台9線 太麻里',    county:'台東縣',lat:22.6100,lng:121.0100,snap:'t9-382k-950.jpg'},
-    {id:'t9-400',name:'台9線 多良南迴',  county:'台東縣',lat:22.4300,lng:120.9000,snap:'t9-400k-500.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台11線（東海岸公路）
-    // ════════════════════════════════════════════
-    {id:'t11-011',name:'台11線 花蓮市',  county:'花蓮縣',lat:23.9800,lng:121.6100,snap:'t11-11k-000.jpg'},
-    {id:'t11-050',name:'台11線 花蓮豐濱',county:'花蓮縣',lat:23.6300,lng:121.5200,snap:'t11-50k-000.jpg'},
-    {id:'t11-100',name:'台11線 台東成功',county:'台東縣',lat:23.0900,lng:121.3700,snap:'t11-100k-000.jpg'},
-    {id:'t11-150',name:'台11線 台東市北',county:'台東縣',lat:22.8500,lng:121.1700,snap:'t11-150k-000.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台17線（西濱公路）
-    // ════════════════════════════════════════════
-    {id:'t17-000',name:'台17線 台中清水', county:'台中市',lat:24.3500,lng:120.5600,snap:'t17-0k-400.jpg'},
-    {id:'t17-007',name:'台17線 台中清水2',county:'台中市',lat:24.3200,lng:120.5500,snap:'t17-7k-000.jpg'},
-    {id:'t17-035',name:'台17線 彰化鹿港', county:'彰化縣',lat:24.0600,lng:120.4300,snap:'t17-35k-970.jpg'},
-    {id:'t17-139',name:'台17線 台南北門', county:'台南市',lat:23.2800,lng:120.1300,snap:'t17-139k-500.jpg'},
-    {id:'t17-162',name:'台17線 台南將軍', county:'台南市',lat:23.1900,lng:120.1200,snap:'t17-162k-900.jpg'},
-    {id:'t17-209',name:'台17線 高雄梓官', county:'高雄市',lat:22.7500,lng:120.2000,snap:'t17-209k-500.jpg'},
-    {id:'t17-256',name:'台17線 屏東林邊', county:'屏東縣',lat:22.4300,lng:120.5100,snap:'t17-256k-500.jpg'},
-    {id:'t17-267',name:'台17線 屏東東港', county:'屏東縣',lat:22.4500,lng:120.4700,snap:'t17-267k-800.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台61線（西濱快速，延伸）
-    // ════════════════════════════════════════════
-    {id:'t61-002',name:'台61線 淡水',    county:'新北市',lat:25.1600,lng:121.4300,snap:'t61-2k-500.jpg'},
-    {id:'t61-010',name:'台61線 林口',    county:'新北市',lat:25.0800,lng:121.3700,snap:'t61-10k-170.jpg'},
-    {id:'t61-020',name:'台61線 桃園觀音',county:'桃園市',lat:25.0200,lng:121.0900,snap:'t61-20k-000.jpg'},
-    {id:'t61-029',name:'台61線 新竹竹北',county:'新竹縣',lat:24.8400,lng:120.9200,snap:'t61-29k-367.jpg'},
-    {id:'t61-033',name:'台61線 苗栗通霄',county:'苗栗縣',lat:24.5000,lng:120.6800,snap:'t61-33k-300.jpg'},
-    {id:'t61-087',name:'台61線 苗栗後龍',county:'苗栗縣',lat:24.6200,lng:120.7900,snap:'t61-87k-600.jpg'},
-    {id:'t61-103',name:'台61線 苗栗竹南',county:'苗栗縣',lat:24.6800,lng:120.8700,snap:'t61-103k-100.jpg'},
-    {id:'t61-145',name:'台61線 台中梧棲',county:'台中市',lat:24.2900,lng:120.5200,snap:'t61-145k-350.jpg'},
-    {id:'t61-152',name:'台61線 台中清水',county:'台中市',lat:24.3500,lng:120.5500,snap:'t61-152k-350.jpg'},
-    {id:'t61-160',name:'台61線 台中大甲',county:'台中市',lat:24.3500,lng:120.6200,snap:'t61-160k-800.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台26線（屏鵝公路）
-    // ════════════════════════════════════════════
-    {id:'t26-021',name:'台26線 屏東恆春北',county:'屏東縣',lat:22.0200,lng:120.7300,snap:'t26-21k-323.jpg'},
-    {id:'t26-050',name:'台26線 屏東車城',  county:'屏東縣',lat:21.9600,lng:120.7200,snap:'t26-50k-000.jpg'},
-    {id:'t26-060',name:'台26線 屏東恆春',  county:'屏東縣',lat:21.9400,lng:120.7400,snap:'t26-60k-000.jpg'},
-
-    // ════════════════════════════════════════════
-    // 台88線（東西向快速，高屏）
-    // ════════════════════════════════════════════
+    // 國道1號（南下）
+    {id:'n1s000',name:'國1 基隆端',       county:'基隆市',lat:25.1190,lng:121.7218,snap:'n1-s-0k-000.jpg'},
+    {id:'n1s008',name:'國1 汐止',          county:'新北市',lat:25.0720,lng:121.6590,snap:'n1-s-8k-000.jpg'},
+    {id:'n1s020',name:'國1 五股',          county:'新北市',lat:25.0700,lng:121.4700,snap:'n1-s-20k-000.jpg'},
+    {id:'n1s040',name:'國1 桃園',          county:'桃園市',lat:25.0000,lng:121.3000,snap:'n1-s-40k-000.jpg'},
+    {id:'n1s050',name:'國1 中壢南',        county:'桃園市',lat:24.9200,lng:121.2700,snap:'n1-s-50k-000.jpg'},
+    {id:'n1s060',name:'國1 中壢',          county:'桃園市',lat:24.9600,lng:121.2300,snap:'n1-s-60k-000.jpg'},
+    {id:'n1s080',name:'國1 新竹',          county:'新竹市',lat:24.8200,lng:121.0900,snap:'n1-s-80k-000.jpg'},
+    {id:'n1s100',name:'國1 苗栗三義',      county:'苗栗縣',lat:24.3997,lng:120.7576,snap:'n1-s-100k-000.jpg'},
+    {id:'n1s120',name:'國1 苗栗',          county:'苗栗縣',lat:24.5600,lng:120.8200,snap:'n1-s-120k-000.jpg'},
+    {id:'n1s160',name:'國1 台中',          county:'台中市',lat:24.2000,lng:120.6500,snap:'n1-s-160k-000.jpg'},
+    {id:'n1s180',name:'國1 彰化',          county:'彰化縣',lat:24.0700,lng:120.5400,snap:'n1-s-180k-000.jpg'},
+    {id:'n1s200',name:'國1 雲林',          county:'雲林縣',lat:23.7000,lng:120.4700,snap:'n1-s-200k-000.jpg'},
+    {id:'n1s230',name:'國1 嘉義',          county:'嘉義縣',lat:23.4500,lng:120.3800,snap:'n1-s-230k-000.jpg'},
+    {id:'n1s280',name:'國1 台南',          county:'台南市',lat:23.0500,lng:120.2900,snap:'n1-s-280k-000.jpg'},
+    {id:'n1s330',name:'國1 高雄',          county:'高雄市',lat:22.7000,lng:120.2900,snap:'n1-s-330k-000.jpg'},
+    // 國道1號（北上）
+    {id:'n1n000',name:'國1 基隆端(北)',    county:'基隆市',lat:25.1200,lng:121.7230,snap:'n1-n-0k-000.jpg'},
+    {id:'n1n040',name:'國1 桃園(北)',      county:'桃園市',lat:25.0100,lng:121.3100,snap:'n1-n-40k-000.jpg'},
+    {id:'n1n060',name:'國1 中壢(北)',      county:'桃園市',lat:24.9700,lng:121.2400,snap:'n1-n-60k-000.jpg'},
+    {id:'n1n080',name:'國1 新竹(北)',      county:'新竹市',lat:24.8300,lng:121.1000,snap:'n1-n-80k-000.jpg'},
+    {id:'n1n120',name:'國1 苗栗(北)',      county:'苗栗縣',lat:24.5700,lng:120.8300,snap:'n1-n-120k-000.jpg'},
+    {id:'n1n160',name:'國1 台中(北)',      county:'台中市',lat:24.2100,lng:120.6600,snap:'n1-n-160k-000.jpg'},
+    {id:'n1n330',name:'國1 高雄(北)',      county:'高雄市',lat:22.7100,lng:120.2800,snap:'n1-n-330k-000.jpg'},
+    // 國道3號
+    {id:'n3s010',name:'國3 木柵',          county:'台北市',lat:24.9900,lng:121.5700,snap:'n3-s-10k-000.jpg'},
+    {id:'n3s030',name:'國3 新店',          county:'新北市',lat:24.9500,lng:121.5300,snap:'n3-s-30k-000.jpg'},
+    {id:'n3s050',name:'國3 新竹',          county:'新竹市',lat:24.8000,lng:121.1200,snap:'n3-s-50k-000.jpg'},
+    {id:'n3s070',name:'國3 苗栗',          county:'苗栗縣',lat:24.5500,lng:120.8800,snap:'n3-s-70k-000.jpg'},
+    {id:'n3s140',name:'國3 台中霧峰',      county:'台中市',lat:24.0500,lng:120.7000,snap:'n3-s-140k-000.jpg'},
+    {id:'n3s280',name:'國3 台南',          county:'台南市',lat:22.9800,lng:120.2300,snap:'n3-s-280k-000.jpg'},
+    {id:'n3n050',name:'國3 新竹(北)',      county:'新竹市',lat:24.8100,lng:121.1300,snap:'n3-n-50k-000.jpg'},
+    {id:'n3n100',name:'國3 台中(北)',      county:'台中市',lat:24.1600,lng:120.6800,snap:'n3-n-100k-000.jpg'},
+    // 國道5號
+    {id:'n5s000',name:'國5 石碇',          county:'新北市',lat:24.9900,lng:121.6900,snap:'n5-s-0k-000.jpg'},
+    {id:'n5s030',name:'國5 宜蘭',          county:'宜蘭縣',lat:24.7800,lng:121.7500,snap:'n5-s-30k-000.jpg'},
+    {id:'n5s050',name:'國5 蘇澳',          county:'宜蘭縣',lat:24.6000,lng:121.8400,snap:'n5-s-50k-000.jpg'},
+    // 台1線
+    {id:'t1-092', name:'台1線 苗栗頭份',   county:'苗栗縣',lat:24.6800,lng:120.9200,snap:'t1-92k-450.jpg'},
+    {id:'t1-132', name:'台1線 苗栗通霄',   county:'苗栗縣',lat:24.4900,lng:120.6700,snap:'t1-132k-050.jpg'},
+    {id:'t1-394', name:'台1線 屏東九如',   county:'屏東縣',lat:22.7300,lng:120.4800,snap:'t1-394k-950.jpg'},
+    {id:'t1-399', name:'台1線 屏東市',     county:'屏東縣',lat:22.6700,lng:120.4900,snap:'t1-399k-700.jpg'},
+    {id:'t1-412', name:'台1線 屏東枋寮',   county:'屏東縣',lat:22.3600,lng:120.5800,snap:'t1-412k-450.jpg'},
+    // 台3線
+    {id:'t3-095', name:'台3線 苗栗',       county:'苗栗縣',lat:24.5700,lng:120.8100,snap:'t3-94k-950.jpg'},
+    {id:'t3-126', name:'台3線 苗栗大湖',   county:'苗栗縣',lat:24.4200,lng:120.8400,snap:'t3-126k-500.jpg'},
+    {id:'t3-164', name:'台3線 台中東勢',   county:'台中市',lat:24.2500,lng:120.8400,snap:'t3-164k-350.jpg'},
+    {id:'t3-195', name:'台3線 台中霧峰',   county:'台中市',lat:24.0100,lng:120.7100,snap:'t3-195k-200.jpg'},
+    {id:'t3-216', name:'台3線 南投',       county:'南投縣',lat:23.9100,lng:120.6900,snap:'t3-216k-300.jpg'},
+    {id:'t3-224', name:'台3線 南投竹山',   county:'南投縣',lat:23.7600,lng:120.6500,snap:'t3-224k-700.jpg'},
+    {id:'t3-389', name:'台3線 台南楠西',   county:'台南市',lat:23.1600,lng:120.4900,snap:'t3-389k-000.jpg'},
+    // 台9線
+    {id:'t9-011', name:'台9線 北宜石碇',   county:'新北市',lat:25.0100,lng:121.6600,snap:'t9-11k-650.jpg'},
+    {id:'t9-023', name:'台9線 北宜坪林',   county:'新北市',lat:24.9400,lng:121.7100,snap:'t9-23k-050.jpg'},
+    {id:'t9-037', name:'台9線 頭城',       county:'宜蘭縣',lat:24.8600,lng:121.8000,snap:'t9-37k-100.jpg'},
+    {id:'t9-056', name:'台9線 宜蘭市',     county:'宜蘭縣',lat:24.7600,lng:121.7500,snap:'t9-56k-400.jpg'},
+    {id:'t9-069', name:'台9線 蘇澳',       county:'宜蘭縣',lat:24.6000,lng:121.8500,snap:'t9-69k-300.jpg'},
+    {id:'t9-113', name:'台9線 南澳蘇花',   county:'宜蘭縣',lat:24.4600,lng:121.8400,snap:'t9-113k-181.jpg'},
+    {id:'t9-328', name:'台9線 台東鹿野',   county:'台東縣',lat:22.9700,lng:121.1500,snap:'t9-328k-300.jpg'},
+    {id:'t9-375', name:'台9線 台東市',     county:'台東縣',lat:22.7600,lng:121.1200,snap:'t9-375k-000.jpg'},
+    {id:'t9-382', name:'台9線 太麻里',     county:'台東縣',lat:22.6100,lng:121.0100,snap:'t9-382k-950.jpg'},
+    {id:'t9-400', name:'台9線 多良南迴',   county:'台東縣',lat:22.4300,lng:120.9000,snap:'t9-400k-500.jpg'},
+    // 台11線
+    {id:'t11-011',name:'台11線 花蓮市',    county:'花蓮縣',lat:23.9800,lng:121.6100,snap:'t11-11k-000.jpg'},
+    {id:'t11-050',name:'台11線 花蓮豐濱',  county:'花蓮縣',lat:23.6300,lng:121.5200,snap:'t11-50k-000.jpg'},
+    {id:'t11-100',name:'台11線 台東成功',  county:'台東縣',lat:23.0900,lng:121.3700,snap:'t11-100k-000.jpg'},
+    {id:'t11-150',name:'台11線 台東市北',  county:'台東縣',lat:22.8500,lng:121.1700,snap:'t11-150k-000.jpg'},
+    // 台17線
+    {id:'t17-000',name:'台17線 台中清水',  county:'台中市',lat:24.3500,lng:120.5600,snap:'t17-0k-400.jpg'},
+    {id:'t17-035',name:'台17線 彰化鹿港',  county:'彰化縣',lat:24.0600,lng:120.4300,snap:'t17-35k-970.jpg'},
+    {id:'t17-139',name:'台17線 台南北門',  county:'台南市',lat:23.2800,lng:120.1300,snap:'t17-139k-500.jpg'},
+    {id:'t17-162',name:'台17線 台南將軍',  county:'台南市',lat:23.1900,lng:120.1200,snap:'t17-162k-900.jpg'},
+    {id:'t17-209',name:'台17線 高雄梓官',  county:'高雄市',lat:22.7500,lng:120.2000,snap:'t17-209k-500.jpg'},
+    {id:'t17-256',name:'台17線 屏東林邊',  county:'屏東縣',lat:22.4300,lng:120.5100,snap:'t17-256k-500.jpg'},
+    {id:'t17-267',name:'台17線 屏東東港',  county:'屏東縣',lat:22.4500,lng:120.4700,snap:'t17-267k-800.jpg'},
+    // 台61線
+    {id:'t61-002',name:'台61線 淡水',      county:'新北市',lat:25.1600,lng:121.4300,snap:'t61-2k-500.jpg'},
+    {id:'t61-010',name:'台61線 林口',      county:'新北市',lat:25.0800,lng:121.3700,snap:'t61-10k-170.jpg'},
+    {id:'t61-020',name:'台61線 桃園觀音',  county:'桃園市',lat:25.0200,lng:121.0900,snap:'t61-20k-000.jpg'},
+    {id:'t61-029',name:'台61線 新竹竹北',  county:'新竹縣',lat:24.8400,lng:120.9200,snap:'t61-29k-367.jpg'},
+    {id:'t61-033',name:'台61線 苗栗通霄',  county:'苗栗縣',lat:24.5000,lng:120.6800,snap:'t61-33k-300.jpg'},
+    {id:'t61-087',name:'台61線 苗栗後龍',  county:'苗栗縣',lat:24.6200,lng:120.7900,snap:'t61-87k-600.jpg'},
+    {id:'t61-145',name:'台61線 台中梧棲',  county:'台中市',lat:24.2900,lng:120.5200,snap:'t61-145k-350.jpg'},
+    {id:'t61-152',name:'台61線 台中清水',  county:'台中市',lat:24.3500,lng:120.5500,snap:'t61-152k-350.jpg'},
+    {id:'t61-160',name:'台61線 台中大甲',  county:'台中市',lat:24.3500,lng:120.6200,snap:'t61-160k-800.jpg'},
+    // 台26線
+    {id:'t26-021',name:'台26線 恆春北',    county:'屏東縣',lat:22.0200,lng:120.7300,snap:'t26-21k-323.jpg'},
+    {id:'t26-050',name:'台26線 車城',      county:'屏東縣',lat:21.9600,lng:120.7200,snap:'t26-50k-000.jpg'},
+    {id:'t26-060',name:'台26線 恆春',      county:'屏東縣',lat:21.9400,lng:120.7400,snap:'t26-60k-000.jpg'},
+    // 台88線
     {id:'t88-015',name:'台88線 高雄大發',  county:'高雄市',lat:22.6400,lng:120.4000,snap:'t88-15k-766.jpg'},
     {id:'t88-021',name:'台88線 屏東竹田',  county:'屏東縣',lat:22.6100,lng:120.4800,snap:'t88-21k-900.jpg'}
   ];
 
+  // 路況 level → status 對照
+  // TDX CongestionLevel: 1=順暢, 2=緩慢, 3=壅塞, 4=非常壅塞, 0=未知
+  function levelToStatus(lv) {
+    if (lv === 1) return 'smooth';
+    if (lv === 2) return 'slow';
+    if (lv >= 3)  return 'jam';
+    return 'unknown';
+  }
+
   var _cams = CAMS.map(function(c) {
-    return {
-      id:c.id, name:c.name, county:c.county,
-      lat:c.lat, lng:c.lng,
-      url: B + c.snap,
-      type:'cctv', status:'unknown'
-    };
+    return { id:c.id, name:c.name, county:c.county, lat:c.lat, lng:c.lng,
+             url: B + c.snap, type:'cctv', status:'unknown' };
   });
+
+  // 用縣市路況更新攝影機 status
+  function applyCountyStatus(county, level) {
+    var status = levelToStatus(level);
+    _cams.forEach(function(cam) {
+      if (cam.county === county) cam.status = status;
+    });
+  }
+
+  // 抓取全台縣市壅塞等級
+  function fetchCongestion(token) {
+    var cities = Object.keys(CITY_CODES);
+    var fetched = 0;
+    cities.forEach(function(county) {
+      var code = CITY_CODES[county];
+      fetch('https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CongestionLevel/City/' + code + '?$format=JSON&$top=1', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (Array.isArray(data) && data.length > 0) {
+          var lv = data[0].CongestionLevel || data[0].Level || 0;
+          applyCountyStatus(county, lv);
+        }
+        fetched++;
+        if (fetched === cities.length) {
+          Bus.emit('cams:updated');
+          Bus.emit('status:updated');
+        }
+      })
+      .catch(function() {
+        fetched++;
+        if (fetched === cities.length) {
+          Bus.emit('cams:updated');
+          Bus.emit('status:updated');
+        }
+      });
+    });
+  }
 
   window.Data = {
     weather: {},
     allCams: function() { return _cams; },
+
     loadDynamic: function() {
       setTimeout(function() { Bus.emit('cams:updated'); }, 100);
+      // 取得 TDX Token 後抓路況
+      getTDXToken(function(token) {
+        if (token) {
+          fetchCongestion(token);
+          // 每 3 分鐘更新一次
+          setInterval(function() {
+            getTDXToken(function(t) { if (t) fetchCongestion(t); });
+          }, 3 * 60 * 1000);
+        }
+      });
     },
+
     fetchWeather: function() {
       var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
                 '?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100';
@@ -947,7 +1021,20 @@
   // Route
   var RouteMod = {
     active: false, filteredCams: [],
+    mode: 'motorcycle',
     init: function() {
+      // 模式切換按鈕
+      document.querySelectorAll('.route-mode-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.route-mode-btn').forEach(function(b) {
+            b.classList.remove('active');
+            b.style.background = '';
+            b.style.color = '';
+          });
+          btn.classList.add('active');
+          RouteMod.mode = btn.dataset.mode;
+        });
+      });
       var btn     = document.getElementById('js-route-btn');
       var clearBtn= document.getElementById('js-rb-clear');
       var locBtn  = document.getElementById('js-loc');
@@ -985,11 +1072,12 @@
         }
         // 取得真實道路路徑
         Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
-        return getRoadRoute(startPt, endPt).then(function(coords) {
+        return getRoadRoute(startPt, endPt, RouteMod.mode).then(function(coords) {
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
           var info = window._lastRouteInfo;
+          var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
           var msg = info
-            ? ('\u8def\u7dda\u89e3\u6790\u5b8c\u6210\uff01' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418')
+            ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418')
             : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
           Toast.show(msg, 3000);
           RouteMod._doFilter('', coords);
@@ -1161,7 +1249,9 @@
     Bus.on('filter:changed',  function() { ListMod.render(); });
     Bus.on('cams:updated',    function() { ListMod.render(); });
     Bus.on('weather:updated', function() { ListMod.render(); });
+    Bus.on('status:updated',  function() { ListMod.render(); StatusBar.update(); });
     ListMod.render();
+    StatusBar.init();
   });
 })();
 
@@ -1289,6 +1379,41 @@
     if (Object.keys(Data.weather).length > 0) renderWeather();
   });
 })();
+
+// ── 路況狀態列模組 ────────────────────────────────────────────────────────
+var StatusBar = {
+  init: function() {},
+  update: function() {
+    // 統計各路況數量
+    var counts = { smooth:0, slow:0, jam:0, unknown:0 };
+    Data.allCams().forEach(function(c) {
+      counts[c.status] = (counts[c.status] || 0) + 1;
+    });
+
+    // 更新地圖圖例旁的統計
+    var el = document.getElementById('status-summary');
+    if (!el) return;
+    var total = Data.allCams().length;
+    var smoothPct = total ? Math.round(counts.smooth / total * 100) : 0;
+    var slowPct   = total ? Math.round(counts.slow   / total * 100) : 0;
+    var jamPct    = total ? Math.round(counts.jam    / total * 100) : 0;
+    el.innerHTML =
+      '<div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>' +
+      '<span>' + counts.smooth + '</span></div>' +
+      '<div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span>' +
+      '<span>' + counts.slow + '</span></div>' +
+      '<div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span>' +
+      '<span>' + counts.jam + '</span></div>';
+
+    // 更新時間戳
+    var tsEl = document.getElementById('status-ts');
+    if (tsEl) {
+      var now = new Date();
+      tsEl.textContent = String(now.getHours()).padStart(2,'0') + ':' +
+                         String(now.getMinutes()).padStart(2,'0') + ' 更新';
+    }
+  }
+};
 
 </script>
 
