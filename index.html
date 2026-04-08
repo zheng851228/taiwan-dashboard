@@ -469,13 +469,20 @@ body.light .text-slate-400 { color: #64748b; }
     return 'other';
   };
 
+  var _geocodeCache = {};
   window.geocodeName = function(name) {
-    var q = encodeURIComponent(name.trim());
+    name = name.trim();
+    if (_geocodeCache[name]) return Promise.resolve(_geocodeCache[name]);
+    var q = encodeURIComponent(name);
     var url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1&countrycodes=tw';
     return fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data && data.length > 0) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        if (data && data.length > 0) {
+          var result = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+          _geocodeCache[name] = result;
+          return result;
+        }
         return null;
       })
       .catch(function() { return null; });
@@ -616,39 +623,38 @@ body.light .text-slate-400 { color: #64748b; }
 
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
     var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
-    // 機車模式：用 OSRM driving + exclude motorway/trunk（避開國道/快速道路）
-    // 汽車模式：預設 driving（不排除）
     var baseUrl = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson&alternatives=false';
-    var url = (mode === 'motorcycle')
-      ? baseUrl + '&exclude=motorway,trunk'
-      : baseUrl;
 
-    function doFetch(fetchUrl) {
-      return fetch(fetchUrl)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (!data.routes || !data.routes[0]) return null;
-          var geom = data.routes[0].geometry;
-          if (!geom || !geom.coordinates) return null;
-          window._lastRouteInfo = {
-            distance: Math.round(data.routes[0].distance / 1000),
-            duration: Math.round(data.routes[0].duration / 60)
-          };
-          return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
-        });
+    function parseRoute(data) {
+      if (!data || !data.routes || !data.routes[0]) return null;
+      var geom = data.routes[0].geometry;
+      if (!geom || !geom.coordinates) return null;
+      window._lastRouteInfo = {
+        distance: Math.round(data.routes[0].distance / 1000),
+        duration: Math.round(data.routes[0].duration / 60)
+      };
+      return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
     }
 
-    return doFetch(url)
-      .then(function(result) {
-        // 如果 exclude 失敗（某些路線無替代道路），降級為一般路徑
-        if (!result && mode === 'motorcycle') {
-          return doFetch(baseUrl);
-        }
-        return result;
-      })
-      .then(function(result) {
-        return result || [startLatLng, endLatLng];
-      })
+    function fetchRoute(url) {
+      return fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(parseRoute)
+        .catch(function() { return null; });
+    }
+
+    if (mode === 'motorcycle') {
+      // 同時送兩個請求，取 exclude 版本（若失敗降級一般版本）
+      var excludeUrl = baseUrl + '&exclude=motorway,trunk';
+      return Promise.all([fetchRoute(excludeUrl), fetchRoute(baseUrl)])
+        .then(function(results) {
+          return results[0] || results[1] || [startLatLng, endLatLng];
+        })
+        .catch(function() { return [startLatLng, endLatLng]; });
+    }
+
+    return fetchRoute(baseUrl)
+      .then(function(r) { return r || [startLatLng, endLatLng]; })
       .catch(function() { return [startLatLng, endLatLng]; });
   };
 
@@ -1078,44 +1084,27 @@ body.light .text-slate-400 { color: #64748b; }
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
       var btn = document.getElementById('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
-      var startSimple = simplifyAddress(startVal);
-      var endSimple   = simplifyAddress(endVal);
-      Promise.all([extractPointFromUrl(startSimple), extractPointFromUrl(endSimple)])
+      // 起點、終點、所有停靠點同時 geocode（完全並行）
+      var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (window._pendingWaypoints || []);
+      var allAddrs = [simplifyAddress(startVal)]
+        .concat(uiWaypoints.map(function(wp) { return simplifyAddress(wp); }))
+        .concat([simplifyAddress(endVal)]);
+      window._pendingWaypoints = [];
+
+      Promise.all(allAddrs.map(function(addr) { return extractPointFromUrl(addr); }))
         .then(function(results) {
           var startPt = results[0];
-          var endPt   = results[1];
+          var endPt   = results[results.length - 1];
           if (!startPt || !endPt) {
             if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
             Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
             return;
           }
           Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
-          // 有停靠點時，分段計算路線再合併
-        var waypoints = window._pendingWaypoints || [];
-        var allPoints = [startPt].concat(
-          waypoints.map(function(wp) { return wp; })
-        ).concat([endPt]);
-        window._pendingWaypoints = [];
-
-        // 分段計算：每兩點之間呼叫一次 getRoadRoute
-        var segPromises = [];
-        for (var si = 0; si < allPoints.length - 1; si++) {
-          (function(a, b) {
-            segPromises.push(getRoadRoute(a, b, RouteMod.mode));
-          })(allPoints[si], allPoints[si+1]);
-        }
-
-        // 從 UI 取最新停靠點值（使用者可能手動修改過）
-        var uiWaypoints = (window.WaypointsMod ? WaypointsMod.getWaypoints() : waypoints);
-        return Promise.all(
-          uiWaypoints.length > 0
-            ? [Promise.all(uiWaypoints.map(function(wp) { return extractPointFromUrl(simplifyAddress(wp)); }))]
-            : [Promise.resolve([])]
-        ).then(function(res) {
-          var wpPts = res[0].filter(function(p) { return p; });
+          var wpPts = results.slice(1, -1).filter(function(p) { return p; });
           var finalPoints = [startPt].concat(wpPts).concat([endPt]);
-          // 儲存所有點座標供 A/B/C 標記使用
           window._routeAllPoints = finalPoints;
+          // 所有路段同時送 OSRM（完全並行）
           var segs = [];
           for (var fi = 0; fi < finalPoints.length - 1; fi++) {
             segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
