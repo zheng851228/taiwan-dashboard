@@ -1910,34 +1910,47 @@ var WaypointsMod = {
       var ptIdx   = points.indexOf(pt);
       var isFirst = ptIdx === 0;
       var isLast  = ptIdx === points.length - 1;
+      var isSpecial = isFirst || isLast;
 
-      // 起終點加文字標籤，停靠點只有字母
-      var topLabel = '';
+      // 圓點尺寸
+      var dotSize = isSpecial ? 26 : 16;
+
+      // 內容：起終點用文字，停靠點用字母
+      var innerContent = '';
       if (isFirst) {
-        topLabel = '<div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.5)">起點</div>';
+        innerContent = '<span style="font-size:11px;font-weight:900;color:#fff">起</span>';
       } else if (isLast) {
-        topLabel = '<div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.5)">終點</div>';
+        innerContent = '<span style="font-size:11px;font-weight:900;color:#fff">終</span>';
+      } else {
+        innerContent = '<span style="font-size:9px;font-weight:900;color:#fff">' + pt.label + '</span>';
       }
 
-      // 圓點大小：起終點較大，停靠點一般
-      var dotSize = (isFirst || isLast) ? 20 : 14;
-      var totalH  = dotSize + 20 + (topLabel ? 22 : 0);
+      // 標籤（在圓點下方，避免被截斷）
+      var bottomLabel = '';
+      if (isFirst) {
+        bottomLabel = '<div style="margin-top:3px;background:#22c55e;color:#fff;font-size:10px;font-weight:900;padding:1px 6px;border-radius:4px;white-space:nowrap;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.5)">起點</div>';
+      } else if (isLast) {
+        bottomLabel = '<div style="margin-top:3px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;padding:1px 6px;border-radius:4px;white-space:nowrap;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.5)">終點</div>';
+      }
 
+      var totalW = isSpecial ? 40 : dotSize;
       var pinHtml =
-        '<div style="position:relative;width:' + dotSize + 'px;height:' + totalH + 'px">' +
-          topLabel +
-          '<div style="position:absolute;' + (topLabel ? 'top:22px' : 'top:0') + ';left:0;width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;background:' + pt.color + ';border:2.5px solid #fff;box-shadow:0 0 8px ' + pt.color + ';display:flex;align-items:center;justify-content:center;">' +
-            ((!isFirst && !isLast) ? '<span style="font-size:9px;font-weight:900;color:#fff">' + pt.label + '</span>' : '') +
+        '<div style="display:flex;flex-direction:column;align-items:center;width:' + totalW + 'px">' +
+          '<div style="width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;background:' + pt.color + ';border:3px solid #fff;box-shadow:0 0 10px ' + pt.color + ',0 2px 8px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;">' +
+            innerContent +
           '</div>' +
+          bottomLabel +
         '</div>';
 
+      var totalH = isSpecial ? dotSize + 22 : dotSize;
       var icon = L.divIcon({
         className: '',
         html: pinHtml,
-        iconSize:   [dotSize, totalH],
-        iconAnchor: [dotSize/2, topLabel ? (22 + dotSize) : dotSize]
+        iconSize:   [totalW, totalH],
+        iconAnchor: [totalW/2, dotSize/2]
       });
-      var m = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(MapMod.map);
+      // 起終點 zIndexOffset 高於攝影機標記
+      var m = L.marker([pt.lat, pt.lng], { icon: icon, zIndexOffset: isSpecial ? 1000 : 100 }).addTo(MapMod.map);
       window._waypointMapMarkers.push(m);
     });
   },
