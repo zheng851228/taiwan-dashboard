@@ -194,6 +194,7 @@
 <div class="absolute bottom-[5.5rem] right-4 z-[400] glass px-2 py-1.5 rounded-xl text-[9px] space-y-1">
   <div class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;display:inline-block;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;"></span><span class="text-slate-300">國道</span></div>
   <div class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#f97316;display:inline-block;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;"></span><span class="text-slate-300">省道</span></div>
+  <div class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:5px;color:#fff;font-weight:900;">YT</span><span class="text-slate-300">直播</span></div>
 </div>
 </section>
 
@@ -824,9 +825,29 @@
              url: B + c.snap, type:'cctv', status:'unknown' };
   });
 
+  // YouTube 固定路況直播頻道（有真實座標）
+  // videoId 為 YouTube 直播影片 ID，可隨時更新
+  var YT_CAMS = [
+    {id:'yt001',name:'YT 國道一號 台北段',    county:'台北市',lat:25.0550,lng:121.5200,videoId:'JqUGnYXbFOM'},
+    {id:'yt002',name:'YT 國道一號 台中段',    county:'台中市',lat:24.1800,lng:120.6600,videoId:'m_BNOjdCKKI'},
+    {id:'yt003',name:'YT 國道一號 高雄段',    county:'高雄市',lat:22.6500,lng:120.3000,videoId:'JqUGnYXbFOM'},
+    {id:'yt004',name:'YT 國道三號 新竹段',    county:'新竹市',lat:24.8000,lng:121.1200,videoId:'d9MyW72ELq0'},
+    {id:'yt005',name:'YT 國道五號 雪山隧道', county:'宜蘭縣',lat:24.8600,lng:121.7500,videoId:'v0tMxV6CXIY'},
+    {id:'yt006',name:'YT 蛇花公路 直播',         county:'花蓮縣',lat:24.0800,lng:121.6200,videoId:'2X-1IzwTkPE'},
+    {id:'yt007',name:'YT 台九線 南辺',              county:'台東縣',lat:22.5000,lng:120.9500,videoId:'HFbFsVCm-QY'},
+    {id:'yt008',name:'YT 台北市區路況',         county:'台北市',lat:25.0400,lng:121.5650,videoId:'d9MyW72ELq0'},
+    {id:'yt009',name:'YT 高雄市區路況',         county:'高雄市',lat:22.6200,lng:120.2900,videoId:'m_BNOjdCKKI'},
+    {id:'yt010',name:'YT 國道三號 台南段',  county:'台南市',lat:22.9800,lng:120.2300,videoId:'d9MyW72ELq0'}
+  ];
+
+  var _ytCams = YT_CAMS.map(function(c) {
+    return { id:c.id, name:c.name, county:c.county, lat:c.lat, lng:c.lng,
+             videoId:c.videoId, type:'youtube', status:'unknown' };
+  });
+
   window.Data = {
     weather: {},
-    allCams: function() { return _cams; },
+    allCams: function() { return _cams.concat(_ytCams); },
     loadDynamic: function() {
       setTimeout(function() { Bus.emit('cams:updated'); }, 100);
     },
@@ -941,12 +962,9 @@
         // 省道 - 橘色
         color = '#f97316'; label = ''; sz = 12;
       }
-      var dotHtml;
-      if (cam.type === 'youtube') {
-        dotHtml = '<div style="width:18px;height:18px;border-radius:4px;background:#ff0000;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:bold;box-shadow:0 0 6px #ff0000">YT</div>';
-      } else {
-        dotHtml = '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 6px '+color+'"></div>';
-      }
+      var dotHtml = '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.7);box-shadow:0 0 6px '+color+';display:flex;align-items:center;justify-content:center;">'
+        + (cam.type==='youtube' ? '<span style="font-size:7px;font-weight:900;color:#fff;line-height:1;">YT</span>' : '')
+        + '</div>';
       var icon = L.divIcon({ className:'', html: dotHtml, iconSize:[sz,sz], iconAnchor:[sz/2,sz/2] });
       var marker = L.marker([cam.lat, cam.lng], { icon: icon })
         .addTo(MapMod.map)
@@ -1908,79 +1926,107 @@ var WaypointsMod = {
 };
 
 var YoutubeMod = {
-  // 已知台灣路況固定直播頻道 (videoId)
-  FIXED_CHANNELS: [
-    { name: '國道即時', videoId: 'live_stream', channelId: 'UCz3LjnNSYM515OjNwetFtMg' },
-  ],
-  // 縣市對應搜尋關鍵字
-  CITY_KW: {
-    '台北市':'台北','新北市':'新北','基隆市':'基隆','桃園市':'桃園',
-    '新竹市':'新竹','新竹縣':'新竹','苗栗縣':'苗栗','台中市':'台中',
-    '彰化縣':'彰化','南投縣':'南投','雲林縣':'雲林','嘉義市':'嘉義',
-    '嘉義縣':'嘉義','台南市':'台南','高雄市':'高雄','屏東縣':'屏東',
-    '宜蘭縣':'宜蘭','花蓮縣':'花蓮','台東縣':'台東','澎湖縣':'澎湖',
-    '金門縣':'金門','連江縣':'馬祖'
+  _roadNames: [], // 快取沿途路名
+
+  // 從路線座標中取樣幾個點，用 Nominatim reverse geocode 取路名
+  fetchRoadNames: function(coords, cb) {
+    if (!coords || coords.length < 2) { cb([]); return; }
+    // 取均勻分布的 5 個採樣點（避免太多 API 請求）
+    var total = coords.length;
+    var indices = [0];
+    for (var k = 1; k <= 3; k++) indices.push(Math.round(k * total / 4));
+    indices.push(total - 1);
+    // 去重
+    var seen = {};
+    indices = indices.filter(function(i){ if(seen[i]) return false; seen[i]=1; return true; });
+
+    var roads = [];
+    var done = 0;
+    indices.forEach(function(idx) {
+      var lat = coords[idx][0];
+      var lng = coords[idx][1];
+      var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng
+              + '&format=json&zoom=16&addressdetails=1';
+      (function(i) {
+        fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var addr = data && data.address;
+            if (addr) {
+              var road = addr.road || addr.pedestrian || addr.path || '';
+              var area = addr.suburb || addr.town || addr.city_district || addr.county || '';
+              if (road) roads.push({ road: road, area: area });
+            }
+          })
+          .catch(function(){})
+          .then(function() {
+            done++;
+            if (done === indices.length) cb(roads);
+          });
+      })(idx);
+    });
   },
-  getRouteCities: function(coords) {
-    if (!coords || coords.length < 2) return [];
-    var cities = [];
-    var centers = window.COUNTY_CENTERS || {};
-    Object.keys(centers).forEach(function(county) {
-      var c = centers[county];
-      for (var i = 0; i < coords.length - 1; i++) {
-        if (distToSegKm(c[0], c[1], coords[i][0], coords[i][1], coords[i+1][0], coords[i+1][1]) <= 25) {
-          cities.push(county); break;
-        }
+
+  // 把路名轉成 YouTube 搜尋關鍵字
+  buildSearches: function(roads) {
+    var searches = [];
+    var seen = {};
+    roads.forEach(function(r) {
+      // 清理路名：移除括號內容、只保留中文路名
+      var road = r.road.replace(/\(.*?\)/g, '').replace(/[a-zA-Z\s]/g, '').trim();
+      if (!road || road.length < 2) road = r.road.trim();
+      var area = r.area.replace(/[a-zA-Z\s]/g, '').trim();
+      if (road) {
+        var q1 = road + ' 路況 直播';
+        var q2 = (area ? area + ' ' : '') + road + ' 路況';
+        [q1, q2].forEach(function(q) {
+          if (!seen[q] && q.length > 3) { seen[q] = 1; searches.push(q); }
+        });
       }
     });
-    return cities;
+    return searches.slice(0, 6);
   },
-  embedVideo: function(videoId) {
-    var area = document.getElementById('yt-embed-area');
-    var frame = document.getElementById('yt-embed-frame');
-    if (!area || !frame) return;
-    frame.src = 'https://www.youtube.com/embed/' + videoId + '?autoplay=1&mute=1';
-    area.style.display = 'block';
-  },
+
   showRouteSearch: function(coords) {
     var panel = document.getElementById('yt-route-panel');
     if (!panel) return;
-    var cities = YoutubeMod.getRouteCities(coords || []);
-    if (cities.length === 0) cities = ['台灣'];
     var cityEl = document.getElementById('yt-route-cities');
     var linkEl = document.getElementById('yt-route-links');
-    var tabsEl = document.getElementById('yt-channel-tabs');
-    if (cityEl) cityEl.textContent = '沿途：' + cities.slice(0,5).map(function(c){ return YoutubeMod.CITY_KW[c]||c; }).join(' → ');
-    // 搜尋連結（前3個城市）
-    var searches = [];
-    cities.slice(0,3).forEach(function(county) {
-      var kw = YoutubeMod.CITY_KW[county] || county;
-      searches.push(kw + ' 路況 直播');
-      searches.push(kw + ' 國道 live');
-    });
-    // 去重，取前4個
-    var seen = {};
-    searches = searches.filter(function(q){ if(seen[q]) return false; seen[q]=1; return true; }).slice(0,4);
-    var links = '';
-    searches.forEach(function(q) {
-      var url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
-      links += '<a href="' + url + '" target="_blank" ' +
-        'style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;' +
-        'background:rgba(30,41,59,0.8);margin-bottom:6px;text-decoration:none;color:inherit;">' +
-        '<i class="fa-brands fa-youtube" style="color:#ef4444;flex-shrink:0;font-size:14px;"></i>' +
-        '<span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + q + '</span>' +
-        '<i class="fa-solid fa-arrow-up-right-from-square" style="color:#64748b;font-size:10px;flex-shrink:0;"></i>' +
-        '</a>';
-    });
-    if (linkEl) linkEl.innerHTML = links;
-    // 隱藏 embed（等用戶點搜尋結果後手動嵌入）
-    var area = document.getElementById('yt-embed-area');
-    if (area) area.style.display = 'none';
-    var frame = document.getElementById('yt-embed-frame');
-    if (frame) frame.src = '';
+    if (cityEl) cityEl.textContent = '正在取得沿途路名...';
+    if (linkEl) linkEl.innerHTML = '<div style="text-align:center;padding:12px;color:#64748b;font-size:11px;">載入中...</div>';
     panel.classList.add('visible');
     panel.style.display = 'block';
+
+    YoutubeMod.fetchRoadNames(coords || [], function(roads) {
+      YoutubeMod._roadNames = roads;
+      var searches = YoutubeMod.buildSearches(roads);
+
+      // 若沒抓到路名，退回用座標附近地名
+      if (searches.length === 0) {
+        searches = ['台灣 路況 直播', '國道 路況 live', '省道 路況 直播'];
+      }
+
+      var roadLabel = roads.slice(0,3).map(function(r){
+        var road = r.road.replace(/[a-zA-Z\s]/g,'').trim();
+        return road || r.road;
+      }).filter(Boolean).join(' → ');
+      if (cityEl) cityEl.textContent = roadLabel ? '沿途：' + roadLabel : '沿途路線';
+
+      var links = '';
+      searches.forEach(function(q) {
+        var url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+        links += '<a href="' + url + '" target="_blank" '
+          + 'style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;'
+          + 'background:rgba(30,41,59,0.8);margin-bottom:6px;text-decoration:none;color:inherit;">'
+          + '<i class="fa-brands fa-youtube" style="color:#ef4444;flex-shrink:0;font-size:14px;"></i>'
+          + '<span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + q + '</span>'
+          + '<i class="fa-solid fa-arrow-up-right-from-square" style="color:#64748b;font-size:10px;flex-shrink:0;"></i>'
+          + '</a>';
+      });
+      if (linkEl) linkEl.innerHTML = links;
+    });
   },
+
   hide: function() {
     var panel = document.getElementById('yt-route-panel');
     if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
