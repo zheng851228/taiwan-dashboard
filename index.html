@@ -1921,7 +1921,10 @@ var WaypointsMod = {
         html: pinHtml,
         iconSize:   [dotSize, totalH],
         iconAnchor: [dotSize/2, topLabel ? (22 + dotSize) : dotSize]
-      });});
+      });
+      var m = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(MapMod.map);
+      window._waypointMapMarkers.push(m);
+    });
   },
 
   // 清除地圖標記
