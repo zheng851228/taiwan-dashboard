@@ -1135,7 +1135,6 @@ body.light .text-slate-400 { color: #64748b; }
           var wpPts = results.slice(1, -1).filter(function(p) { return p; });
           var finalPoints = [startPt].concat(wpPts).concat([endPt]);
           window._routeAllPoints = finalPoints;
-          Toast.show('[路線] AllPoints=' + finalPoints.length, 3000);
           var segs = [];
           for (var fi = 0; fi < finalPoints.length - 1; fi++) {
             segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
@@ -1147,7 +1146,14 @@ body.light .text-slate-400 { color: #64748b; }
           });
         })
         .then(function(coords) {
-          if (!coords) return;
+          // 即使 OSRM 失敗（coords=null），仍畫起終點標記
+          if (window.WaypointsMod && window._routeAllPoints) {
+            setTimeout(function() { WaypointsMod.drawRouteLabels(); }, 100);
+          }
+          if (!coords) {
+            if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+            return;
+          }
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
           var info = window._lastRouteInfo;
           var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
@@ -1163,7 +1169,9 @@ body.light .text-slate-400 { color: #64748b; }
         })
         .catch(function() {
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
-          Toast.show('\u89e3\u6790\u5931\u6557\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66');
+          Toast.show('\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66');
+          // 即使路線失敗，仍畫起終點標記
+          if (window.WaypointsMod && window._routeAllPoints) WaypointsMod.drawRouteLabels();
         });
     },
     _doFilter: function(coords) {
@@ -1945,8 +1953,7 @@ var WaypointsMod = {
   // 依據 _routeAllPoints 畫 A/B/C 標記
   drawRouteLabels: function() {
     var pts = window._routeAllPoints;
-    Toast.show('[標記] pts=' + (pts ? pts.length : 'null'), 4000);
-    if (!pts || pts.length < 2) { Toast.show('[標記] 點數不足，略過', 4000); return; }
+    if (!pts || pts.length < 2) return;
     var labels = WaypointsMod.LETTERS;
     var totalPts = pts.length;
     var mapPoints = pts.map(function(pt, i) {
@@ -1962,7 +1969,6 @@ var WaypointsMod = {
         color: color
       };
     });
-    Toast.show('[標記] 畫' + mapPoints.length + '個點', 4000);
     WaypointsMod.drawMarkers(mapPoints);
   }
 };
