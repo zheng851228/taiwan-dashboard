@@ -189,6 +189,11 @@
       <button id="js-rb-clear" class="text-[10px] text-slate-400 hover:text-orange-400 font-bold ml-1">清除</button>
     </div>
   </div>
+<!-- 圖例 -->
+<div class="absolute bottom-[5.5rem] right-4 z-[400] glass px-2 py-1.5 rounded-xl text-[9px] space-y-1">
+  <div class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;display:inline-block;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;"></span><span class="text-slate-300">國道</span></div>
+  <div class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#f97316;display:inline-block;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;"></span><span class="text-slate-300">省道</span></div>
+</div>
 </section>
 
 <section id="pg-list" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
@@ -926,10 +931,23 @@
       }
     },
     addMarker: function(cam) {
-      var color = cam.type === 'youtube' ? '#ff0000' : '#f97316';
-      var icon  = cam.type === 'youtube'
-        ? L.divIcon({ className:'', html:'<div style="width:18px;height:18px;border-radius:4px;background:#ff0000;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:bold;box-shadow:0 0 6px #ff0000">YT</div>', iconSize:[18,18], iconAnchor:[9,9] })
-        : L.divIcon({ className:'', html:'<div style="width:12px;height:12px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.5);box-shadow:0 0 6px '+color+'"></div>', iconSize:[12,12], iconAnchor:[6,6] });
+      var color, label, sz;
+      if (cam.type === 'youtube') {
+        color = '#ff0000'; label = 'YT'; sz = 18;
+      } else if (cam.id && cam.id.charAt(0) === 'n') {
+        // 國道 - 藍色
+        color = '#3b82f6'; label = ''; sz = 12;
+      } else {
+        // 省道 - 橘色
+        color = '#f97316'; label = ''; sz = 12;
+      }
+      var dotHtml;
+      if (cam.type === 'youtube') {
+        dotHtml = '<div style="width:18px;height:18px;border-radius:4px;background:#ff0000;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:bold;box-shadow:0 0 6px #ff0000">YT</div>';
+      } else {
+        dotHtml = '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.6);box-shadow:0 0 6px '+color+'"></div>';
+      }
+      var icon = L.divIcon({ className:'', html: dotHtml, iconSize:[sz,sz], iconAnchor:[sz/2,sz/2] });
       var marker = L.marker([cam.lat, cam.lng], { icon: icon })
         .addTo(MapMod.map)
         .bindTooltip(cam.name, { direction:'top', offset:[0,-8] });
@@ -1779,42 +1797,29 @@ var WaypointsMod = {
     if (!window._waypointMapMarkers) window._waypointMapMarkers = [];
     window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
     window._waypointMapMarkers = [];
-    points.forEach(function(pt) {
-      var ptIdx   = points.indexOf(pt);
-      var isFirst = ptIdx === 0;
-      var isLast  = ptIdx === points.length - 1;
+    points.forEach(function(pt, ptIdx) {
+      var isFirst   = (ptIdx === 0);
+      var isLast    = (ptIdx === points.length - 1);
       var isSpecial = isFirst || isLast;
-      var dotSize = isSpecial ? 26 : 16;
-      var innerContent = '';
-      if (isFirst) {
-        innerContent = '<span style="font-size:11px;font-weight:900;color:#fff">起</span>';
-      } else if (isLast) {
-        innerContent = '<span style="font-size:11px;font-weight:900;color:#fff">終</span>';
-      } else {
-        innerContent = '<span style="font-size:9px;font-weight:900;color:#fff">' + pt.label + '</span>';
-      }
-      var bottomLabel = '';
-      if (isFirst) {
-        bottomLabel = '<div style="margin-top:3px;background:#22c55e;color:#fff;font-size:10px;font-weight:900;padding:1px 6px;border-radius:4px;white-space:nowrap;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.5)">起點</div>';
-      } else if (isLast) {
-        bottomLabel = '<div style="margin-top:3px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;padding:1px 6px;border-radius:4px;white-space:nowrap;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.5)">終點</div>';
-      }
-      var totalW = isSpecial ? 40 : dotSize;
-      var pinHtml =
-        '<div style="display:flex;flex-direction:column;align-items:center;width:' + totalW + 'px">' +
-          '<div style="width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;background:' + pt.color + ';border:3px solid #fff;box-shadow:0 0 10px ' + pt.color + ',0 2px 8px rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;">' +
-            innerContent +
-          '</div>' +
-          bottomLabel +
-        '</div>';
-      var totalH = isSpecial ? dotSize + 22 : dotSize;
+      var bg    = isFirst ? '#22c55e' : (isLast ? '#ef4444' : '#f97316');
+      var label = isFirst ? '起' : (isLast ? '終' : (pt.label || String(ptIdx+1)));
+      var sz    = isSpecial ? 32 : 18;
+      var fs    = isSpecial ? 13 : 9;
+      // 圓點 + 下方文字標籤
+      var tag   = isFirst ? '起點' : (isLast ? '終點' : '');
+      var tagHtml = tag ? ('<div style="margin-top:2px;background:' + bg + ';color:#fff;font-size:9px;font-weight:900;padding:1px 5px;border-radius:3px;white-space:nowrap;">' + tag + '</div>') : '';
+      var html  = '<div style="text-align:center;">'
+        + '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + bg + ';border:2px solid #fff;box-shadow:0 0 8px ' + bg + ';display:inline-flex;align-items:center;justify-content:center;font-size:' + fs + 'px;font-weight:900;color:#fff;">' + label + '</div>'
+        + tagHtml
+        + '</div>';
+      var totalH = isSpecial ? sz + 16 : sz;
       var icon = L.divIcon({
         className: '',
-        html: pinHtml,
-        iconSize:   [totalW, totalH],
-        iconAnchor: [totalW/2, dotSize/2]
+        html: html,
+        iconSize:   [sz, totalH],
+        iconAnchor: [sz/2, sz/2]
       });
-      var m = L.marker([pt.lat, pt.lng], { icon: icon, zIndexOffset: isSpecial ? 1000 : 100 }).addTo(MapMod.map);
+      var m = L.marker([pt.lat, pt.lng], { icon: icon, zIndexOffset: isSpecial ? 2000 : 500 }).addTo(MapMod.map);
       window._waypointMapMarkers.push(m);
     });
   },
