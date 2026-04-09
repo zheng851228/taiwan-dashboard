@@ -1197,8 +1197,10 @@ body.light .text-slate-400 { color: #64748b; }
         if(_s&&_e&&window.HistoryMod) HistoryMod.add(_s.value,_e.value,window._routeAllPoints?window._routeAllPoints.slice(1,-1).map(function(p){return p[0]+','+p[1];}):[]); 
       })();
       Bus.emit('filter:changed');
-      // 畫 A/B/C 地圖標記
-      setTimeout(function() { if (window.WaypointsMod) WaypointsMod.drawRouteLabels(); }, 200);
+      // 畫 A/B/C 地圖標記（在 render 之後執行，確保不被覆蓋）
+      setTimeout(function() {
+        if (window.WaypointsMod) WaypointsMod.drawRouteLabels();
+      }, 500);
       // 延遲顯示 YouTube panel
       setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 400);
     },
@@ -1304,6 +1306,10 @@ body.light .text-slate-400 { color: #64748b; }
           MapMod.map.setView([cam.lat, cam.lng], 14);
         });
       });
+      // render 完後重新畫路線標記（因為 clearMarkers 不清 waypoint markers，但確保顯示）
+      if (RouteMod && RouteMod.active && window.WaypointsMod) {
+        WaypointsMod.drawRouteLabels();
+      }
     }
   };
 
