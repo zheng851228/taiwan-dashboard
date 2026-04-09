@@ -1892,23 +1892,36 @@ var WaypointsMod = {
     window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
     window._waypointMapMarkers = [];
     points.forEach(function(pt) {
-      var isLast = (points.indexOf(pt) === points.length - 1);
+      var ptIdx   = points.indexOf(pt);
+      var isFirst = ptIdx === 0;
+      var isLast  = ptIdx === points.length - 1;
+
+      // 起終點加文字標籤，停靠點只有字母
+      var topLabel = '';
+      if (isFirst) {
+        topLabel = '<div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.5)">起點</div>';
+      } else if (isLast) {
+        topLabel = '<div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.5)">終點</div>';
+      }
+
+      // 圓點大小：起終點較大，停靠點一般
+      var dotSize = (isFirst || isLast) ? 20 : 14;
+      var totalH  = dotSize + 20 + (topLabel ? 22 : 0);
+
       var pinHtml =
-        '<div style="position:relative;width:40px;height:52px;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.5))">' +
-          '<div style="position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;background:' + pt.color + ';border:3px solid #fff;display:flex;align-items:center;justify-content:center;">' +
-            '<span style="font-size:15px;font-weight:900;color:#fff;font-family:sans-serif">' + pt.label + '</span>' +
+        '<div style="position:relative;width:' + dotSize + 'px;height:' + totalH + 'px">' +
+          topLabel +
+          '<div style="position:absolute;' + (topLabel ? 'top:22px' : 'top:0') + ';left:0;width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;background:' + pt.color + ';border:2.5px solid #fff;box-shadow:0 0 8px ' + pt.color + ';display:flex;align-items:center;justify-content:center;">' +
+            ((!isFirst && !isLast) ? '<span style="font-size:9px;font-weight:900;color:#fff">' + pt.label + '</span>' : '') +
           '</div>' +
-          '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:14px solid ' + pt.color + '"></div>' +
         '</div>';
+
       var icon = L.divIcon({
         className: '',
         html: pinHtml,
-        iconSize: [40, 52],
-        iconAnchor: [20, 52]
-      });
-      var m = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(MapMod.map);
-      window._waypointMapMarkers.push(m);
-    });
+        iconSize:   [dotSize, totalH],
+        iconAnchor: [dotSize/2, topLabel ? (22 + dotSize) : dotSize]
+      });});
   },
 
   // 清除地圖標記
