@@ -3,7 +3,7 @@
 <html lang="zh-TW" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>環島路況指揮中心</title>
@@ -42,22 +42,23 @@
     @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
     #yt-route-panel {
       position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: calc(100% - 32px);
-      max-width: 480px;
+      bottom: 5.5rem;
+      left: 12px;
+      right: 12px;
+      max-height: 55vh;
+      overflow-y: auto;
       z-index: 1800;
       display: none;
       background: rgba(10,18,38,0.97);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(239,68,68,0.45);
-      border-radius: 20px;
-      padding: 16px;
-      box-shadow: 0 12px 48px rgba(0,0,0,0.8);
+      border: 1px solid rgba(239,68,68,0.4);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
     }
     #yt-route-panel.visible { display: block; }
+    input, textarea, select { font-size: max(16px, 1em) !important; }
   </style>
 </head>
 <body class="text-slate-100">
@@ -187,6 +188,7 @@
       <span class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 animate-pulse"></span>
       <span class="text-[10px] font-bold text-orange-400">已過濾沿途攝影機</span>
       <button id="js-rb-clear" class="text-[10px] text-slate-400 hover:text-orange-400 font-bold ml-1">清除</button>
+      <button id="js-yt-btn" class="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1 flex items-center gap-1"><i class="fa-brands fa-youtube"></i> 直播</button>
     </div>
   </div>
 <!-- 圖例 -->
@@ -963,27 +965,23 @@
       if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
     },
     drawStartEnd: function(pts) {
-      // 清除舊的起終點標記
       MapMod.startEndMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
       MapMod.startEndMarkers = [];
       if (!pts || pts.length < 2) return;
       pts.forEach(function(pt, i) {
         var isFirst = (i === 0);
         var isLast  = (i === pts.length - 1);
-        var isSpecial = isFirst || isLast;
-        if (!isSpecial) return; // 中途點不畫，省得複雜
+        if (!isFirst && !isLast) return;
         var bg    = isFirst ? '#22c55e' : '#ef4444';
         var label = isFirst ? '起' : '終';
-        var tag   = isFirst ? '起點' : '終點';
-        var sz    = 32;
+        var sz    = 20;
         var html  = '<div style="text-align:center;pointer-events:none;">'
-          + '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + bg + ';border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,0.8),0 0 0 3px ' + bg + ';display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;font-family:sans-serif;">' + label + '</div>'
-          + '<div style="margin-top:2px;background:' + bg + ';color:#fff;font-size:10px;font-weight:900;padding:2px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.6);font-family:sans-serif;">' + tag + '</div>'
+          + '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + bg + ';border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,0.7);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#fff;font-family:sans-serif;">' + label + '</div>'
           + '</div>';
         var icon = L.divIcon({
           className: '',
           html: html,
-          iconSize:   [sz, sz + 20],
+          iconSize:   [sz, sz],
           iconAnchor: [sz/2, sz/2]
         });
         var m = L.marker([pt[0], pt[1]], { icon: icon, zIndexOffset: 9000 }).addTo(MapMod.map);
@@ -1324,6 +1322,19 @@
     Bus.on('status:updated',  function() { ListMod.render(); });
     ListMod.render();
     NearbyMod.init();
+
+    // YouTube 直播按鈕
+    var ytBtn = document.getElementById('js-yt-btn');
+    if (ytBtn) {
+      ytBtn.addEventListener('click', function() {
+        var panel = document.getElementById('yt-route-panel');
+        if (panel && panel.style.display === 'block') {
+          YoutubeMod.hide();
+        } else {
+          YoutubeMod.showRouteSearch(RouteMod.routeCoords);
+        }
+      });
+    }
   });
 })();
 </script>
@@ -1957,23 +1968,12 @@ var YoutubeMod = {
     if (frame) frame.src = '';
     panel.classList.add('visible');
     panel.style.display = 'block';
-    var ov = document.getElementById('yt-overlay');
-    if (!ov) {
-      ov = document.createElement('div');
-      ov.id = 'yt-overlay';
-      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1799;';
-      ov.addEventListener('click', function() { YoutubeMod.hide(); });
-      document.body.appendChild(ov);
-    }
-    ov.style.display = 'block';
   },
   hide: function() {
     var panel = document.getElementById('yt-route-panel');
     if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
     var frame = document.getElementById('yt-embed-frame');
     if (frame) frame.src = '';
-    var ov = document.getElementById('yt-overlay');
-    if (ov) ov.style.display = 'none';
   }
 };
 </script>
