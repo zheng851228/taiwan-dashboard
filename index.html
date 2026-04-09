@@ -917,6 +917,7 @@
 
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
+    startEndMarkers: [],
     init: function() {
       MapMod.map = L.map('map', { center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM, zoomControl: false });
       MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
@@ -925,10 +926,8 @@
     clearMarkers: function() {
       MapMod.markers.forEach(function(m) { MapMod.map.removeLayer(m); });
       MapMod.markers = [];
-      // 攝影機標記清除後，立即補畫起終點標記
-      if (window.RouteMod && RouteMod.active && window.WaypointsMod) {
-        setTimeout(function() { WaypointsMod.drawRouteLabels(); }, 0);
-      }
+      // 攝影機清除後補畫起終點
+      setTimeout(function() { MapMod.redrawStartEnd(); }, 0);
     },
     addMarker: function(cam) {
       var color, label, sz;
@@ -962,6 +961,40 @@
     },
     clearRoute: function() {
       if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
+    },
+    drawStartEnd: function(pts) {
+      // 清除舊的起終點標記
+      MapMod.startEndMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
+      MapMod.startEndMarkers = [];
+      if (!pts || pts.length < 2) return;
+      pts.forEach(function(pt, i) {
+        var isFirst = (i === 0);
+        var isLast  = (i === pts.length - 1);
+        var isSpecial = isFirst || isLast;
+        if (!isSpecial) return; // 中途點不畫，省得複雜
+        var bg    = isFirst ? '#22c55e' : '#ef4444';
+        var label = isFirst ? '起' : '終';
+        var tag   = isFirst ? '起點' : '終點';
+        var sz    = 32;
+        var html  = '<div style="text-align:center;pointer-events:none;">'
+          + '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + bg + ';border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,0.8),0 0 0 3px ' + bg + ';display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;font-family:sans-serif;">' + label + '</div>'
+          + '<div style="margin-top:2px;background:' + bg + ';color:#fff;font-size:10px;font-weight:900;padding:2px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.6);font-family:sans-serif;">' + tag + '</div>'
+          + '</div>';
+        var icon = L.divIcon({
+          className: '',
+          html: html,
+          iconSize:   [sz, sz + 20],
+          iconAnchor: [sz/2, sz/2]
+        });
+        var m = L.marker([pt[0], pt[1]], { icon: icon, zIndexOffset: 9000 }).addTo(MapMod.map);
+        MapMod.startEndMarkers.push(m);
+      });
+    },
+    redrawStartEnd: function() {
+      var pts = window._routeAllPoints;
+      if (pts && pts.length >= 2) {
+        MapMod.drawStartEnd(pts);
+      }
     }
   };
 
@@ -1073,7 +1106,7 @@
           if (!coords) {
             if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
             // 路線失敗仍畫標記
-            if (window.WaypointsMod && window._routeAllPoints) WaypointsMod.drawRouteLabels();
+            MapMod.drawStartEnd(window._routeAllPoints);
             return;
           }
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
@@ -1092,7 +1125,7 @@
         .catch(function() {
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
           Toast.show('\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66');
-          if (window.WaypointsMod && window._routeAllPoints) WaypointsMod.drawRouteLabels();
+          MapMod.drawStartEnd(window._routeAllPoints);
         });
     },
     _doFilter: function(coords) {
@@ -1106,10 +1139,8 @@
         return false;
       });
       MapMod.drawRoute(simplified);
-      // 立即畫起終點標記（在 drawRoute 後、render 前）
-      if (window.WaypointsMod && window._routeAllPoints) {
-        WaypointsMod.drawRouteLabels();
-      }
+      // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
+      MapMod.drawStartEnd(window._routeAllPoints);
       var st = document.getElementById('js-route-status');
       if (st) st.textContent = '\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f';
       var banner = document.getElementById('js-route-banner');
@@ -1135,6 +1166,7 @@
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
       MapMod.clearRoute();
+      MapMod.drawStartEnd(null); // 清除起終點標記
       YoutubeMod.hide();
       WaypointsMod && WaypointsMod.clearMarkers();
       window._pendingWaypoints = [];
