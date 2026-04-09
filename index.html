@@ -7,6 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>環島路況指揮中心</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#f97316" />
+  <meta name="apple-mobile-web-app-title" content="路況指揮" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
@@ -98,14 +101,25 @@ body.light .text-slate-400 { color: #64748b; }
     <!-- 收合狀態 -->
     <div id="route-collapsed" class="glass px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2">
       <i class="fa-solid fa-route text-orange-500 text-sm shrink-0"></i>
-      <input id="route-paste-input" type="text"
-        class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500 min-w-0"
-        placeholder="貼上 Google Maps 路線網址或點此展開..." />
+      <div class="flex-1 min-w-0">
+        <input id="route-paste-input" type="text"
+          class="w-full bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
+          placeholder="貼上 Google Maps 路線網址或點此展開..." />
+        <div id="route-summary" class="hidden text-[10px] text-orange-400 font-bold mt-0.5 truncate"></div>
+      </div>
       <button id="route-toggle" class="text-orange-500 text-xs shrink-0 hover:text-orange-400">展開</button>
       <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">&#10005;</button>
     </div>
     <!-- 展開狀態 -->
     <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
+      <!-- 歷史記錄 -->
+      <div class="flex items-center justify-between">
+        <button id="history-btn" class="text-[10px] text-slate-400 hover:text-orange-400 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]"></i> 最近路線</button>
+        <span id="history-count" class="text-[10px] text-slate-600"></span>
+      </div>
+      <div id="history-dropdown" class="hidden bg-slate-900/90 rounded-xl border border-white/10 max-h-44 overflow-y-auto">
+        <div id="history-panel"></div>
+      </div>
       <!-- 貼路線網址 -->
       <div class="bg-slate-800/60 rounded-xl px-3 py-2 flex items-center gap-2">
         <i class="fa-brands fa-google text-blue-400 text-xs shrink-0"></i>
@@ -154,8 +168,12 @@ body.light .text-slate-400 { color: #64748b; }
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-400 drop-shadow-md"></div>
   </div>
 
-  <!-- 定位按鈕 -->
+  <!-- 定位按鈕 + 全螢幕 -->
   <div class="absolute bottom-[8rem] right-4 z-[500] flex flex-col gap-3">
+    <button id="js-fullscreen"
+      class="w-12 h-12 glass rounded-full shadow-2xl flex items-center justify-center text-slate-400 hover:text-orange-500 hover:scale-110 active:scale-90 transition-all">
+      <i class="fa-solid fa-expand text-xl"></i>
+    </button>
     <button id="js-loc"
       class="w-12 h-12 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 hover:scale-110 active:scale-90 transition-all">
       <i class="fa-solid fa-location-crosshairs text-xl"></i>
@@ -927,7 +945,7 @@ body.light .text-slate-400 { color: #64748b; }
 
   // Theme
   var ThemeMod = {
-    dark: true,
+    dark: localStorage.getItem('tw_theme') !== 'light',
     init: function() {
       var btn = document.getElementById('js-theme');
       if (btn) btn.addEventListener('click', function() { ThemeMod.toggle(); });
@@ -939,10 +957,12 @@ body.light .text-slate-400 { color: #64748b; }
         document.body.classList.remove('light');
         if (btn) btn.textContent = '\u{1F319}';
         MapMod.setTile(Config.TILE_DARK);
+        localStorage.setItem('tw_theme', 'dark');
       } else {
         document.body.classList.add('light');
         if (btn) btn.textContent = '\u2600\uFE0F';
         MapMod.setTile(Config.TILE_LIGHT);
+        localStorage.setItem('tw_theme', 'light');
       }
     }
   };
@@ -1040,7 +1060,18 @@ body.light .text-slate-400 { color: #64748b; }
       if (countyEl) countyEl.textContent = '\u{1F4CD} ' + cam.county;
       if (typeEl)   typeEl.textContent   = cam.type === 'youtube' ? '\u{1F534} YouTube \u76f4\u64ad' : '\u{1F4F7} CCTV \u651d\u5f71\u6a5f';
       var w = Data.weather[cam.county];
-      if (weatherEl) weatherEl.textContent = w ? ('\u{1F321}\uFE0F ' + w.temp + '\u00B0C  ' + (w.weather||'')) : '';
+      if (weatherEl) {
+        if (w) {
+          var _wIcon = '';
+          if (w.weather) {
+            if (w.weather.indexOf('\u96e8')!==-1) _wIcon='\ud83c\udf27\ufe0f';
+            else if (w.weather.indexOf('\u6674')!==-1) _wIcon='\u2600\ufe0f';
+            else if (w.weather.indexOf('\u96f2')!==-1) _wIcon='\u26c5';
+            else _wIcon='\ud83c\udf21\ufe0f';
+          }
+          weatherEl.textContent = _wIcon + ' ' + (w.temp||'--') + '\u00B0C  ' + (w.weather||'');
+        } else { weatherEl.textContent = ''; }
+      }
       if (playBtn) {
         playBtn.textContent = cam.type === 'youtube' ? '\u25B6 \u958b\u555f YouTube' : '\u25B6 \u958b\u555f\u5f71\u50cf';
         playBtn.style.display = (cam.url || cam.videoId) ? 'block' : 'none';
@@ -1154,6 +1185,17 @@ body.light .text-slate-400 { color: #64748b; }
       if (info) { info.classList.remove('hidden'); info.classList.add('flex'); }
       if (cnt)  cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + RouteMod.filteredCams.length + ' \u652f';
       Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
+      (function(){
+        var _s=document.getElementById('route-summary');
+        var _ri=window._lastRouteInfo;
+        if(_s&&_ri){_s.textContent=(RouteMod.mode==='motorcycle'?'\ud83c\udfcd':'\ud83d\ude97')+' '+_ri.distance+'km/'+_ri.duration+'\u5206 \u00b7 '+RouteMod.filteredCams.length+'\u652f';_s.classList.remove('hidden');}
+      })();
+      // 儲存路線歷史
+      (function(){
+        var _s=document.getElementById('js-route-start');
+        var _e=document.getElementById('js-route-end');
+        if(_s&&_e&&window.HistoryMod) HistoryMod.add(_s.value,_e.value,window._routeAllPoints?window._routeAllPoints.slice(1,-1).map(function(p){return p[0]+','+p[1];}):[]); 
+      })();
       Bus.emit('filter:changed');
       // 畫 A/B/C 地圖標記
       setTimeout(function() { if (window.WaypointsMod) WaypointsMod.drawRouteLabels(); }, 200);
@@ -1225,21 +1267,38 @@ body.light .text-slate-400 { color: #64748b; }
           : '<span class="text-[10px] bg-white/10 text-slate-400 px-2 py-0.5 rounded-full">CCTV</span>';
         var w  = Data.weather[cam.county];
         var wt = w ? (w.temp + '\u00B0C') : '';
-        html += '<div class="cam-card glass rounded-2xl p-4 flex items-center gap-4 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
-          + '<div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:'+color+'22">'
-          + '<span class="w-3 h-3 rounded-full inline-block" style="background:'+color+'"></span></div>'
-          + '<div class="flex-1 min-w-0">'
-          + '<div class="font-bold text-sm truncate flex items-center gap-2">'+cam.name+' '+badge+'</div>'
-          + '<div class="text-[11px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
+        var _ts=cam.url?(cam.url+(cam.url.indexOf('?')!==-1?'&':'?')+'t='+Math.floor(Date.now()/60000)):'';
+        html += '<div class="cam-card glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
+          + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
+          + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
+          + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+_ts+'" />'
           + '</div>'
-          + '<i class="fa-solid fa-chevron-right text-slate-600 text-sm shrink-0"></i></div>';
+          + '<div class="flex-1 min-w-0">'
+          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+cam.name+' '+badge+'</div>'
+          + '<div class="text-[10px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
+          + '</div>'
+          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div>';
         MapMod.addMarker(cam);
       });
       el.innerHTML = html;
+      if('IntersectionObserver' in window){
+        var _ob=new IntersectionObserver(function(entries){
+          entries.forEach(function(e){
+            if(!e.isIntersecting)return;
+            var img=e.target.querySelector('.cam-th');
+            if(img&&img.dataset.src&&!img.src){img.src=img.dataset.src;img.onload=function(){img.style.opacity='1';};}
+            _ob.unobserve(e.target);
+          });
+        },{rootMargin:'80px'});
+        el.querySelectorAll('.cam-tw').forEach(function(w){_ob.observe(w);});
+      }
       el.querySelectorAll('.cam-card').forEach(function(card) {
         card.addEventListener('click', function() {
           var cam = map[card.dataset.id];
           if (!cam) return;
+          el.querySelectorAll('.cam-card').forEach(function(c){c.style.borderColor='';c.style.background='';});
+          card.style.borderColor='#f97316';
+          card.style.background='rgba(249,115,22,0.08)';
           InfoMod.open(cam);
           NavMod.go('map');
           MapMod.map.setView([cam.lat, cam.lng], 14);
@@ -1290,6 +1349,11 @@ body.light .text-slate-400 { color: #64748b; }
   window.addEventListener('load', function() {
     ClockMod.init();
     MapMod.init();
+    // 套用儲存的主題
+    if (localStorage.getItem('tw_theme') === 'light') {
+      document.body.classList.add('light');
+      var _tb = document.getElementById('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
+    }
     ThemeMod.init();
     NavMod.init();
     RouteMod.init();
@@ -1394,6 +1458,27 @@ body.light .text-slate-400 { color: #64748b; }
 var NearbyMod = {
   userLat: null, userLng: null, radius: 5, marker: null, circle: null,
   init: function() {
+    // 全螢幕按鈕
+    var fsBtn = document.getElementById('js-fullscreen');
+    if (fsBtn) {
+      fsBtn.addEventListener('click', function() {
+        var header = document.querySelector('header');
+        var nav    = document.querySelector('nav');
+        var isFS   = fsBtn.querySelector('i').classList.contains('fa-compress');
+        if (isFS) {
+          if(header) header.style.display='';
+          if(nav)    nav.style.display='';
+          fsBtn.querySelector('i').className = 'fa-solid fa-expand text-xl';
+          fsBtn.classList.remove('text-orange-500'); fsBtn.classList.add('text-slate-400');
+        } else {
+          if(header) header.style.display='none';
+          if(nav)    nav.style.display='none';
+          fsBtn.querySelector('i').className = 'fa-solid fa-compress text-xl';
+          fsBtn.classList.add('text-orange-500'); fsBtn.classList.remove('text-slate-400');
+        }
+        setTimeout(function(){MapMod.map&&MapMod.map.invalidateSize();},100);
+      });
+    }
     var locBtn     = document.getElementById('js-loc');
     var closeBtn   = document.getElementById('nearby-close');
     var radiusBtns = document.querySelectorAll('.nearby-r-btn');
@@ -1418,6 +1503,13 @@ var NearbyMod = {
         NearbyMod.userLat = pos.coords.latitude;
         NearbyMod.userLng = pos.coords.longitude;
         NearbyMod.showOnMap(); NearbyMod.render(); NearbyMod.show();
+        // 自動帶入為起點
+        var _sEl = document.getElementById('js-route-start');
+        if (_sEl && !_sEl.value) {
+          _sEl.value = pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6);
+          var _cs = document.getElementById('clear-start'); if(_cs) _cs.classList.remove('hidden');
+          Toast.show('已定位！位置已帶入為起點', 3000);
+        }
       },
       function(err) {
         if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
@@ -1512,6 +1604,8 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 // 收合式路線輸入
 (function() {
   window.addEventListener('load', function() {
+    var histBtn=document.getElementById('history-btn');
+    if(histBtn){histBtn.addEventListener('click',function(){HistoryMod.toggle();});HistoryMod.updateCount();}
     var toggleBtn = document.getElementById('route-toggle');
     var closeBtn  = document.getElementById('route-toggle-close');
     var collapsed = document.getElementById('route-collapsed');
@@ -1661,6 +1755,75 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     }
   });
 })();
+
+// -- HistoryMod (route history, max 10)
+var HistoryMod = {
+  KEY: 'tw_route_history', MAX: 10,
+  load: function() {
+    try { return JSON.parse(localStorage.getItem(HistoryMod.KEY) || '[]'); } catch(e) { return []; }
+  },
+  save: function(list) { try { localStorage.setItem(HistoryMod.KEY, JSON.stringify(list)); } catch(e) {} },
+  add: function(start, end, wps) {
+    if (!start || !end) return;
+    var list = HistoryMod.load().filter(function(r) { return !(r.start===start && r.end===end); });
+    list.unshift({ start:start, end:end, waypoints:wps||[],
+      distance: window._lastRouteInfo ? window._lastRouteInfo.distance : 0,
+      duration: window._lastRouteInfo ? window._lastRouteInfo.duration : 0,
+      mode: RouteMod ? RouteMod.mode : 'motorcycle', time: Date.now() });
+    if (list.length > HistoryMod.MAX) list = list.slice(0, HistoryMod.MAX);
+    HistoryMod.save(list); HistoryMod.updateCount();
+  },
+  updateCount: function() {
+    var el = document.getElementById('history-count');
+    var n = HistoryMod.load().length;
+    if (el) el.textContent = n > 0 ? n + '\u7b46' : '';
+  },
+  render: function() {
+    var panel = document.getElementById('history-panel');
+    if (!panel) return;
+    var list = HistoryMod.load();
+    if (!list.length) { panel.innerHTML = '<div class="text-center text-slate-500 text-xs py-3">\u5c1a\u7121\u8a18\u9304</div>'; return; }
+    var html = '';
+    list.forEach(function(item, idx) {
+      var d = new Date(item.time);
+      var ds = (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+      var mIco = item.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f' : '\ud83d\ude97';
+      var wpTxt = item.waypoints && item.waypoints.length ? ' \u00b7 '+item.waypoints.length+'\u505c\u9760' : '';
+      html += '<div class="hist-item flex items-center gap-2 px-3 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0" data-idx="'+idx+'">'
+        + '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+item.start.slice(0,10)+' \u2192 '+item.end.slice(0,10)+'</div>'
+        + '<div class="text-[10px] text-slate-500 mt-0.5">'+mIco+' '+(item.distance||'?')+'km'+wpTxt+' \u00b7 '+ds+'</div></div>'
+        + '<button class="hist-del text-slate-600 hover:text-red-400 text-sm px-1 shrink-0" data-idx="'+idx+'">\u00d7</button></div>';
+    });
+    panel.innerHTML = html;
+    panel.querySelectorAll('.hist-item').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        if (e.target.classList.contains('hist-del')) return;
+        var item = list[parseInt(el.dataset.idx)];
+        var sEl=document.getElementById('js-route-start'); var eEl=document.getElementById('js-route-end');
+        if (sEl) { sEl.value=item.start; var cs=document.getElementById('clear-start'); if(cs) cs.classList.remove('hidden'); }
+        if (eEl) { eEl.value=item.end;   var ce=document.getElementById('clear-end');   if(ce) ce.classList.remove('hidden'); }
+        window._pendingWaypoints = item.waypoints||[];
+        if (window.WaypointsMod) WaypointsMod.render(window._pendingWaypoints);
+        HistoryMod.hide();
+        Toast.show('\u8def\u7dda\u5df2\u5e36\u5165\uff0c\u8acb\u6309\u89e3\u6790');
+      });
+    });
+    panel.querySelectorAll('.hist-del').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var l=HistoryMod.load(); l.splice(parseInt(btn.dataset.idx),1);
+        HistoryMod.save(l); HistoryMod.render(); HistoryMod.updateCount();
+      });
+    });
+  },
+  toggle: function() {
+    var dd=document.getElementById('history-dropdown');
+    if (!dd) return;
+    if (dd.classList.contains('hidden')) { HistoryMod.render(); dd.classList.remove('hidden'); }
+    else dd.classList.add('hidden');
+  },
+  hide: function() { var dd=document.getElementById('history-dropdown'); if(dd) dd.classList.add('hidden'); }
+};
 
 // ── 停靠點模組 ──────────────────────────────────────────────────────────
 var WaypointsMod = {
