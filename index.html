@@ -1135,6 +1135,7 @@ body.light .text-slate-400 { color: #64748b; }
           var wpPts = results.slice(1, -1).filter(function(p) { return p; });
           var finalPoints = [startPt].concat(wpPts).concat([endPt]);
           window._routeAllPoints = finalPoints;
+          Toast.show('[路線] AllPoints=' + finalPoints.length, 3000);
           var segs = [];
           for (var fi = 0; fi < finalPoints.length - 1; fi++) {
             segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
@@ -1944,7 +1945,8 @@ var WaypointsMod = {
   // 依據 _routeAllPoints 畫 A/B/C 標記
   drawRouteLabels: function() {
     var pts = window._routeAllPoints;
-    if (!pts || pts.length < 2) return;
+    Toast.show('[標記] pts=' + (pts ? pts.length : 'null'), 4000);
+    if (!pts || pts.length < 2) { Toast.show('[標記] 點數不足，略過', 4000); return; }
     var labels = WaypointsMod.LETTERS;
     var totalPts = pts.length;
     var mapPoints = pts.map(function(pt, i) {
@@ -1960,6 +1962,7 @@ var WaypointsMod = {
         color: color
       };
     });
+    Toast.show('[標記] 畫' + mapPoints.length + '個點', 4000);
     WaypointsMod.drawMarkers(mapPoints);
   }
 };
