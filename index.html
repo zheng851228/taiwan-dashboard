@@ -3,7 +3,7 @@
 <html lang="zh-TW" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>環島路況指揮中心</title>
@@ -58,7 +58,6 @@
       box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
     }
     #yt-route-panel.visible { display: block; }
-    input, textarea, select { font-size: max(16px, 1em) !important; }
   </style>
 </head>
 <body class="text-slate-100">
@@ -1322,6 +1321,19 @@
     Bus.on('status:updated',  function() { ListMod.render(); });
     ListMod.render();
     NearbyMod.init();
+
+    // 防止 iOS Safari 輸入框縮放（font-size>=16px 才不縮放）
+    // 用 touch focus 事件動態設，不影響視覺
+    document.addEventListener('focusin', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        e.target.style.fontSize = '16px';
+      }
+    });
+    document.addEventListener('focusout', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        e.target.style.fontSize = '';
+      }
+    });
 
     // YouTube 直播按鈕
     var ytBtn = document.getElementById('js-yt-btn');
