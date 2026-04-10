@@ -825,31 +825,35 @@
              url: B + c.snap, type:'cctv', status:'unknown' };
   });
 
-  // YouTube 固定路況直播頻道（有真實座標）
-  // videoId 為 YouTube 直播影片 ID，可隨時更新
-  var YT_CAMS = [
-    {id:'yt001',name:'YT 國道一號 台北段',    county:'台北市',lat:25.0550,lng:121.5200,videoId:'JqUGnYXbFOM'},
-    {id:'yt002',name:'YT 國道一號 台中段',    county:'台中市',lat:24.1800,lng:120.6600,videoId:'m_BNOjdCKKI'},
-    {id:'yt003',name:'YT 國道一號 高雄段',    county:'高雄市',lat:22.6500,lng:120.3000,videoId:'JqUGnYXbFOM'},
-    {id:'yt004',name:'YT 國道三號 新竹段',    county:'新竹市',lat:24.8000,lng:121.1200,videoId:'d9MyW72ELq0'},
-    {id:'yt005',name:'YT 國道五號 雪山隧道', county:'宜蘭縣',lat:24.8600,lng:121.7500,videoId:'v0tMxV6CXIY'},
-    {id:'yt006',name:'YT 蛇花公路 直播',         county:'花蓮縣',lat:24.0800,lng:121.6200,videoId:'2X-1IzwTkPE'},
-    {id:'yt007',name:'YT 台九線 南辺',              county:'台東縣',lat:22.5000,lng:120.9500,videoId:'HFbFsVCm-QY'},
-    {id:'yt008',name:'YT 台北市區路況',         county:'台北市',lat:25.0400,lng:121.5650,videoId:'d9MyW72ELq0'},
-    {id:'yt009',name:'YT 高雄市區路況',         county:'高雄市',lat:22.6200,lng:120.2900,videoId:'m_BNOjdCKKI'},
-    {id:'yt010',name:'YT 國道三號 台南段',  county:'台南市',lat:22.9800,lng:120.2300,videoId:'d9MyW72ELq0'}
-  ];
-
-  var _ytCams = YT_CAMS.map(function(c) {
-    return { id:c.id, name:c.name, county:c.county, lat:c.lat, lng:c.lng,
-             videoId:c.videoId, type:'youtube', status:'unknown' };
-  });
+  var _ytCams = []; // 從 cams.json 動態載入
 
   window.Data = {
     weather: {},
     allCams: function() { return _cams.concat(_ytCams); },
     loadDynamic: function() {
-      setTimeout(function() { Bus.emit('cams:updated'); }, 100);
+      // 從 cams.json 載入 YouTube 直播頻道
+      fetch('cams.json?t=' + Date.now())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!Array.isArray(data)) return;
+          _ytCams = data.map(function(c) {
+            return {
+              id:      c.id,
+              name:    c.name,
+              county:  c.county,
+              lat:     c.lat,
+              lng:     c.lng,
+              videoId: c.videoId,
+              type:    'youtube',
+              status:  'unknown'
+            };
+          });
+          Bus.emit('cams:updated');
+        })
+        .catch(function() {
+          // cams.json 載入失敗，仍正常顯示 CCTV
+          Bus.emit('cams:updated');
+        });
     },
     fetchWeather: function() {
       var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
