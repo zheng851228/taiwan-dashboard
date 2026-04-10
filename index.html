@@ -706,6 +706,7 @@
   };
 
   var B = 'https://c01.twipcam.com/cam/snapshot/';
+  var PROXY = 'https://url-expander.lucky851228.workers.dev/?img=';
 
   var CAMS = [
     {id:'n1s000',name:'國1 基隆端',       county:'基隆市',lat:25.1190,lng:121.7218,snap:'n1-s-0k-000.jpg'},
@@ -822,7 +823,7 @@
 
   var _cams = CAMS.map(function(c) {
     return { id:c.id, name:c.name, county:c.county, lat:c.lat, lng:c.lng,
-             url: B + c.snap, type:'cctv', status:'unknown' };
+             url: PROXY + encodeURIComponent(B + c.snap), type:'cctv', status:'unknown' };
   });
 
   var _ytCams = []; // 從 cams.json 動態載入
