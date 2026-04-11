@@ -387,8 +387,8 @@
     CWA_KEY: 'CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB',
     MAP_CENTER: [23.9, 121.0],
     MAP_ZOOM: 7,
-    ROUTE_FILTER_KM: 15.0,
-    SIMPLIFY_STEP: 5,
+    ROUTE_FILTER_KM: 20.0,
+    SIMPLIFY_STEP: 2,
     TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
@@ -1111,12 +1111,16 @@
       var simplified = simplifyCoords(coords, Config.SIMPLIFY_STEP);
       RouteMod.routeCoords = coords;
       RouteMod.active = true;
-      RouteMod.filteredCams = Data.allCams().filter(function(cam) {
+      // YouTube 頻道不過濾，全部保留；CCTV 才做路線過濾
+      var ytCams = Data.allCams().filter(function(c){ return c.type === 'youtube'; });
+      var cctv   = Data.allCams().filter(function(c){ return c.type !== 'youtube'; });
+      var filteredCctv = cctv.filter(function(cam) {
         for (var i = 0; i < simplified.length-1; i++) {
           if (distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]) <= Config.ROUTE_FILTER_KM) return true;
         }
         return false;
       });
+      RouteMod.filteredCams = filteredCctv.concat(ytCams);
       MapMod.drawRoute(simplified);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(window._routeAllPoints);
@@ -2034,6 +2038,30 @@ var YoutubeMod = {
   };
   document.getElementById('modal-overlay').addEventListener('click', function() { window.ModalEffect.close(); });
   document.getElementById('modal-close-btn').addEventListener('click', function() { window.ModalEffect.close(); });
+</script>
+
+<script>
+  // 註冊 Service Worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./sw.js')
+        .then(function(reg) {
+          console.log('SW registered:', reg.scope);
+          // 有新版本時提示用戶
+          reg.addEventListener('updatefound', function() {
+            var newWorker = reg.installing;
+            newWorker.addEventListener('statechange', function() {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                Toast.show('有新版本，重新整理即可更新', 4000);
+              }
+            });
+          });
+        })
+        .catch(function(err) {
+          console.log('SW registration failed:', err);
+        });
+    });
+  }
 </script>
 
 </body>
