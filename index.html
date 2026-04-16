@@ -838,7 +838,7 @@
   'use strict';
 
   // 依攝影機名稱推斷縣市
-  function guessCounty(name) {
+  function guessCountyByName(name) {
     var map = [
       ['基隆','基隆市'],['台北','台北市'],['臺北','台北市'],['新北','新北市'],
       ['桃園','桃園市'],['新竹','新竹市'],['苗栗','苗栗縣'],
@@ -851,8 +851,8 @@
       ['永和','新北市'],['新莊','新北市'],['五股','新北市'],['林口','新北市'],
       ['楊梅','桃園市'],['中壢','桃園市'],['龍潭','桃園市'],
       ['頭份','苗栗縣'],['三義','苗栗縣'],['竹南','苗栗縣'],
-      ['豐原','台中市'],['大雅','台中市'],['南屯','台中市'],['王田','彰化縣'],
-      ['員林','彰化縣'],['北斗','彰化縣'],['埔鹽','彰化縣'],
+      ['豐原','台中市'],['大雅','台中市'],['南屯','台中市'],['大甲','台中市'],
+      ['王田','彰化縣'],['員林','彰化縣'],['北斗','彰化縣'],['埔鹽','彰化縣'],
       ['西螺','雲林縣'],['虎尾','雲林縣'],['斗南','雲林縣'],['斗六','雲林縣'],
       ['民雄','嘉義縣'],['水上','嘉義縣'],['竹崎','嘉義縣'],['梅山','嘉義縣'],
       ['新營','台南市'],['麻豆','台南市'],['永康','台南市'],['仁德','台南市'],
@@ -864,6 +864,27 @@
     for (var i = 0; i < map.length; i++) {
       if (name.indexOf(map[i][0]) !== -1) return map[i][1];
     }
+    return null;
+  }
+
+  // 依座標反推縣市（用最近縣市中心）
+  function guessCountyByCoord(lat, lng) {
+    var best = null, minD = 1e9;
+    for (var c in window.COUNTY_CENTERS) {
+      var cc = window.COUNTY_CENTERS[c];
+      var dLat = (cc[0] - lat);
+      var dLng = (cc[1] - lng);
+      var d = dLat*dLat + dLng*dLng;
+      if (d < minD) { minD = d; best = c; }
+    }
+    return best || '台灣';
+  }
+
+  // 優先名稱，失敗再用座標
+  function guessCounty(name, lat, lng) {
+    var byName = guessCountyByName(name);
+    if (byName) return byName;
+    if (lat && lng) return guessCountyByCoord(lat, lng);
     return '台灣';
   }
 
@@ -916,8 +937,8 @@
             })
             .map(function(c) {
               var cat = classifyCam(c.id);
-              // 依 name 判斷縣市
-              var county = guessCounty(c.name);
+              // 先名稱、失敗改座標反推
+              var county = guessCounty(c.name, c.lat, c.lon);
               return {
                 id:     c.id,
                 name:   c.name,
