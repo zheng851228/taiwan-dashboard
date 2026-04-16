@@ -58,6 +58,111 @@
       box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
     }
     #yt-route-panel.visible { display: block; }
+
+```
+/* === 沿途影像輪播 === */
+#route-camera-strip {
+  position: fixed;
+  bottom: 5.5rem;
+  left: 12px;
+  right: 12px;
+  z-index: 1700;
+  display: none;
+  background: rgba(10,18,38,0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(249,115,22,0.4);
+  border-radius: 16px;
+  padding: 10px 12px 12px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
+}
+#route-camera-strip.visible { display: block; }
+#route-camera-strip-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+}
+#route-camera-strip-scroll::-webkit-scrollbar { height: 4px; }
+.strip-cam {
+  flex: 0 0 140px;
+  width: 140px;
+  background: rgba(30,41,59,0.8);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08);
+  scroll-snap-align: start;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.strip-cam:active { transform: scale(0.96); }
+.strip-cam:hover { border-color: rgba(249,115,22,0.6); }
+.strip-cam-img {
+  width: 100%;
+  height: 80px;
+  background: #0f172a;
+  position: relative;
+  overflow: hidden;
+}
+.strip-cam-img img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.strip-cam-img .ph {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #475569; font-size: 18px;
+}
+.strip-cam-info { padding: 5px 7px; }
+.strip-cam-name {
+  font-size: 10px; font-weight: 700; color: #e2e8f0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.3;
+}
+.strip-cam-meta {
+  font-size: 9px; color: #94a3b8; margin-top: 2px;
+  display: flex; align-items: center; gap: 4px;
+}
+.strip-cam-badge {
+  display: inline-block; padding: 0 4px; border-radius: 3px;
+  font-size: 8px; font-weight: 900;
+  flex-shrink: 0;
+}
+.strip-cam-badge.yt { background: #ef4444; color: #fff; }
+.strip-cam-badge.cctv { background: rgba(249,115,22,0.25); color: #fb923c; }
+
+/* info-panel 縮圖 */
+#info-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #0f172a;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 6px;
+  position: relative;
+  display: none;
+}
+#info-thumb.visible { display: block; }
+#info-thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#info-thumb .ph {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #475569; font-size: 24px;
+}
+```
+
   </style>
 </head>
 <body class="text-slate-100">
@@ -187,6 +292,7 @@
       <span class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 animate-pulse"></span>
       <span class="text-[10px] font-bold text-orange-400">已過濾沿途攝影機</span>
       <button id="js-rb-clear" class="text-[10px] text-slate-400 hover:text-orange-400 font-bold ml-1">清除</button>
+      <button id="js-strip-btn" class="text-[10px] text-orange-400 hover:text-orange-300 font-bold ml-1 flex items-center gap-1"><i class="fa-solid fa-images"></i> 影像</button>
       <button id="js-yt-btn" class="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1 flex items-center gap-1"><i class="fa-brands fa-youtube"></i> 直播</button>
     </div>
   </div>
@@ -350,6 +456,22 @@
     <div id="yt-route-links"></div>
   </div>
 
+  <!-- 沿途影像輪播 -->
+
+  <div id="route-camera-strip">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <i class="fa-solid fa-camera" style="color:#f97316;font-size:14px;"></i>
+        <span style="font-size:12px;font-weight:900;">沿途影像</span>
+        <span id="strip-count" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
+      </div>
+      <button onclick="RouteStripMod.hide()" style="width:22px;height:22px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
+        <i class="fa-solid fa-xmark" style="font-size:10px;"></i>
+      </button>
+    </div>
+    <div id="route-camera-strip-scroll"></div>
+  </div>
+
   <div id="modal" class="fixed inset-0 z-[2000] hidden items-center justify-center p-4">
     <div class="absolute inset-0 bg-black/90 backdrop-blur-md" id="modal-overlay"></div>
     <div id="modal-sh" class="relative w-full max-w-3xl glass rounded-3xl overflow-hidden shadow-2xl flex flex-col scale-95 opacity-0 transition-all duration-300">
@@ -381,6 +503,9 @@
       <button id="info-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 shrink-0 ml-3">
         <i class="fa-solid fa-xmark text-sm"></i>
       </button>
+    </div>
+    <div id="info-thumb">
+      <div class="ph"><i class="fa-solid fa-camera"></i></div>
     </div>
     <button id="info-play" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-2xl text-sm transition-all active:scale-95 shadow-lg shadow-orange-500/20">
       &#9654; 開啟影像
@@ -1008,6 +1133,7 @@
       var countyEl  = document.getElementById('info-county');
       var typeEl    = document.getElementById('info-type');
       var weatherEl = document.getElementById('info-weather');
+      var thumbEl   = document.getElementById('info-thumb');
       var playBtn   = document.getElementById('info-play');
       if (!panel) return;
       if (nameEl)   nameEl.textContent   = cam.name;
@@ -1023,8 +1149,36 @@
             else if (w.weather.indexOf('\u96f2')!==-1) _wIcon='\u26c5';
             else _wIcon='\ud83c\udf21\ufe0f';
           }
-          weatherEl.textContent = _wIcon + ' ' + (w.temp||'--') + '\u00B0C  ' + (w.weather||'');
-        } else { weatherEl.textContent = ''; }
+          var tempStr = (w.temp !== undefined && w.temp !== null && w.temp !== '--') ? (w.temp + '\u00B0C') : '--';
+          weatherEl.textContent = _wIcon + ' ' + tempStr + '  ' + (w.weather||'');
+        } else {
+          weatherEl.textContent = '\ud83d\udca8 \u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...';
+        }
+      }
+      // 縮圖預覽
+      if (thumbEl) {
+        thumbEl.classList.add('visible');
+        var thumbSrc = '';
+        if (cam.type === 'youtube' && cam.videoId) {
+          thumbSrc = 'https://img.youtube.com/vi/' + cam.videoId + '/mqdefault.jpg';
+        } else if (cam.url) {
+          thumbSrc = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/30000);
+        }
+        if (thumbSrc) {
+          thumbEl.innerHTML = '<div class="ph"><i class="fa-solid fa-spinner fa-spin"></i></div><img alt="" />';
+          var imgNode = thumbEl.querySelector('img');
+          imgNode.onload = function() {
+            imgNode.style.opacity = '1';
+            var ph = thumbEl.querySelector('.ph');
+            if (ph) ph.style.display = 'none';
+          };
+          imgNode.onerror = function() {
+            thumbEl.innerHTML = '<div class="ph"><i class="fa-solid fa-triangle-exclamation"></i></div>';
+          };
+          imgNode.src = thumbSrc;
+        } else {
+          thumbEl.innerHTML = '<div class="ph"><i class="fa-solid fa-camera"></i></div>';
+        }
       }
       if (playBtn) {
         playBtn.textContent = cam.type === 'youtube' ? '\u25B6 \u958b\u555f YouTube' : '\u25B6 \u958b\u555f\u5f71\u50cf';
@@ -1036,6 +1190,8 @@
     close: function() {
       var panel = document.getElementById('info-panel');
       if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex'); }
+      var thumbEl = document.getElementById('info-thumb');
+      if (thumbEl) thumbEl.classList.remove('visible');
       InfoMod.current = null;
     }
   };
@@ -1160,12 +1316,15 @@
         if(_s&&_e&&window.HistoryMod) HistoryMod.add(_s.value,_e.value,window._routeAllPoints?window._routeAllPoints.slice(1,-1).map(function(p){return p[0]+','+p[1];}):[]); 
       })();
       Bus.emit('filter:changed');
+      // 沿途影像輪播（自動顯示）
+      setTimeout(function() { RouteStripMod.show(RouteMod.filteredCams); }, 300);
       setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 400);
     },
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
       MapMod.clearRoute();
       MapMod.drawStartEnd(null); // 清除起終點標記
+      RouteStripMod.hide();
       YoutubeMod.hide();
       WaypointsMod && WaypointsMod.clearMarkers();
       window._pendingWaypoints = [];
@@ -1356,6 +1515,14 @@
         } else {
           YoutubeMod.showRouteSearch(RouteMod.routeCoords);
         }
+      });
+    }
+
+    // 沿途影像按鈕
+    var stripBtn = document.getElementById('js-strip-btn');
+    if (stripBtn) {
+      stripBtn.addEventListener('click', function() {
+        RouteStripMod.toggle();
       });
     }
   });
@@ -2025,6 +2192,103 @@ var YoutubeMod = {
     if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
     var frame = document.getElementById('yt-embed-frame');
     if (frame) frame.src = '';
+  }
+};
+
+// ===== 沿途影像輪播 =====
+var RouteStripMod = {
+  show: function(cams) {
+    var panel   = document.getElementById('route-camera-strip');
+    var scroll  = document.getElementById('route-camera-strip-scroll');
+    var countEl = document.getElementById('strip-count');
+    if (!panel || !scroll) return;
+    if (!cams || cams.length === 0) { RouteStripMod.hide(); return; }
+    // 排序：CCTV 在前，YouTube 在後
+    var sorted = cams.slice().sort(function(a,b) {
+      if (a.type === b.type) return 0;
+      return a.type === 'youtube' ? 1 : -1;
+    });
+    if (countEl) countEl.textContent = '\u5171 ' + sorted.length + ' \u652f';
+    scroll.innerHTML = '';
+    sorted.forEach(function(cam) {
+      var card = document.createElement('div');
+      card.className = 'strip-cam';
+      card.dataset.id = cam.id;
+      var isYT = cam.type === 'youtube';
+      var thumbSrc = '';
+      if (isYT && cam.videoId) {
+        thumbSrc = 'https://img.youtube.com/vi/' + cam.videoId + '/mqdefault.jpg';
+      } else if (cam.url) {
+        thumbSrc = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000);
+      }
+      var badgeHtml = isYT
+        ? '<span class="strip-cam-badge yt">YT</span>'
+        : '<span class="strip-cam-badge cctv">CCTV</span>';
+      var w = Data.weather[cam.county];
+      var wTxt = w ? (' \u00b7 ' + w.temp + '\u00B0C') : '';
+      var imgHtml = thumbSrc ? '<img data-src="' + thumbSrc + '" alt="" />' : '';
+      card.innerHTML =
+        '<div class="strip-cam-img">' +
+          '<div class="ph"><i class="fa-solid fa-camera"></i></div>' +
+          imgHtml +
+        '</div>' +
+        '<div class="strip-cam-info">' +
+          '<div class="strip-cam-name">' + cam.name + '</div>' +
+          '<div class="strip-cam-meta">' + badgeHtml + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + cam.county + wTxt + '</span></div>' +
+        '</div>';
+      card.addEventListener('click', function() {
+        var allCams = Data.allCams();
+        var found = null;
+        for (var i = 0; i < allCams.length; i++) { if (allCams[i].id === cam.id) { found = allCams[i]; break; } }
+        if (!found) return;
+        InfoMod.open(found);
+        MapMod.map.setView([found.lat, found.lng], 13);
+      });
+      scroll.appendChild(card);
+    });
+    panel.classList.add('visible');
+    // 縮圖延遲載入
+    if ('IntersectionObserver' in window) {
+      var obs = new IntersectionObserver(function(entries) {
+        entries.forEach(function(e) {
+          if (!e.isIntersecting) return;
+          var img = e.target;
+          if (img.dataset.src && !img.src) {
+            img.src = img.dataset.src;
+            img.onload = function() {
+              img.style.opacity = '1';
+              var ph = img.parentElement.querySelector('.ph');
+              if (ph) ph.style.display = 'none';
+            };
+            img.onerror = function() { img.remove(); };
+          }
+          obs.unobserve(img);
+        });
+      }, { root: scroll, rootMargin: '100px' });
+      scroll.querySelectorAll('img[data-src]').forEach(function(img) { obs.observe(img); });
+    } else {
+      scroll.querySelectorAll('img[data-src]').forEach(function(img) {
+        img.src = img.dataset.src;
+        img.onload = function() {
+          img.style.opacity = '1';
+          var ph = img.parentElement.querySelector('.ph');
+          if (ph) ph.style.display = 'none';
+        };
+      });
+    }
+  },
+  hide: function() {
+    var panel = document.getElementById('route-camera-strip');
+    if (panel) panel.classList.remove('visible');
+  },
+  toggle: function() {
+    var panel = document.getElementById('route-camera-strip');
+    if (!panel) return;
+    if (panel.classList.contains('visible')) {
+      RouteStripMod.hide();
+    } else {
+      RouteStripMod.show(RouteMod.filteredCams);
+    }
   }
 };
 </script>
