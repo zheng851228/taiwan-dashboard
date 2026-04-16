@@ -161,12 +161,57 @@
   display: flex; align-items: center; justify-content: center;
   color: #475569; font-size: 24px;
 }
+
+/* 診斷狀態面板 */
+#diag-panel {
+  position: fixed;
+  top: calc(var(--safe-top) + 3.5rem);
+  left: 8px;
+  z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  color: #10b981;
+  font-family: monospace;
+  font-size: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(16,185,129,0.4);
+  max-width: 280px;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+  display: none;
+}
+#diag-panel.visible { display: block; }
+#diag-panel .diag-err { color: #ef4444; }
+#diag-panel .diag-warn { color: #f59e0b; }
+#diag-panel .diag-info { color: #60a5fa; }
+#diag-panel .diag-close {
+  float: right;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 6px;
+  margin-top: -2px;
+}
 ```
 
   </style>
 </head>
 <body class="text-slate-100">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
+
+  <!-- 診斷狀態面板（點擊時鐘3次開啟）-->
+
+  <div id="diag-panel">
+    <button class="diag-close" onclick="document.getElementById('diag-panel').classList.remove('visible')">&times;</button>
+    <div style="color:#10b981;font-weight:bold;margin-bottom:4px;">🔧 診斷日誌</div>
+    <div id="diag-log"></div>
+  </div>
 
   <header class="fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.25rem)] pb-2 glass shadow-2xl">
     <div class="flex justify-between items-center max-w-5xl mx-auto">
@@ -541,6 +586,58 @@
       island:  ['澎湖縣','金門縣','連江縣']
     }
   };
+
+  // ===== 螢幕診斷工具 =====
+  window.Diag = {
+    logs: [],
+    add: function(msg, level) {
+      level = level || 'info';
+      var time = new Date().toTimeString().slice(0,8);
+      Diag.logs.push({ time: time, msg: msg, level: level });
+      if (typeof console !== 'undefined') console.log('[Diag]', msg);
+      Diag._render();
+    },
+    info: function(m) { Diag.add(m, 'info'); },
+    ok:   function(m) { Diag.add(m, 'ok'); },
+    err:  function(m) { Diag.add(m, 'err'); },
+    warn: function(m) { Diag.add(m, 'warn'); },
+    show: function() {
+      var p = document.getElementById('diag-panel');
+      if (p) p.classList.add('visible');
+    },
+    hide: function() {
+      var p = document.getElementById('diag-panel');
+      if (p) p.classList.remove('visible');
+    },
+    _render: function() {
+      var el = document.getElementById('diag-log');
+      if (!el) return;
+      var html = Diag.logs.slice(-20).map(function(l) {
+        var cls = l.level === 'err' ? 'diag-err' : (l.level === 'warn' ? 'diag-warn' : (l.level === 'info' ? 'diag-info' : ''));
+        var icon = l.level === 'err' ? '❌' : (l.level === 'warn' ? '⚠️' : (l.level === 'ok' ? '✅' : '·'));
+        return '<div class="' + cls + '">' + icon + ' ' + l.msg + '</div>';
+      }).join('');
+      el.innerHTML = html;
+    }
+  };
+
+  // 連續點擊時鐘 3 次開啟診斷面板
+  (function() {
+    var taps = 0, lastTap = 0;
+    document.addEventListener('DOMContentLoaded', function() {
+      var clk = document.getElementById('js-clk');
+      if (!clk) return;
+      clk.addEventListener('click', function() {
+        var now = Date.now();
+        if (now - lastTap < 600) { taps++; } else { taps = 1; }
+        lastTap = now;
+        if (taps >= 3) {
+          Diag.show();
+          taps = 0;
+        }
+      });
+    });
+  })();
 })();
 </script>
 
@@ -919,25 +1016,49 @@
     loadDynamic: function() {
       // 並行載入 twipcam API + cams.json
       var TWIPCAM_API = 'https://www.twipcam.com/api/v1/cam-list.json';
-      var ALLOWED_TYPES = { highway:1, expressway:1, provincial:1, scenic:1, city:1 };
+      Diag.info('開始載入資料...');
+
+      function fetchTwipcam() {
+        Diag.info('直連 twipcam API...');
+        return fetch(TWIPCAM_API, { mode: 'cors' })
+          .then(function(r) {
+            Diag.add('twipcam HTTP ' + r.status, r.ok ? 'ok' : 'err');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .catch(function(err) {
+            Diag.err('twipcam 直連失敗: ' + (err && err.message));
+            Diag.info('嘗試代理...');
+            var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(TWIPCAM_API);
+            return fetch(proxy).then(function(r){
+              Diag.add('代理 HTTP ' + r.status, r.ok ? 'ok' : 'err');
+              if (!r.ok) throw new Error('proxy HTTP ' + r.status);
+              return r.json();
+            }).catch(function(e2){
+              Diag.err('代理也失敗: ' + (e2 && e2.message));
+              return [];
+            });
+          });
+      }
 
       Promise.all([
-        fetch(TWIPCAM_API).then(function(r){return r.json();}).catch(function(){return [];}),
-        fetch('cams.json').then(function(r){return r.json();}).catch(function(){return [];})
+        fetchTwipcam(),
+        fetch('cams.json').then(function(r){return r.json();}).catch(function(e){Diag.err('cams.json: '+e.message); return [];})
       ]).then(function(results) {
         var apiData  = results[0];
         var ytData   = results[1];
+
+        Diag.info('twipcam 筆數: ' + (Array.isArray(apiData) ? apiData.length : 'NOT ARRAY'));
+        Diag.info('cams.json 筆數: ' + (Array.isArray(ytData) ? ytData.length : 'NOT ARRAY'));
 
         // 轉換 twipcam API 資料
         if (Array.isArray(apiData)) {
           _cams = apiData
             .filter(function(c) {
-              // 只保留台灣座標範圍
               return c.lat > 21 && c.lat < 26 && c.lon > 118 && c.lon < 123;
             })
             .map(function(c) {
               var cat = classifyCam(c.id);
-              // 先名稱、失敗改座標反推
               var county = guessCounty(c.name, c.lat, c.lon);
               return {
                 id:     c.id,
@@ -951,6 +1072,7 @@
                 status: 'unknown'
               };
             });
+          Diag.ok('CCTV 過濾後: ' + _cams.length + ' 支');
         }
 
         // 載入 YouTube 頻道
@@ -967,10 +1089,18 @@
               status:  'unknown'
             };
           });
+          Diag.ok('YouTube: ' + _ytCams.length + ' 支');
         }
 
         var statEl = document.getElementById('js-stat-cams');
         if (statEl) statEl.textContent = _cams.length;
+        if (_cams.length === 0) {
+          Diag.err('CCTV 數量為 0，請檢查 API');
+          Diag.show();
+          setTimeout(function() {
+            Toast.show('\u26a0\ufe0f CCTV \u8cc7\u6599\u672a\u8f09\u5165', 4000);
+          }, 1500);
+        }
         Bus.emit('cams:updated');
       });
     },
@@ -1543,8 +1673,16 @@
     var stripBtn = document.getElementById('js-strip-btn');
     if (stripBtn) {
       stripBtn.addEventListener('click', function() {
+        console.log('[strip btn] clicked. filteredCams:', RouteMod.filteredCams.length,
+                    'RouteStripMod:', typeof RouteStripMod);
+        if (typeof RouteStripMod === 'undefined') {
+          Toast.show('\u6a21\u7d44\u672a\u8f09\u5165\uff0c\u8acb\u91cd\u65b0\u6574\u7406');
+          return;
+        }
         RouteStripMod.toggle();
       });
+    } else {
+      console.warn('[strip btn] 找不到 #js-strip-btn 按鈕');
     }
   });
 })();
@@ -2219,11 +2357,12 @@ var YoutubeMod = {
 // ===== 沿途影像輪播 =====
 var RouteStripMod = {
   show: function(cams) {
+    console.log('[RouteStripMod.show] 被呼叫, cams=', cams ? cams.length : 'null');
     var panel   = document.getElementById('route-camera-strip');
     var scroll  = document.getElementById('route-camera-strip-scroll');
     var countEl = document.getElementById('strip-count');
-    if (!panel || !scroll) return;
-    if (!cams || cams.length === 0) { RouteStripMod.hide(); return; }
+    if (!panel || !scroll) { console.warn('[RouteStripMod] panel or scroll missing'); return; }
+    if (!cams || cams.length === 0) { console.log('[RouteStripMod] 無 cams 資料，隱藏'); RouteStripMod.hide(); return; }
     // 排序：CCTV 在前，YouTube 在後
     var sorted = cams.slice().sort(function(a,b) {
       if (a.type === b.type) return 0;
@@ -2268,6 +2407,8 @@ var RouteStripMod = {
       scroll.appendChild(card);
     });
     panel.classList.add('visible');
+    panel.style.display = 'block';
+    console.log('[RouteStripMod] 顯示 panel, 卡片數:', sorted.length);
     // 縮圖延遲載入
     if ('IntersectionObserver' in window) {
       var obs = new IntersectionObserver(function(entries) {
@@ -2300,12 +2441,13 @@ var RouteStripMod = {
   },
   hide: function() {
     var panel = document.getElementById('route-camera-strip');
-    if (panel) panel.classList.remove('visible');
+    if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
   },
   toggle: function() {
     var panel = document.getElementById('route-camera-strip');
     if (!panel) return;
-    if (panel.classList.contains('visible')) {
+    var isVisible = panel.classList.contains('visible') || panel.style.display === 'block';
+    if (isVisible) {
       RouteStripMod.hide();
     } else {
       RouteStripMod.show(RouteMod.filteredCams);
