@@ -1014,44 +1014,28 @@
     weather: {},
     allCams: function() { return _cams.concat(_ytCams); },
     loadDynamic: function() {
-      // 並行載入 twipcam API + cams.json
-      var TWIPCAM_API = 'https://www.twipcam.com/api/v1/cam-list.json';
       Diag.info('開始載入資料...');
 
-      function fetchTwipcam() {
-        Diag.info('直連 twipcam API...');
-        return fetch(TWIPCAM_API, { mode: 'cors' })
-          .then(function(r) {
-            Diag.add('twipcam HTTP ' + r.status, r.ok ? 'ok' : 'err');
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-          })
-          .catch(function(err) {
-            Diag.err('twipcam 直連失敗: ' + (err && err.message));
-            Diag.info('嘗試代理...');
-            var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(TWIPCAM_API);
-            return fetch(proxy).then(function(r){
-              Diag.add('代理 HTTP ' + r.status, r.ok ? 'ok' : 'err');
-              if (!r.ok) throw new Error('proxy HTTP ' + r.status);
-              return r.json();
-            }).catch(function(e2){
-              Diag.err('代理也失敗: ' + (e2 && e2.message));
-              return [];
-            });
-          });
-      }
-
       Promise.all([
-        fetchTwipcam(),
-        fetch('cams.json').then(function(r){return r.json();}).catch(function(e){Diag.err('cams.json: '+e.message); return [];})
+        fetch('cam-list.json').then(function(r){
+          Diag.add('cam-list.json HTTP ' + r.status, r.ok ? 'ok' : 'err');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).catch(function(e){
+          Diag.err('cam-list.json 失敗: ' + e.message);
+          return [];
+        }),
+        fetch('cams.json').then(function(r){return r.json();}).catch(function(e){
+          Diag.err('cams.json: ' + e.message); return [];
+        })
       ]).then(function(results) {
         var apiData  = results[0];
         var ytData   = results[1];
 
-        Diag.info('twipcam 筆數: ' + (Array.isArray(apiData) ? apiData.length : 'NOT ARRAY'));
+        Diag.info('cam-list 筆數: ' + (Array.isArray(apiData) ? apiData.length : 'NOT ARRAY'));
         Diag.info('cams.json 筆數: ' + (Array.isArray(ytData) ? ytData.length : 'NOT ARRAY'));
 
-        // 轉換 twipcam API 資料
+        // 轉換 twipcam 資料
         if (Array.isArray(apiData)) {
           _cams = apiData
             .filter(function(c) {
@@ -1072,7 +1056,7 @@
                 status: 'unknown'
               };
             });
-          Diag.ok('CCTV 過濾後: ' + _cams.length + ' 支');
+          Diag.ok('CCTV: ' + _cams.length + ' 支');
         }
 
         // 載入 YouTube 頻道
@@ -1095,7 +1079,7 @@
         var statEl = document.getElementById('js-stat-cams');
         if (statEl) statEl.textContent = _cams.length;
         if (_cams.length === 0) {
-          Diag.err('CCTV 數量為 0，請檢查 API');
+          Diag.err('CCTV 為 0，請確認 cam-list.json 已上傳到 repo');
           Diag.show();
           setTimeout(function() {
             Toast.show('\u26a0\ufe0f CCTV \u8cc7\u6599\u672a\u8f09\u5165', 4000);
