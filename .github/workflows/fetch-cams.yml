@@ -1,0 +1,31 @@
+name: Update cam-list
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # 每 6 小時更新一次
+  workflow_dispatch:          # 也可手動觸發
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch twipcam cam-list.json
+        run: |
+          curl -sSL "https://www.twipcam.com/api/v1/cam-list.json" \
+            -H "User-Agent: Mozilla/5.0" \
+            -o cam-list.json
+          echo "筆數: $(cat cam-list.json | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d))')"
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cam-list.json
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore: update cam-list.json [skip ci]"
+            git push
+          fi
