@@ -1479,6 +1479,7 @@
 
   var ListMod = {
     region: 'all', search: '',
+    MAP_MARKER_ZOOM: 10, // 縮放 >= 10 才畫 marker
     init: function() {
       document.querySelectorAll('.rtab').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -1512,8 +1513,28 @@
       }
       var map = {};
       Data.allCams().forEach(function(c) { map[c.id] = c; });
+
+      // 地圖 marker：路線模式全畫；一般模式要縮放夠近才畫
+      var zoom = MapMod.map ? MapMod.map.getZoom() : 0;
+      var shouldDrawMarkers = RouteMod.active || zoom >= ListMod.MAP_MARKER_ZOOM;
+      var markerCams = shouldDrawMarkers ? cams : cams.filter(function(c){ return c.type === 'youtube'; });
+      markerCams.forEach(function(cam) { MapMod.addMarker(cam); });
+
+      // 地圖縮放時自動補畫/移除 marker
+      if (MapMod.map && !MapMod._zoomBound) {
+        MapMod._zoomBound = true;
+        MapMod.map.on('zoomend', function() { Bus.emit('filter:changed'); });
+      }
+
+      // 列表：全部顯示（虛擬化：只渲染可見部分）
+      // 簡化版：限制列表最多 200 筆（搜尋或篩選後才顯示全部）
+      var listCams = (ListMod.search || ListMod.region !== 'all' || RouteMod.active)
+        ? cams
+        : cams.slice(0, 200);
+      var hasMore = listCams.length < cams.length;
+
       var html = '';
-      cams.forEach(function(cam) {
+      listCams.forEach(function(cam) {
         var color = cam.type === 'youtube' ? '#ff0000' : '#f97316';
         var badge = cam.type === 'youtube'
           ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold">YT</span>'
@@ -1531,8 +1552,10 @@
           + '<div class="text-[10px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
           + '</div>'
           + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div>';
-        MapMod.addMarker(cam);
       });
+      if (hasMore) {
+        html += '<div class="text-center text-slate-500 text-xs py-4">顯示前 200 支，請選擇縣市或搜尋查看更多</div>';
+      }
       el.innerHTML = html;
       if('IntersectionObserver' in window){
         var _ob=new IntersectionObserver(function(entries){
