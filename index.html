@@ -40,24 +40,7 @@
     body.light .text-slate-400 { color: #64748b; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
-    #yt-route-panel {
-      position: fixed;
-      bottom: 5.5rem;
-      left: 12px;
-      right: 12px;
-      max-height: 55vh;
-      overflow-y: auto;
-      z-index: 1800;
-      display: none;
-      background: rgba(10,18,38,0.97);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(239,68,68,0.4);
-      border-radius: 16px;
-      padding: 14px;
-      box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
-    }
-    #yt-route-panel.visible { display: block; }
+    #yt-route-panel-removed { display:none; }
 
 ```
 /* === 沿途影像輪播 === */
@@ -198,6 +181,33 @@
   margin-left: 6px;
   margin-top: -2px;
 }
+
+/* 地名建議下拉 */
+.suggest-box { display:none; }
+.suggest-box.visible { display:block; }
+.suggest-item {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #cbd5e1;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:active { background: rgba(249,115,22,0.15); }
+.suggest-item .suggest-icon { color: #f97316; font-size: 10px; flex-shrink: 0; }
+.suggest-item .suggest-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.suggest-item .suggest-sub { color: #64748b; font-size: 10px; flex-shrink:0; }
+
+/* 路線解析按鈕動畫 */
+#js-route-btn.loading {
+  background: linear-gradient(90deg, #c2410c, #ea580c, #c2410c);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
 ```
 
   </style>
@@ -240,59 +250,67 @@
       <div class="flex-1 min-w-0">
         <input id="route-paste-input" type="text"
           class="w-full bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
-          placeholder="貼上 Google Maps 路線網址或點此展開..." />
+          placeholder="貼上 Google Maps 路線或點此展開..." />
         <div id="route-summary" class="hidden text-[10px] text-orange-400 font-bold mt-0.5 truncate"></div>
       </div>
       <button id="route-toggle" class="text-orange-500 text-xs shrink-0 hover:text-orange-400">展開</button>
       <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">&#10005;</button>
     </div>
     <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
+      <!-- 歷史路線 -->
       <div class="flex items-center justify-between">
         <button id="history-btn" class="text-[10px] text-slate-400 hover:text-orange-400 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]"></i> 最近路線</button>
         <span id="history-count" class="text-[10px] text-slate-600"></span>
       </div>
-      <div id="history-dropdown" class="hidden bg-slate-900/90 rounded-xl border border-white/10 max-h-44 overflow-y-auto">
+      <div id="history-dropdown" class="hidden bg-slate-900/90 rounded-xl border border-white/10 max-h-36 overflow-y-auto">
         <div id="history-panel"></div>
       </div>
+      <!-- Google Maps 貼入 -->
       <div class="bg-slate-800/60 rounded-xl px-3 py-2 flex items-center gap-2">
         <i class="fa-brands fa-google text-blue-400 text-xs shrink-0"></i>
         <input type="text" id="js-gmaps-url"
           class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
-          placeholder="貼上 Google Maps 路線網址（自動填入）" />
+          placeholder="貼上 Google Maps 路線網址..." />
         <button id="js-gmaps-parse" class="text-[10px] text-orange-400 font-black shrink-0 hover:text-orange-300">帶入</button>
       </div>
       <div id="js-gmaps-status" class="text-[10px] text-blue-400 px-1 hidden"></div>
+      <!-- 起點 -->
       <div class="flex gap-2 items-center">
-        <div class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shrink-0">
-          <span class="text-white text-[10px] font-black">A</span>
+        <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0 shadow shadow-green-500/40">
+          <span class="text-white text-[9px] font-black">起</span>
         </div>
         <div class="flex-1 relative">
-          <input type="text" id="js-route-start"
-            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="起點地名或座標..." />
+          <input type="text" id="js-route-start" autocomplete="off"
+            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:border-green-500/60"
+            placeholder="起點地名..." />
           <button id="clear-start" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
         </div>
       </div>
+      <div id="suggest-start" class="hidden bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
+      <!-- 停靠點 -->
       <div id="waypoints-container" class="space-y-2"></div>
+      <!-- 終點 -->
       <div class="flex gap-2 items-center">
-        <div id="end-label" class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center shrink-0">
-          <span class="text-white text-[10px] font-black">B</span>
+        <div id="end-label" class="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shrink-0 shadow shadow-red-500/40">
+          <span class="text-white text-[9px] font-black">終</span>
         </div>
         <div class="flex-1 relative">
-          <input type="text" id="js-route-end"
-            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
-            placeholder="終點地名或座標..." />
+          <input type="text" id="js-route-end" autocomplete="off"
+            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:border-red-500/60"
+            placeholder="終點地名..." />
           <button id="clear-end" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
         </div>
       </div>
-      <div class="flex gap-2">
-        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949;&#65039; 機車</button>
+      <div id="suggest-end" class="hidden bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
+      <!-- 交通模式 + 解析 -->
+      <div class="flex gap-1.5">
+        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949; 機車</button>
         <button data-mode="car" class="route-mode-btn flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">&#128663; 汽車</button>
-        <button id="route-toggle-close" class="px-3 py-1.5 rounded-xl text-xs text-slate-500 border border-white/10 bg-slate-800/50">收起</button>
+        <button id="route-toggle-close" class="px-2.5 py-1.5 rounded-xl text-xs text-slate-500 border border-white/10 bg-slate-800/50">&#8593;</button>
       </div>
       <button id="js-route-btn"
-        class="w-full bg-orange-500 hover:bg-orange-600 py-2 rounded-xl text-white font-bold text-xs transition-all active:scale-95">
-        &#128269; 解析路線找沿途攝影機
+        class="w-full bg-gradient-to-r from-orange-500 to-orange-600 py-2.5 rounded-xl text-white font-bold text-sm transition-all active:scale-95 shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-magnifying-glass-location text-sm"></i> 找沿途攝影機
       </button>
     </div>
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-400 drop-shadow-md"></div>
@@ -338,7 +356,6 @@
       <span class="text-[10px] font-bold text-orange-400">已過濾沿途攝影機</span>
       <button id="js-rb-clear" class="text-[10px] text-slate-400 hover:text-orange-400 font-bold ml-1">清除</button>
       <button id="js-strip-btn" class="text-[10px] text-orange-400 hover:text-orange-300 font-bold ml-1 flex items-center gap-1"><i class="fa-solid fa-images"></i> 影像</button>
-      <button id="js-yt-btn" class="text-[10px] text-red-400 hover:text-red-300 font-bold ml-1 flex items-center gap-1"><i class="fa-brands fa-youtube"></i> 直播</button>
     </div>
   </div>
 <!-- 圖例 -->
@@ -379,10 +396,11 @@
     </div>
     <div class="relative">
       <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
-      <input type="text" id="js-search"
-        placeholder="搜尋攝影機名稱或縣市..."
+      <input type="text" id="js-search" autocomplete="off"
+        placeholder="搜尋攝影機、地名、縣市..."
         class="w-full bg-slate-800/50 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
     </div>
+    <div id="suggest-list" class="suggest-box bg-slate-900 border border-white/10 rounded-2xl overflow-hidden"></div>
     <div id="js-list-route-info" class="hidden text-xs font-bold text-orange-400 px-1 flex items-center gap-2">
       <span class="relative flex h-2 w-2">
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
@@ -481,25 +499,7 @@
     </div>
   </nav>
 
-  <div id="yt-route-panel">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <i class="fa-brands fa-youtube" style="color:#ef4444;font-size:15px;"></i>
-        <span style="font-size:12px;font-weight:900;">沿途路況直播</span>
-      </div>
-      <button onclick="YoutubeMod.hide()" style="width:22px;height:22px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
-        <i class="fa-solid fa-xmark" style="font-size:10px;"></i>
-      </button>
-    </div>
-    <div id="yt-route-cities" style="font-size:10px;color:#fb923c;font-weight:700;margin-bottom:8px;"></div>
-    <div id="yt-embed-area" style="margin-bottom:8px;display:none;">
-      <div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;border-radius:10px;overflow:hidden;">
-        <iframe id="yt-embed-frame" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="autoplay;encrypted-media" allowfullscreen></iframe>
-      </div>
-      <div style="display:flex;gap:6px;margin-top:6px;overflow-x:auto;padding-bottom:4px;" id="yt-channel-tabs"></div>
-    </div>
-    <div id="yt-route-links"></div>
-  </div>
+  <!-- yt-route-panel removed -->
 
   <!-- 沿途影像輪播 -->
 
@@ -1006,36 +1006,24 @@
     return 'other';
   }
 
-  var _cams = []; // 從 twipcam API 動態載入
-
-  var _ytCams = []; // 從 cams.json 動態載入
+  var _cams = [];
 
   window.Data = {
     weather: {},
-    allCams: function() { return _cams.concat(_ytCams); },
+    allCams: function() { return _cams; },
     loadDynamic: function() {
       Diag.info('開始載入資料...');
       var PROXY = 'https://url-expander.lucky851228.workers.dev/cam-list';
 
-      Promise.all([
-        fetch(PROXY).then(function(r){
-          Diag.add('cam-list HTTP ' + r.status, r.ok ? 'ok' : 'err');
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        }).catch(function(e){
-          Diag.err('cam-list 失敗: ' + e.message);
-          return [];
-        }),
-        fetch('cams.json').then(function(r){return r.json();}).catch(function(e){
-          Diag.err('cams.json: ' + e.message); return [];
-        })
-      ]).then(function(results) {
-        var apiData = results[0];
-        var ytData  = results[1];
-
+      fetch(PROXY).then(function(r){
+        Diag.add('cam-list HTTP ' + r.status, r.ok ? 'ok' : 'err');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).catch(function(e){
+        Diag.err('cam-list 失敗: ' + e.message);
+        return [];
+      }).then(function(apiData) {
         Diag.info('cam-list 筆數: ' + (Array.isArray(apiData) ? apiData.length : 'NOT ARRAY'));
-        Diag.info('cams.json 筆數: ' + (Array.isArray(ytData) ? ytData.length : 'NOT ARRAY'));
-
         if (Array.isArray(apiData)) {
           _cams = apiData
             .filter(function(c) {
@@ -1058,38 +1046,20 @@
             });
           Diag.ok('CCTV: ' + _cams.length + ' 支');
         }
-
-        if (Array.isArray(ytData)) {
-          _ytCams = ytData.map(function(c) {
-            return {
-              id:      c.id,
-              name:    c.name,
-              county:  c.county,
-              lat:     c.lat,
-              lng:     c.lng,
-              videoId: c.videoId,
-              type:    'youtube',
-              status:  'unknown'
-            };
-          });
-          Diag.ok('YouTube: ' + _ytCams.length + ' 支');
-        }
-
         var statEl = document.getElementById('js-stat-cams');
         if (statEl) statEl.textContent = _cams.length;
         if (_cams.length === 0) {
           Diag.err('CCTV 為 0，Worker 可能需要更新');
           Diag.show();
-          setTimeout(function() {
-            Toast.show('\u26a0\ufe0f CCTV \u8cc7\u6599\u672a\u8f09\u5165', 4000);
-          }, 1500);
+          setTimeout(function() { Toast.show('\u26a0\ufe0f CCTV \u8cc7\u6599\u672a\u8f09\u5165', 4000); }, 1500);
         }
         Bus.emit('cams:updated');
       });
     },
     fetchWeather: function() {
-      var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001' +
-                '?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100';
+      // O-A0001 只有縣市代表站，22 筆，比 O-A0003-001 快很多
+      var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001' +
+                '?Authorization=' + Config.CWA_KEY + '&format=JSON';
       fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(json) {
@@ -1099,10 +1069,29 @@
             var c = s.GeoInfo && s.GeoInfo.CountyName;
             if (!c) return;
             var obs = s.WeatherElement;
-            if (!Data.weather[c]) Data.weather[c] = { temp: obs && obs.AirTemperature, weather: obs && obs.Weather };
+            // 覆蓋寫入（代表站資料更準）
+            Data.weather[c] = {
+              temp:    obs && obs.AirTemperature,
+              weather: obs && obs.Weather
+            };
           });
           Bus.emit('weather:updated');
-        }).catch(function() {});
+        }).catch(function() {
+          // 備援：fallback 到原本的 O-A0003-001
+          fetch('https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100')
+            .then(function(r){return r.json();})
+            .then(function(json){
+              var st = json && json.records && json.records.Station;
+              if (!Array.isArray(st)) return;
+              st.forEach(function(s) {
+                var c = s.GeoInfo && s.GeoInfo.CountyName;
+                if (!c || Data.weather[c]) return;
+                var obs = s.WeatherElement;
+                Data.weather[c] = { temp: obs && obs.AirTemperature, weather: obs && obs.Weather };
+              });
+              Bus.emit('weather:updated');
+            }).catch(function(){});
+        });
     }
   };
 
@@ -1428,9 +1417,7 @@
       RouteMod.routeCoords = coords;
       RouteMod.active = true;
       // YouTube 頻道不過濾，全部保留；CCTV 才做路線過濾
-      var ytCams = Data.allCams().filter(function(c){ return c.type === 'youtube'; });
-      var cctv   = Data.allCams().filter(function(c){ return c.type !== 'youtube'; });
-
+      var cctv = Data.allCams();
       // 縮小半徑到 5km，避免抓太多
       var FILTER_KM = 5;
       var filteredCctv = cctv.filter(function(cam) {
@@ -1468,7 +1455,7 @@
         filteredCctv = sampled;
       }
 
-      RouteMod.filteredCams = filteredCctv.concat(ytCams);
+      RouteMod.filteredCams = filteredCctv;
       MapMod.drawRoute(simplified);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(window._routeAllPoints);
@@ -1494,14 +1481,12 @@
       Bus.emit('filter:changed');
       // 沿途影像輪播（自動顯示）
       setTimeout(function() { RouteStripMod.show(RouteMod.filteredCams); }, 300);
-      setTimeout(function() { YoutubeMod.showRouteSearch(RouteMod.routeCoords); }, 400);
     },
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
       MapMod.clearRoute();
       MapMod.drawStartEnd(null); // 清除起終點標記
       RouteStripMod.hide();
-      YoutubeMod.hide();
       WaypointsMod && WaypointsMod.clearMarkers();
       window._pendingWaypoints = [];
       WaypointsMod && WaypointsMod.render([]);
@@ -1532,13 +1517,56 @@
         });
       });
       var s = document.getElementById('js-search');
-      if (s) s.addEventListener('input', function() { ListMod.search = s.value.trim().toLowerCase(); Bus.emit('filter:changed'); });
+      var suggestList = document.getElementById('suggest-list');
+      if (s) {
+        s.addEventListener('input', function() {
+          ListMod.search = s.value.trim().toLowerCase();
+          Bus.emit('filter:changed');
+          // 地名建議
+          var q = s.value.trim();
+          if (!q || q.length < 1) { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } return; }
+          PlaceSuggest.search(q, function(results) {
+            if (!suggestList) return;
+            if (!results.length) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); return; }
+            var html = results.map(function(r) {
+              return '<div class="suggest-item" data-name="'+r.name+'" data-lat="'+(r.lat||'')+'" data-lng="'+(r.lng||'')+'">'
+                + '<i class="fa-solid fa-location-dot suggest-icon"></i>'
+                + '<span class="suggest-name">'+r.name+'</span>'
+                + '<span class="suggest-sub">'+(r.sub||'')+'</span>'
+                + '</div>';
+            }).join('');
+            suggestList.innerHTML = html;
+            suggestList.classList.add('visible');
+            suggestList.querySelectorAll('.suggest-item').forEach(function(item) {
+              item.addEventListener('click', function() {
+                s.value = item.dataset.name;
+                ListMod.search = item.dataset.name.toLowerCase();
+                suggestList.innerHTML=''; suggestList.classList.remove('visible');
+                Bus.emit('filter:changed');
+                // 若有座標，飛到地圖
+                var lat = parseFloat(item.dataset.lat);
+                var lng = parseFloat(item.dataset.lng);
+                if (lat && lng && MapMod.map) {
+                  NavMod.go('map');
+                  MapMod.map.setView([lat, lng], 13);
+                }
+              });
+            });
+          });
+        });
+        s.addEventListener('blur', function() {
+          setTimeout(function() { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } }, 200);
+        });
+      }
     },
     getFiltered: function() {
       var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
       return cams.filter(function(cam) {
         var rOk = ListMod.region === 'all' || getRegion(cam.county) === ListMod.region;
-        var sOk = !ListMod.search || cam.name.toLowerCase().indexOf(ListMod.search) !== -1 || cam.county.toLowerCase().indexOf(ListMod.search) !== -1;
+        var sOk = !ListMod.search ||
+          cam.name.toLowerCase().indexOf(ListMod.search) !== -1 ||
+          cam.county.toLowerCase().indexOf(ListMod.search) !== -1 ||
+          (cam.id && cam.id.toLowerCase().indexOf(ListMod.search) !== -1);
         return rOk && sOk;
       });
     },
@@ -1702,6 +1730,26 @@
     ListMod.render();
     NearbyMod.init();
 
+    // 起終點地名建議
+    PlaceSuggest.bind('js-route-start', 'suggest-start');
+    PlaceSuggest.bind('js-route-end',   'suggest-end');
+
+    // 路線解析按鈕 loading 動畫
+    var _routeBtn = document.getElementById('js-route-btn');
+    if (_routeBtn) {
+      var _origAnalyze = RouteMod.analyze.bind(RouteMod);
+      RouteMod.analyze = function() {
+        _routeBtn.classList.add('loading');
+        _routeBtn.disabled = true;
+        _origAnalyze();
+      };
+      // 解析完成後移除 loading
+      Bus.on('filter:changed', function() {
+        _routeBtn.classList.remove('loading');
+        _routeBtn.disabled = false;
+      });
+    }
+
     // 防止 iOS Safari 輸入框縮放（font-size>=16px 才不縮放）
     // 用 touch focus 事件動態設，不影響視覺
     document.addEventListener('focusin', function(e) {
@@ -1714,19 +1762,6 @@
         e.target.style.fontSize = '';
       }
     });
-
-    // YouTube 直播按鈕
-    var ytBtn = document.getElementById('js-yt-btn');
-    if (ytBtn) {
-      ytBtn.addEventListener('click', function() {
-        var panel = document.getElementById('yt-route-panel');
-        if (panel && panel.style.display === 'block') {
-          YoutubeMod.hide();
-        } else {
-          YoutubeMod.showRouteSearch(RouteMod.routeCoords);
-        }
-      });
-    }
 
     // 沿途影像按鈕
     var stripBtn = document.getElementById('js-strip-btn');
@@ -2303,115 +2338,7 @@ var WaypointsMod = {
   }
 };
 
-var YoutubeMod = {
-  _roadNames: [], // 快取沿途路名
-
-  // 從路線座標中取樣幾個點，用 Nominatim reverse geocode 取路名
-  fetchRoadNames: function(coords, cb) {
-    if (!coords || coords.length < 2) { cb([]); return; }
-    // 取均勻分布的 5 個採樣點（避免太多 API 請求）
-    var total = coords.length;
-    var indices = [0];
-    for (var k = 1; k <= 3; k++) indices.push(Math.round(k * total / 4));
-    indices.push(total - 1);
-    // 去重
-    var seen = {};
-    indices = indices.filter(function(i){ if(seen[i]) return false; seen[i]=1; return true; });
-
-    var roads = [];
-    var done = 0;
-    indices.forEach(function(idx) {
-      var lat = coords[idx][0];
-      var lng = coords[idx][1];
-      var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng
-              + '&format=json&zoom=16&addressdetails=1';
-      (function(i) {
-        fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            var addr = data && data.address;
-            if (addr) {
-              var road = addr.road || addr.pedestrian || addr.path || '';
-              var area = addr.suburb || addr.town || addr.city_district || addr.county || '';
-              if (road) roads.push({ road: road, area: area });
-            }
-          })
-          .catch(function(){})
-          .then(function() {
-            done++;
-            if (done === indices.length) cb(roads);
-          });
-      })(idx);
-    });
-  },
-
-  // 把路名轉成 YouTube 搜尋關鍵字
-  buildSearches: function(roads) {
-    var searches = [];
-    var seen = {};
-    roads.forEach(function(r) {
-      // 清理路名：移除括號內容、只保留中文路名
-      var road = r.road.replace(/\(.*?\)/g, '').replace(/[a-zA-Z\s]/g, '').trim();
-      if (!road || road.length < 2) road = r.road.trim();
-      var area = r.area.replace(/[a-zA-Z\s]/g, '').trim();
-      if (road) {
-        var q1 = road + ' 路況 直播';
-        var q2 = (area ? area + ' ' : '') + road + ' 路況';
-        [q1, q2].forEach(function(q) {
-          if (!seen[q] && q.length > 3) { seen[q] = 1; searches.push(q); }
-        });
-      }
-    });
-    return searches.slice(0, 6);
-  },
-
-  showRouteSearch: function(coords) {
-    var panel = document.getElementById('yt-route-panel');
-    if (!panel) return;
-    var cityEl = document.getElementById('yt-route-cities');
-    var linkEl = document.getElementById('yt-route-links');
-    if (cityEl) cityEl.textContent = '正在取得沿途路名...';
-    if (linkEl) linkEl.innerHTML = '<div style="text-align:center;padding:12px;color:#64748b;font-size:11px;">載入中...</div>';
-    panel.classList.add('visible');
-    panel.style.display = 'block';
-
-    YoutubeMod.fetchRoadNames(coords || [], function(roads) {
-      YoutubeMod._roadNames = roads;
-      var searches = YoutubeMod.buildSearches(roads);
-
-      // 若沒抓到路名，退回用座標附近地名
-      if (searches.length === 0) {
-        searches = ['台灣 路況 直播', '國道 路況 live', '省道 路況 直播'];
-      }
-
-      var roadLabel = roads.slice(0,3).map(function(r){
-        var road = r.road.replace(/[a-zA-Z\s]/g,'').trim();
-        return road || r.road;
-      }).filter(Boolean).join(' → ');
-      if (cityEl) cityEl.textContent = roadLabel ? '沿途：' + roadLabel : '沿途路線';
-
-      var links = '';
-      searches.forEach(function(q) {
-        var url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
-        links += '<a href="' + url + '" target="_blank" '
-          + 'style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;'
-          + 'background:rgba(30,41,59,0.8);margin-bottom:6px;text-decoration:none;color:inherit;">'
-          + '<i class="fa-brands fa-youtube" style="color:#ef4444;flex-shrink:0;font-size:14px;"></i>'
-          + '<span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">' + q + '</span>'
-          + '<i class="fa-solid fa-arrow-up-right-from-square" style="color:#64748b;font-size:10px;flex-shrink:0;"></i>'
-          + '</a>';
-      });
-      if (linkEl) linkEl.innerHTML = links;
-    });
-  },
-
-  hide: function() {
-    var panel = document.getElementById('yt-route-panel');
-    if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
-    var frame = document.getElementById('yt-embed-frame');
-    if (frame) frame.src = '';
-  }
-};
+// YoutubeMod removed
 
 // ===== 沿途影像輪播 =====
 var RouteStripMod = {
@@ -2513,10 +2440,100 @@ var RouteStripMod = {
     }
   }
 };
-</script>
 
-<script>
-  var modal   = document.getElementById('modal');
+// ===== 地名建議模組 =====
+var PlaceSuggest = {
+  // 台灣常用地名快速候選
+  PLACES: [
+    '台北','新北','基隆','桃園','新竹','苗栗','台中','彰化','南投','雲林',
+    '嘉義','台南','高雄','屏東','宜蘭','花蓮','台東','澎湖','金門','馬祖',
+    '台北車站','台中車站','高雄車站','台南車站','桃園機場','高雄機場',
+    '墾丁','日月潭','阿里山','合歡山','太魯閣','九份','淡水','烏來',
+    '北海岸','東海岸','花東縱谷','南橫公路','北橫公路','中橫公路',
+    '蘇花公路','台11線','台9線','台1線','台3線','台17線','台61線',
+    '國道1號','國道3號','國道5號','國道6號','國道10號',
+    '中山高','二高','北宜','北二高','北部濱海'
+  ],
+  _timer: null,
+
+  // 從 Nominatim 搜尋地名（搜尋框用）
+  search: function(q, cb) {
+    if (!q || q.length < 1) { cb([]); return; }
+    var lower = q.toLowerCase();
+    // 先用本地快速候選
+    var local = PlaceSuggest.PLACES.filter(function(p) {
+      return p.toLowerCase().indexOf(lower) !== -1;
+    }).slice(0, 4).map(function(p) {
+      return { name: p, sub: '快速選擇', lat: null, lng: null };
+    });
+    // 再用 Nominatim 遠端搜尋（debounce 400ms）
+    clearTimeout(PlaceSuggest._timer);
+    PlaceSuggest._timer = setTimeout(function() {
+      var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q + ' 台灣')
+              + '&format=json&limit=5&countrycodes=tw&accept-language=zh-TW';
+      fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var remote = (data || []).map(function(item) {
+            var name = item.display_name.split(',')[0].trim();
+            var sub  = item.display_name.split(',').slice(1,3).join(',').trim();
+            return { name: name, sub: sub, lat: parseFloat(item.lat), lng: parseFloat(item.lon) };
+          });
+          // 合併去重
+          var seen = {};
+          var merged = local.concat(remote).filter(function(r) {
+            if (seen[r.name]) return false;
+            seen[r.name] = 1; return true;
+          });
+          cb(merged.slice(0, 6));
+        })
+        .catch(function() { cb(local); });
+    }, 350);
+    // 立即回傳本地結果
+    if (local.length > 0) cb(local);
+  },
+
+  // 綁定輸入框和建議框
+  bind: function(inputId, suggestId, onSelect) {
+    var inp = document.getElementById(inputId);
+    var box = document.getElementById(suggestId);
+    if (!inp || !box) return;
+
+    inp.addEventListener('input', function() {
+      var q = inp.value.trim();
+      if (!q) { box.innerHTML = ''; box.classList.remove('visible'); return; }
+      PlaceSuggest.search(q, function(results) {
+        if (!results.length) { box.innerHTML = ''; box.classList.remove('visible'); return; }
+        var html = results.map(function(r) {
+          var icon = r.lat ? 'fa-location-dot' : 'fa-road';
+          return '<div class="suggest-item" data-name="' + r.name + '" data-lat="' + (r.lat||'') + '" data-lng="' + (r.lng||'') + '">'
+            + '<i class="fa-solid ' + icon + ' suggest-icon"></i>'
+            + '<span class="suggest-name">' + r.name + '</span>'
+            + '<span class="suggest-sub">' + (r.sub||'') + '</span>'
+            + '</div>';
+        }).join('');
+        box.innerHTML = html;
+        box.classList.add('visible');
+        box.querySelectorAll('.suggest-item').forEach(function(item) {
+          item.addEventListener('click', function() {
+            var name = item.dataset.name;
+            var lat  = item.dataset.lat;
+            var lng  = item.dataset.lng;
+            inp.value = (lat && lng) ? (lat + ',' + lng) : name;
+            box.innerHTML = ''; box.classList.remove('visible');
+            var cs = document.getElementById('clear-' + inputId.replace('js-route-',''));
+            if (cs) cs.classList.remove('hidden');
+            if (onSelect) onSelect(name, lat, lng);
+          });
+        });
+      });
+    });
+
+    inp.addEventListener('blur', function() {
+      setTimeout(function() { box.innerHTML = ''; box.classList.remove('visible'); }, 200);
+    });
+  }
+};
   var modalSh = document.getElementById('modal-sh');
   window.ModalEffect = {
     open: function() {
