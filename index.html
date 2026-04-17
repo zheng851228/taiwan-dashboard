@@ -1175,41 +1175,51 @@
 
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
-    startEndMarkers: [],
+    startEndMarkers: [], _canvas: null, _camData: [],
     init: function() {
-      MapMod.map = L.map('map', { center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM, zoomControl: false });
+      MapMod.map = L.map('map', {
+        center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM,
+        zoomControl: false,
+        preferCanvas: true   // 強制 canvas 渲染，iOS 效能大幅提升
+      });
+      MapMod._canvas = L.canvas({ padding: 0.5 });
       MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
     },
     setTile: function(url) { if (MapMod.tileLayer) MapMod.tileLayer.setUrl(url); },
     clearMarkers: function() {
       MapMod.markers.forEach(function(m) { MapMod.map.removeLayer(m); });
       MapMod.markers = [];
-      // 攝影機清除後補畫起終點
+      MapMod._camData = [];
       setTimeout(function() { MapMod.redrawStartEnd(); }, 0);
     },
     addMarker: function(cam) {
-      var color, label, sz;
+      var color, radius;
       if (cam.type === 'youtube') {
-        color = '#ff0000'; label = 'YT'; sz = 16;
+        color = '#ff0000'; radius = 8;
       } else {
-        sz = 11;
-        label = '';
+        radius = 6;
         var cat = cam.cat || (cam.id && cam.id.charAt(0) === 'n' ? 'highway' : 'provincial');
-        if (cat === 'highway')    color = '#3b82f6'; // 國道 藍
-        else if (cat === 'expressway') color = '#a855f7'; // 快速道路 紫
-        else if (cat === 'scenic')     color = '#22c55e'; // 景點 綠
-        else if (cat === 'city')       color = '#f59e0b'; // 市區 黃
-        else                           color = '#f97316'; // 省道 橘
+        if (cat === 'highway')         color = '#3b82f6';
+        else if (cat === 'expressway') color = '#a855f7';
+        else if (cat === 'scenic')     color = '#22c55e';
+        else if (cat === 'city')       color = '#f59e0b';
+        else                           color = '#f97316';
       }
-      var dotHtml = '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid rgba(255,255,255,0.7);box-shadow:0 0 6px '+color+';display:flex;align-items:center;justify-content:center;">'
-        + (cam.type==='youtube' ? '<span style="font-size:7px;font-weight:900;color:#fff;line-height:1;">YT</span>' : '')
-        + '</div>';
-      var icon = L.divIcon({ className:'', html: dotHtml, iconSize:[sz,sz], iconAnchor:[sz/2,sz/2] });
-      var marker = L.marker([cam.lat, cam.lng], { icon: icon })
-        .addTo(MapMod.map)
-        .bindTooltip(cam.name, { direction:'top', offset:[0,-8] });
+      var marker = L.circleMarker([cam.lat, cam.lng], {
+        renderer:    MapMod._canvas,
+        radius:      radius,
+        color:       'rgba(255,255,255,0.6)',
+        weight:      1.5,
+        fillColor:   color,
+        fillOpacity: 0.95
+      }).addTo(MapMod.map);
       marker.on('click', function() { InfoMod.open(cam); });
+      // tooltip 只在縮放夠大時顯示（避免大量 DOM）
+      if (MapMod.map.getZoom() >= 12) {
+        marker.bindTooltip(cam.name, { direction:'top', offset:[0,-6] });
+      }
       MapMod.markers.push(marker);
+      MapMod._camData.push(cam);
     },
     drawRoute: function(coords) {
       if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
@@ -1420,12 +1430,44 @@
       // YouTube 頻道不過濾，全部保留；CCTV 才做路線過濾
       var ytCams = Data.allCams().filter(function(c){ return c.type === 'youtube'; });
       var cctv   = Data.allCams().filter(function(c){ return c.type !== 'youtube'; });
+
+      // 縮小半徑到 5km，避免抓太多
+      var FILTER_KM = 5;
       var filteredCctv = cctv.filter(function(cam) {
         for (var i = 0; i < simplified.length-1; i++) {
-          if (distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]) <= Config.ROUTE_FILTER_KM) return true;
+          if (distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]) <= FILTER_KM) return true;
         }
         return false;
       });
+
+      // 沿路均勻取樣，最多 50 支 CCTV（避免 lag）
+      var MAX_CCTV = 50;
+      if (filteredCctv.length > MAX_CCTV) {
+        // 計算每支攝影機最近的路線點位置，排序後均勻取樣
+        filteredCctv = filteredCctv.map(function(cam) {
+          var minD = 1e9, bestT = 0;
+          for (var i = 0; i < simplified.length-1; i++) {
+            var dx = simplified[i+1][0]-simplified[i][0];
+            var dy = simplified[i+1][1]-simplified[i][1];
+            var len = dx*dx+dy*dy;
+            var t = len ? ((cam.lat-simplified[i][0])*dx+(cam.lng-simplified[i][1])*dy)/len : 0;
+            t = Math.max(0,Math.min(1,t));
+            var d = distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]);
+            if (d < minD) { minD = d; bestT = i + t; }
+          }
+          cam._routePos = bestT;
+          return cam;
+        }).sort(function(a,b){ return a._routePos - b._routePos; });
+
+        // 均勻取 MAX_CCTV 支
+        var step = filteredCctv.length / MAX_CCTV;
+        var sampled = [];
+        for (var si = 0; si < MAX_CCTV; si++) {
+          sampled.push(filteredCctv[Math.round(si * step)]);
+        }
+        filteredCctv = sampled;
+      }
+
       RouteMod.filteredCams = filteredCctv.concat(ytCams);
       MapMod.drawRoute(simplified);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
@@ -1520,10 +1562,14 @@
       var markerCams = shouldDrawMarkers ? cams : cams.filter(function(c){ return c.type === 'youtube'; });
       markerCams.forEach(function(cam) { MapMod.addMarker(cam); });
 
-      // 地圖縮放時自動補畫/移除 marker
+      // 地圖縮放時自動補畫/移除 marker（debounce 300ms）
       if (MapMod.map && !MapMod._zoomBound) {
         MapMod._zoomBound = true;
-        MapMod.map.on('zoomend', function() { Bus.emit('filter:changed'); });
+        var _zt;
+        MapMod.map.on('zoomend', function() {
+          clearTimeout(_zt);
+          _zt = setTimeout(function() { Bus.emit('filter:changed'); }, 300);
+        });
       }
 
       // 列表：全部顯示（虛擬化：只渲染可見部分）
@@ -1642,10 +1688,17 @@
     RouteMod.init();
     ListMod.init();
     InfoMod.init();
-    Bus.on('filter:changed',  function() { ListMod.render(); });
-    Bus.on('cams:updated',    function() { ListMod.render(); });
-    Bus.on('weather:updated', function() { ListMod.render(); });
-    Bus.on('status:updated',  function() { ListMod.render(); });
+
+    // render 加 debounce，避免短時間內多次觸發（天氣+資料同時到達時）
+    var _renderTimer;
+    function debouncedRender() {
+      clearTimeout(_renderTimer);
+      _renderTimer = setTimeout(function() { ListMod.render(); }, 80);
+    }
+    Bus.on('filter:changed',  debouncedRender);
+    Bus.on('cams:updated',    debouncedRender);
+    Bus.on('weather:updated', debouncedRender);
+    Bus.on('status:updated',  debouncedRender);
     ListMod.render();
     NearbyMod.init();
 
