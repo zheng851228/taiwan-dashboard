@@ -1291,14 +1291,47 @@
       MapMod.markers.push(marker);
       MapMod._camData.push(cam);
     },
-    drawRoute: function(coords) {
-      if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
+    drawRoute: function(coords, mode) {
+      if (MapMod.routeLayer) {
+        if (Array.isArray(MapMod.routeLayer)) {
+          MapMod.routeLayer.forEach(function(l) { MapMod.map.removeLayer(l); });
+        } else {
+          MapMod.map.removeLayer(MapMod.routeLayer);
+        }
+        MapMod.routeLayer = null;
+      }
       if (!coords || coords.length < 2) return;
-      MapMod.routeLayer = L.polyline(coords.map(function(c){return[c[0],c[1]];}), { color:'#f97316', weight:3, opacity:0.8, dashArray:'8,4' }).addTo(MapMod.map);
-      MapMod.map.fitBounds(MapMod.routeLayer.getBounds(), { padding:[40,40] });
+      var latlngs = coords.map(function(c) { return [c[0], c[1]]; });
+      var isMoto = (mode !== 'car');
+      // 主色：機車橘漸層感 / 汽車藍
+      var mainColor  = isMoto ? '#f97316' : '#3b82f6';
+      var glowColor  = isMoto ? '#fb923c' : '#60a5fa';
+      var coreColor  = isMoto ? '#fff7ed' : '#eff6ff';
+
+      // 三層：底層（光暈）→ 中層（主色）→ 頂層（亮芯）
+      var glow = L.polyline(latlngs, {
+        color: glowColor, weight: 10, opacity: 0.18, lineCap: 'round', lineJoin: 'round'
+      }).addTo(MapMod.map);
+      var main = L.polyline(latlngs, {
+        color: mainColor, weight: 5, opacity: 1.0, lineCap: 'round', lineJoin: 'round'
+      }).addTo(MapMod.map);
+      var core = L.polyline(latlngs, {
+        color: coreColor, weight: 1.5, opacity: 0.55, lineCap: 'round', lineJoin: 'round'
+      }).addTo(MapMod.map);
+
+      MapMod.routeLayer = [glow, main, core];
+      var bounds = main.getBounds();
+      MapMod.map.fitBounds(bounds, { padding: [40, 40] });
     },
     clearRoute: function() {
-      if (MapMod.routeLayer) { MapMod.map.removeLayer(MapMod.routeLayer); MapMod.routeLayer = null; }
+      if (MapMod.routeLayer) {
+        if (Array.isArray(MapMod.routeLayer)) {
+          MapMod.routeLayer.forEach(function(l) { MapMod.map.removeLayer(l); });
+        } else {
+          MapMod.map.removeLayer(MapMod.routeLayer);
+        }
+        MapMod.routeLayer = null;
+      }
     },
     drawStartEnd: function(pts) {
       MapMod.startEndMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
@@ -1537,7 +1570,7 @@
       }
 
       RouteMod.filteredCams = filteredCctv;
-      MapMod.drawRoute(simplified);
+      MapMod.drawRoute(simplified, RouteMod.mode);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(window._routeAllPoints);
       var st = document.getElementById('js-route-status');
