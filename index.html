@@ -833,40 +833,120 @@
   };
 
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
-    var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
-    var baseUrl = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson&alternatives=false';
+    // 使用 Valhalla（Stadia Maps 公開端點），有真正的 motorcycle profile
+    var VALHALLA = 'https://valhalla1.openstreetmap.de/route';
 
-    function parseRoute(data) {
-      if (!data || !data.routes || !data.routes[0]) return null;
-      var geom = data.routes[0].geometry;
-      if (!geom || !geom.coordinates) return null;
-      window._lastRouteInfo = {
-        distance: Math.round(data.routes[0].distance / 1000),
-        duration: Math.round(data.routes[0].duration / 60)
-      };
-      return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
+    function buildBody(costing) {
+      return JSON.stringify({
+        locations: [
+          { lat: startLatLng[0], lon: startLatLng[1] },
+          { lat: endLatLng[0],   lon: endLatLng[1]   }
+        ],
+        costing: costing,
+        costing_options: costing === 'motorcycle' ? {
+          motorcycle: { use_highways: 0.0, use_tolls: 0.0, use_trails: 0.1 }
+        } : {
+          auto: { use_highways: 1.0, use_tolls: 1.0 }
+        },
+        units: 'kilometers',
+        language: 'zh-TW'
+      });
     }
 
-    function fetchRoute(url) {
-      return fetch(url)
-        .then(function(r) { return r.json(); })
-        .then(parseRoute)
-        .catch(function() { return null; });
+    function fetchValhalla(costing) {
+      return fetch(VALHALLA, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: buildBody(costing)
+      })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data) {
+        if (!data.trip || !data.trip.legs) return null;
+        var coords = [];
+        data.trip.legs.forEach(function(leg) {
+          if (leg.shape) {
+            // Valhalla shape 是 encoded polyline6
+            var decoded = decodePolyline6(leg.shape);
+            coords = coords.concat(decoded);
+          }
+        });
+        if (coords.length < 5) return null;
+        var summary = data.trip.summary;
+        window._lastRouteInfo = {
+          distance: Math.round(summary.length),
+          duration: Math.round(summary.time / 60)
+        };
+        return coords;
+      })
+      .catch(function() { return null; });
     }
 
     if (mode === 'motorcycle') {
-      // 機車：排除國道(motorway)、快速道路(trunk)、收費路段(toll)
-      var excludeUrl = baseUrl + '&exclude=motorway,trunk,toll';
-      return fetchRoute(excludeUrl)
-        .then(function(r) { return r || [startLatLng, endLatLng]; })
-        .catch(function() { return [startLatLng, endLatLng]; });
+      // 機車：use_highways=0, use_tolls=0（盡量走省道，避開國道收費）
+      return fetchValhalla('motorcycle')
+        .then(function(r) {
+          if (r) return r;
+          // fallback 到 OSRM
+          return fetchOSRM(startLatLng, endLatLng, 'motorcycle');
+        })
+        .then(function(r) { return r || [startLatLng, endLatLng]; });
     }
 
-    // 汽車：走完整路網（含國道）
-    return fetchRoute(baseUrl)
-      .then(function(r) { return r || [startLatLng, endLatLng]; })
-      .catch(function() { return [startLatLng, endLatLng]; });
+    // 汽車：走最快路線含國道
+    return fetchValhalla('auto')
+      .then(function(r) {
+        if (r) return r;
+        return fetchOSRM(startLatLng, endLatLng, 'car');
+      })
+      .then(function(r) { return r || [startLatLng, endLatLng]; });
   };
+
+  // OSRM fallback
+  function fetchOSRM(startLatLng, endLatLng, mode) {
+    var coords = startLatLng[1] + ',' + startLatLng[0] + ';' + endLatLng[1] + ',' + endLatLng[0];
+    var url = 'https://router.project-osrm.org/route/v1/driving/' + coords
+            + '?overview=full&geometries=geojson'
+            + (mode === 'motorcycle' ? '&exclude=motorway,toll' : '');
+    return fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.routes || !data.routes[0]) return null;
+        var geom = data.routes[0].geometry;
+        if (!geom || !geom.coordinates || geom.coordinates.length < 5) return null;
+        window._lastRouteInfo = {
+          distance: Math.round(data.routes[0].distance / 1000),
+          duration: Math.round(data.routes[0].duration / 60)
+        };
+        return geom.coordinates.map(function(c) { return [c[1], c[0]]; });
+      })
+      .catch(function() { return null; });
+  }
+
+  // Valhalla encoded polyline6 解碼
+  function decodePolyline6(str) {
+    var coords = [];
+    var index = 0, lat = 0, lng = 0;
+    while (index < str.length) {
+      var b, shift = 0, result = 0;
+      do {
+        b = str.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      var dlat = (result & 1) ? ~(result >> 1) : (result >> 1);
+      lat += dlat;
+      shift = 0; result = 0;
+      do {
+        b = str.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      var dlng = (result & 1) ? ~(result >> 1) : (result >> 1);
+      lng += dlng;
+      coords.push([lat / 1e6, lng / 1e6]);
+    }
+    return coords;
+  }
 
   window.parseRouteFromUrl = function(url) {
     var coords = parseGoogleMapsCoords(url);
