@@ -3,7 +3,7 @@
 <html lang="zh-TW" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>環島路況指揮中心</title>
@@ -17,6 +17,7 @@
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700;900&display=swap');
     :root { --primary: #f97316; --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
     body { font-family: 'Inter','Noto Sans TC',sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden; background: #060d1f; }
+    input, textarea, select { font-size: 16px !important; }  /* 防 iOS Safari 自動縮放 */
     .pg { display: none; animation: fadeIn 0.3s ease-out; }
     .pg.active { display: block; position: absolute; inset: 0; }
     #pg-map.active { display: block; }
@@ -316,18 +317,18 @@
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-400 drop-shadow-md"></div>
   </div>
 
-  <div class="absolute bottom-[8rem] right-4 z-[500] flex flex-col gap-3">
+  <div class="absolute bottom-[8rem] left-4 z-[500] flex flex-col gap-3">
     <button id="js-fullscreen"
-      class="w-12 h-12 glass rounded-full shadow-2xl flex items-center justify-center text-slate-400 hover:text-orange-500 hover:scale-110 active:scale-90 transition-all">
-      <i class="fa-solid fa-expand text-xl"></i>
+      class="w-11 h-11 glass rounded-full shadow-2xl flex items-center justify-center text-slate-400 hover:text-orange-500 active:scale-90 transition-all">
+      <i class="fa-solid fa-expand text-lg"></i>
     </button>
     <button id="js-loc"
-      class="w-12 h-12 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 hover:scale-110 active:scale-90 transition-all">
-      <i class="fa-solid fa-location-crosshairs text-xl"></i>
+      class="w-11 h-11 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 active:scale-90 transition-all">
+      <i class="fa-solid fa-location-crosshairs text-lg"></i>
     </button>
   </div>
 
-  <div id="nearby-panel" class="hidden absolute bottom-[8.5rem] right-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
+  <div id="nearby-panel" class="hidden absolute bottom-[8.5rem] left-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
     <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
       <div class="flex items-center gap-2">
         <span class="text-orange-500 text-sm">&#128205;</span>
@@ -854,14 +855,14 @@
     }
 
     if (mode === 'motorcycle') {
-      var excludeUrl = baseUrl + '&exclude=motorway,trunk';
-      return Promise.all([fetchRoute(excludeUrl), fetchRoute(baseUrl)])
-        .then(function(results) {
-          return results[0] || results[1] || [startLatLng, endLatLng];
-        })
+      // 機車：排除國道(motorway)、快速道路(trunk)、收費路段(toll)
+      var excludeUrl = baseUrl + '&exclude=motorway,trunk,toll';
+      return fetchRoute(excludeUrl)
+        .then(function(r) { return r || [startLatLng, endLatLng]; })
         .catch(function() { return [startLatLng, endLatLng]; });
     }
 
+    // 汽車：走完整路網（含國道）
     return fetchRoute(baseUrl)
       .then(function(r) { return r || [startLatLng, endLatLng]; })
       .catch(function() { return [startLatLng, endLatLng]; });
@@ -1750,18 +1751,7 @@
       });
     }
 
-    // 防止 iOS Safari 輸入框縮放（font-size>=16px 才不縮放）
-    // 用 touch focus 事件動態設，不影響視覺
-    document.addEventListener('focusin', function(e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        e.target.style.fontSize = '16px';
-      }
-    });
-    document.addEventListener('focusout', function(e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        e.target.style.fontSize = '';
-      }
-    });
+    // iOS Safari：輸入框 font-size 固定 16px，防止縮放（純 CSS 解法更穩定）
 
     // 沿途影像按鈕
     var stripBtn = document.getElementById('js-strip-btn');
