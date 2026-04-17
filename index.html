@@ -41,7 +41,6 @@
     body.light .text-slate-400 { color: #64748b; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
-    #yt-route-panel-removed { display:none; }
 
 ```
 /* === 沿途影像輪播 === */
@@ -378,10 +377,6 @@
     <div style="width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0;box-shadow:0 0 4px #22c55e;"></div>
     <span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">景點</span>
   </div>
-  <div style="display:flex;align-items:center;gap:6px;">
-    <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0;box-shadow:0 0 4px #ef4444;display:flex;align-items:center;justify-content:center;font-size:5px;font-weight:900;color:#fff;">YT</div>
-    <span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">直播</span>
-  </div>
 </div>
 </section>
 
@@ -499,8 +494,6 @@
       </button>
     </div>
   </nav>
-
-  <!-- yt-route-panel removed -->
 
   <!-- 沿途影像輪播 -->
 
@@ -948,23 +941,6 @@
     return coords;
   }
 
-  window.parseRouteFromUrl = function(url) {
-    var coords = parseGoogleMapsCoords(url);
-    if (coords.length >= 2) return Promise.resolve(coords);
-    var dirMatch = url.match(/\/dir\/([^@?#]+)/);
-    if (!dirMatch) return Promise.resolve([]);
-    var parts = dirMatch[1].split('/').map(function(p) {
-      return decodeURIComponent(p.replace(/\+/g,' ')).trim();
-    }).filter(function(p) { return p.length > 0; });
-    if (parts.length < 2) return Promise.resolve([]);
-    var waypoints = [parts[0], parts[parts.length-1]];
-    return Promise.all(waypoints.map(function(name) {
-      var m = name.match(/^(-?\d+\.?\d*),(-?\d+\.?\d*)$/);
-      if (m) return Promise.resolve([parseFloat(m[1]), parseFloat(m[2])]);
-      return geocodeName(name);
-    })).then(function(results) { return results.filter(function(r) { return r !== null; }); });
-  };
-
   window.expandGoogleUrl = function(url) {
     if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) {
       return Promise.resolve(url);
@@ -1138,40 +1114,34 @@
       });
     },
     fetchWeather: function() {
-      // O-A0001 只有縣市代表站，22 筆，比 O-A0003-001 快很多
-      var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001' +
-                '?Authorization=' + Config.CWA_KEY + '&format=JSON';
-      fetch(url)
-        .then(function(r) { return r.json(); })
-        .then(function(json) {
-          var st = json && json.records && json.records.Station;
-          if (!Array.isArray(st)) return;
-          st.forEach(function(s) {
-            var c = s.GeoInfo && s.GeoInfo.CountyName;
-            if (!c) return;
-            var obs = s.WeatherElement;
-            // 覆蓋寫入（代表站資料更準）
-            Data.weather[c] = {
-              temp:    obs && obs.AirTemperature,
-              weather: obs && obs.Weather
-            };
+      var PROXY = 'https://url-expander.lucky851228.workers.dev/weather';
+      fetch(PROXY)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(result) {
+          // Worker 已整理好：{ 台北市: { temp, weather, name, town }, ... }
+          Object.keys(result).forEach(function(county) {
+            Data.weather[county] = result[county];
           });
           Bus.emit('weather:updated');
-        }).catch(function() {
-          // 備援：fallback 到原本的 O-A0003-001
-          fetch('https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=' + Config.CWA_KEY + '&format=JSON&limit=100')
-            .then(function(r){return r.json();})
-            .then(function(json){
-              var st = json && json.records && json.records.Station;
-              if (!Array.isArray(st)) return;
-              st.forEach(function(s) {
-                var c = s.GeoInfo && s.GeoInfo.CountyName;
-                if (!c || Data.weather[c]) return;
-                var obs = s.WeatherElement;
-                Data.weather[c] = { temp: obs && obs.AirTemperature, weather: obs && obs.Weather };
-              });
-              Bus.emit('weather:updated');
-            }).catch(function(){});
+        })
+        .catch(function() {
+          // fallback 直連 CWA
+          var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001' +
+                    '?Authorization=' + Config.CWA_KEY + '&format=JSON';
+          fetch(url).then(function(r){return r.json();}).then(function(json){
+            var st = json && json.records && json.records.Station;
+            if (!Array.isArray(st)) return;
+            st.forEach(function(s) {
+              var c = s.GeoInfo && s.GeoInfo.CountyName;
+              if (!c) return;
+              var obs = s.WeatherElement;
+              Data.weather[c] = { temp: obs && obs.AirTemperature, weather: obs && obs.Weather };
+            });
+            Bus.emit('weather:updated');
+          }).catch(function(){});
         });
     }
   };
@@ -1698,11 +1668,11 @@
       var map = {};
       Data.allCams().forEach(function(c) { map[c.id] = c; });
 
-      // 地圖 marker：路線模式全畫；一般模式要縮放夠近才畫
+      // 地圖 marker：路線模式全畫；一般模式縮放夠近才畫
       var zoom = MapMod.map ? MapMod.map.getZoom() : 0;
-      var shouldDrawMarkers = RouteMod.active || zoom >= ListMod.MAP_MARKER_ZOOM;
-      var markerCams = shouldDrawMarkers ? cams : cams.filter(function(c){ return c.type === 'youtube'; });
-      markerCams.forEach(function(cam) { MapMod.addMarker(cam); });
+      if (RouteMod.active || zoom >= ListMod.MAP_MARKER_ZOOM) {
+        cams.forEach(function(cam) { MapMod.addMarker(cam); });
+      }
 
       // 地圖縮放時自動補畫/移除 marker（debounce 300ms）
       if (MapMod.map && !MapMod._zoomBound) {
@@ -1723,20 +1693,17 @@
 
       var html = '';
       listCams.forEach(function(cam) {
-        var color = cam.type === 'youtube' ? '#ff0000' : '#f97316';
-        var badge = cam.type === 'youtube'
-          ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold">YT</span>'
-          : '<span class="text-[10px] bg-white/10 text-slate-400 px-2 py-0.5 rounded-full">CCTV</span>';
         var w  = Data.weather[cam.county];
         var wt = w ? (w.temp + '\u00B0C') : '';
-        var _ts=cam.url?(cam.url+(cam.url.indexOf('?')!==-1?'&':'?')+'t='+Math.floor(Date.now()/60000)):'';
+        var catLabel = cam.cat === 'highway' ? '\u570b\u9053' : cam.cat === 'expressway' ? '\u5feb\u9053' : cam.cat === 'scenic' ? '\u666f\u9ede' : '\u7701\u9053';
+        var _ts = cam.url ? (cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000)) : '';
         html += '<div class="cam-card glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
           + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
           + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
           + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+_ts+'" />'
           + '</div>'
           + '<div class="flex-1 min-w-0">'
-          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+cam.name+' '+badge+'</div>'
+          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+cam.name+' <span class="text-[10px] bg-white/10 text-slate-400 px-1.5 py-0.5 rounded-full shrink-0">'+catLabel+'</span></div>'
           + '<div class="text-[10px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
           + '</div>'
           + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div>';
@@ -1840,7 +1807,6 @@
     Bus.on('filter:changed',  debouncedRender);
     Bus.on('cams:updated',    debouncedRender);
     Bus.on('weather:updated', debouncedRender);
-    Bus.on('status:updated',  debouncedRender);
     ListMod.render();
     NearbyMod.init();
 
@@ -1869,17 +1835,7 @@
     // 沿途影像按鈕
     var stripBtn = document.getElementById('js-strip-btn');
     if (stripBtn) {
-      stripBtn.addEventListener('click', function() {
-        console.log('[strip btn] clicked. filteredCams:', RouteMod.filteredCams.length,
-                    'RouteStripMod:', typeof RouteStripMod);
-        if (typeof RouteStripMod === 'undefined') {
-          Toast.show('\u6a21\u7d44\u672a\u8f09\u5165\uff0c\u8acb\u91cd\u65b0\u6574\u7406');
-          return;
-        }
-        RouteStripMod.toggle();
-      });
-    } else {
-      console.warn('[strip btn] 找不到 #js-strip-btn 按鈕');
+      stripBtn.addEventListener('click', function() { RouteStripMod.toggle(); });
     }
   });
 })();
@@ -2006,27 +1962,45 @@ var NearbyMod = {
   locate: function() {
     if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
     var btn = document.getElementById('js-loc');
-    if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-2xl"></i>';
-    navigator.geolocation.getCurrentPosition(
-      function(pos) {
-        if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
-        NearbyMod.userLat = pos.coords.latitude;
-        NearbyMod.userLng = pos.coords.longitude;
-        NearbyMod.showOnMap(); NearbyMod.render(); NearbyMod.show();
-        var _sEl = document.getElementById('js-route-start');
-        if (_sEl && !_sEl.value) {
-          _sEl.value = pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6);
-          var _cs = document.getElementById('clear-start'); if(_cs) _cs.classList.remove('hidden');
-          Toast.show('已定位！位置已帶入為起點', 3000);
-        }
-      },
-      function(err) {
-        if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-2xl"></i>';
-        var msg = err.code === 1 ? '\u5b9a\u4f4d\u6b0a\u9650\u88ab\u62d2\u7d55' : err.code === 2 ? '\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e' : '\u5b9a\u4f4d\u903e\u6642';
-        Toast.show(msg);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-lg"></i>';
+    Toast.show('\u5b9a\u4f4d\u4e2d...', 8000);
+
+    function onSuccess(pos) {
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-lg"></i>';
+      NearbyMod.userLat = pos.coords.latitude;
+      NearbyMod.userLng = pos.coords.longitude;
+      var acc = Math.round(pos.coords.accuracy);
+      NearbyMod.showOnMap();
+      NearbyMod.render();
+      NearbyMod.show();
+      var sEl = document.getElementById('js-route-start');
+      if (sEl && !sEl.value) {
+        sEl.value = pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6);
+        var cs = document.getElementById('clear-start');
+        if (cs) cs.classList.remove('hidden');
+      }
+      Toast.show('\u5b9a\u4f4d\u6210\u529f\uff01\u7cbe\u78ba\u5ea6 \u00b1' + acc + 'm', 3000);
+    }
+
+    function onError(err) {
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-location-crosshairs text-lg"></i>';
+      var msgs = { 1: '\u8acb\u5141\u8a31\u4f4d\u7f6e\u6b0a\u9650\uff08\u8a2d\u5b9a > Safari > \u4f4d\u7f6e\uff09', 2: '\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e', 3: '\u5b9a\u4f4d\u903e\u6642\uff0c\u8acb\u91cd\u8a66' };
+      Toast.show(msgs[err.code] || '\u5b9a\u4f4d\u5931\u6557', 4000);
+    }
+
+    // 第一次：允許快取位置（快速回應）
+    navigator.geolocation.getCurrentPosition(onSuccess, function() {
+      // 失敗則重試精確定位
+      navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0
+      });
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 30000
+    });
   },
   showOnMap: function() {
     if (!NearbyMod.userLat) return;
@@ -2331,8 +2305,7 @@ var HistoryMod = {
 };
 
 var WaypointsMod = {
-  LETTERS: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-  COLORS: ['#22c55e','#f97316','#3b82f6','#a855f7','#ec4899','#14b8a6','#f59e0b','#ef4444'],
+  COLORS: ['#f97316','#3b82f6','#a855f7','#ec4899','#14b8a6','#f59e0b'],
 
   render: function(waypoints) {
     var container = document.getElementById('waypoints-container');
@@ -2340,77 +2313,37 @@ var WaypointsMod = {
     container.innerHTML = '';
     var wps = waypoints || window._pendingWaypoints || [];
     wps.forEach(function(wp, idx) {
-      var letter = WaypointsMod.LETTERS[idx + 1] || (idx + 2).toString();
-      var color  = WaypointsMod.COLORS[(idx + 1) % WaypointsMod.COLORS.length];
+      var color = WaypointsMod.COLORS[idx % WaypointsMod.COLORS.length];
+      var label = idx + 1;
       var div = document.createElement('div');
       div.className = 'flex gap-2 items-center';
       div.innerHTML =
-        '<div class="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style="background:' + color + '">' +
-          '<span class="text-white text-[10px] font-black">' + letter + '</span>' +
+        '<div class="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style="background:' + color + '">' +
+          '<span class="text-white text-[9px] font-black">' + label + '</span>' +
         '</div>' +
         '<div class="flex-1 relative">' +
-          '<input type="text" class="wp-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + (wp || '') + '" placeholder="停靠點 ' + letter + '" />' +
+          '<input type="text" class="wp-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + (wp || '') + '" placeholder="停靠點 ' + label + '" />' +
           '<button class="wp-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 text-xs leading-none" data-idx="' + idx + '">&#10005;</button>' +
         '</div>';
       container.appendChild(div);
       div.querySelector('.wp-clear').addEventListener('click', function() {
-        var i = parseInt(this.dataset.idx);
-        window._pendingWaypoints.splice(i, 1);
+        window._pendingWaypoints.splice(parseInt(this.dataset.idx), 1);
         WaypointsMod.render(window._pendingWaypoints);
-        WaypointsMod.updateEndLabel();
       });
       div.querySelector('.wp-input').addEventListener('input', function() {
-        var i = parseInt(this.dataset.idx);
-        window._pendingWaypoints[i] = this.value;
+        window._pendingWaypoints[parseInt(this.dataset.idx)] = this.value;
       });
     });
-    WaypointsMod.updateEndLabel();
   },
 
-  updateEndLabel: function() {
-    var wps = window._pendingWaypoints || [];
-    var endIdx = wps.length + 1;
-    var letter = WaypointsMod.LETTERS[endIdx] || (endIdx + 1).toString();
-    var endLabel = document.getElementById('end-label');
-    if (endLabel) endLabel.querySelector('span').textContent = letter;
-  },
+  updateEndLabel: function() {},
 
   getWaypoints: function() {
-    var inputs = document.querySelectorAll('.wp-input');
     var result = [];
-    inputs.forEach(function(inp) { if (inp.value.trim()) result.push(inp.value.trim()); });
-    return result;
-  },
-
-  drawMarkers: function(points) {
-    if (!window._waypointMapMarkers) window._waypointMapMarkers = [];
-    window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
-    window._waypointMapMarkers = [];
-    points.forEach(function(pt, ptIdx) {
-      var isFirst   = (ptIdx === 0);
-      var isLast    = (ptIdx === points.length - 1);
-      var isSpecial = isFirst || isLast;
-      var bg    = isFirst ? '#22c55e' : (isLast ? '#ef4444' : '#f97316');
-      var label = isFirst ? '起' : (isLast ? '終' : (pt.label || String(ptIdx+1)));
-      var sz    = isSpecial ? 32 : 18;
-      var fs    = isSpecial ? 13 : 9;
-      // 圓點 + 下方文字標籤
-      var tag   = isFirst ? '起點' : (isLast ? '終點' : '');
-      var tagHtml = tag ? ('<div style="margin-top:2px;background:' + bg + ';color:#fff;font-size:9px;font-weight:900;padding:1px 5px;border-radius:3px;white-space:nowrap;">' + tag + '</div>') : '';
-      var html  = '<div style="text-align:center;">'
-        + '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:' + bg + ';border:2px solid #fff;box-shadow:0 0 8px ' + bg + ';display:inline-flex;align-items:center;justify-content:center;font-size:' + fs + 'px;font-weight:900;color:#fff;">' + label + '</div>'
-        + tagHtml
-        + '</div>';
-      var totalH = isSpecial ? sz + 16 : sz;
-      var icon = L.divIcon({
-        className: '',
-        html: html,
-        iconSize:   [sz, totalH],
-        iconAnchor: [sz/2, sz/2]
-      });
-      var m = L.marker([pt.lat, pt.lng], { icon: icon, zIndexOffset: isSpecial ? 2000 : 500 }).addTo(MapMod.map);
-      window._waypointMapMarkers.push(m);
+    document.querySelectorAll('.wp-input').forEach(function(inp) {
+      if (inp.value.trim()) result.push(inp.value.trim());
     });
+    return result;
   },
 
   clearMarkers: function() {
@@ -2418,45 +2351,18 @@ var WaypointsMod = {
       window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
       window._waypointMapMarkers = [];
     }
-  },
-
-  drawRouteLabels: function() {
-    var pts = window._routeAllPoints;
-    if (!pts || pts.length < 2) return;
-    var labels = WaypointsMod.LETTERS;
-    var totalPts = pts.length;
-    var mapPoints = pts.map(function(pt, i) {
-      var isEnd = (i === totalPts - 1);
-      var color = isEnd
-        ? '#ef4444'
-        : WaypointsMod.COLORS[i % (WaypointsMod.COLORS.length - 1)];
-      return {
-        lat:   pt[0],
-        lng:   pt[1],
-        label: labels[i] || (i+1).toString(),
-        color: color
-      };
-    });
-    WaypointsMod.drawMarkers(mapPoints);
   }
 };
-
-// YoutubeMod removed
 
 // ===== 沿途影像輪播 =====
 var RouteStripMod = {
   show: function(cams) {
-    console.log('[RouteStripMod.show] 被呼叫, cams=', cams ? cams.length : 'null');
     var panel   = document.getElementById('route-camera-strip');
     var scroll  = document.getElementById('route-camera-strip-scroll');
     var countEl = document.getElementById('strip-count');
-    if (!panel || !scroll) { console.warn('[RouteStripMod] panel or scroll missing'); return; }
-    if (!cams || cams.length === 0) { console.log('[RouteStripMod] 無 cams 資料，隱藏'); RouteStripMod.hide(); return; }
-    // 排序：CCTV 在前，YouTube 在後
-    var sorted = cams.slice().sort(function(a,b) {
-      if (a.type === b.type) return 0;
-      return a.type === 'youtube' ? 1 : -1;
-    });
+    if (!panel || !scroll) return;
+    if (!cams || cams.length === 0) { RouteStripMod.hide(); return; }
+    var sorted = cams.slice();
     if (countEl) countEl.textContent = '\u5171 ' + sorted.length + ' \u652f';
     scroll.innerHTML = '';
     sorted.forEach(function(cam) {
@@ -2497,7 +2403,6 @@ var RouteStripMod = {
     });
     panel.classList.add('visible');
     panel.style.display = 'block';
-    console.log('[RouteStripMod] 顯示 panel, 卡片數:', sorted.length);
     // 縮圖延遲載入
     if ('IntersectionObserver' in window) {
       var obs = new IntersectionObserver(function(entries) {
