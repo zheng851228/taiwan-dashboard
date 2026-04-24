@@ -3,32 +3,34 @@
 (function() {
   'use strict';
 
+  var THEME_KEY = 'tw_theme';
+
   var ThemeMod = {
-    dark: localStorage.getItem('tw_theme') !== 'light',
+    dark: Storage.get(THEME_KEY, 'dark') !== 'light',
     init: function() {
-      var btn = document.getElementById('js-theme');
+      var btn = Dom.byId('js-theme');
       if (btn) btn.addEventListener('click', function() { ThemeMod.toggle(); });
     },
     toggle: function() {
       ThemeMod.dark = !ThemeMod.dark;
-      var btn = document.getElementById('js-theme');
+      var btn = Dom.byId('js-theme');
       if (ThemeMod.dark) {
         document.body.classList.remove('light');
         if (btn) btn.textContent = '\u{1F319}';
         MapMod.setTile(Config.TILE_DARK);
-        localStorage.setItem('tw_theme', 'dark');
+        Storage.set(THEME_KEY, 'dark');
       } else {
         document.body.classList.add('light');
         if (btn) btn.textContent = '\u2600\uFE0F';
         MapMod.setTile(Config.TILE_LIGHT);
-        localStorage.setItem('tw_theme', 'light');
+        Storage.set(THEME_KEY, 'light');
       }
     }
   };
 
   var ClockMod = {
     init: function() {
-      var clk = document.getElementById('js-clk');
+      var clk = Dom.byId('js-clk');
       function tick() {
         var n = new Date();
         var h = String(n.getHours()).padStart(2,'0');
@@ -43,14 +45,14 @@
   var NavMod = {
     init: function() {
       ['map','list','tools'].forEach(function(k) {
-        var btn = document.getElementById('nav-'+k);
+        var btn = Dom.byId('nav-'+k);
         if (btn) btn.addEventListener('click', function() { NavMod.go(k); });
       });
     },
     go: function(key) {
       ['map','list','tools'].forEach(function(k) {
-        var pg  = document.getElementById('pg-'+k);
-        var btn = document.getElementById('nav-'+k);
+        var pg  = Dom.byId('pg-'+k);
+        var btn = Dom.byId('nav-'+k);
         if (pg)  pg.classList.toggle('active', k === key);
         if (btn) {
           btn.classList.toggle('active', k === key);
@@ -186,20 +188,20 @@
   var InfoMod = {
     current: null,
     init: function() {
-      var closeBtn = document.getElementById('info-close');
-      var playBtn  = document.getElementById('info-play');
+      var closeBtn = Dom.byId('info-close');
+      var playBtn  = Dom.byId('info-play');
       if (closeBtn) closeBtn.addEventListener('click', function() { InfoMod.close(); });
       if (playBtn)  playBtn.addEventListener('click', function() { if (InfoMod.current) ModalMod.open(InfoMod.current); });
     },
     open: function(cam) {
       InfoMod.current = cam;
-      var panel     = document.getElementById('info-panel');
-      var nameEl    = document.getElementById('info-name');
-      var countyEl  = document.getElementById('info-county');
-      var typeEl    = document.getElementById('info-type');
-      var weatherEl = document.getElementById('info-weather');
-      var thumbEl   = document.getElementById('info-thumb');
-      var playBtn   = document.getElementById('info-play');
+      var panel     = Dom.byId('info-panel');
+      var nameEl    = Dom.byId('info-name');
+      var countyEl  = Dom.byId('info-county');
+      var typeEl    = Dom.byId('info-type');
+      var weatherEl = Dom.byId('info-weather');
+      var thumbEl   = Dom.byId('info-thumb');
+      var playBtn   = Dom.byId('info-play');
       if (!panel) return;
       if (nameEl)   nameEl.textContent   = cam.name;
       if (countyEl) countyEl.textContent = '\u{1F4CD} ' + cam.county;
@@ -253,9 +255,9 @@
       panel.classList.add('flex');
     },
     close: function() {
-      var panel = document.getElementById('info-panel');
+      var panel = Dom.byId('info-panel');
       if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex'); }
-      var thumbEl = document.getElementById('info-thumb');
+      var thumbEl = Dom.byId('info-thumb');
       if (thumbEl) thumbEl.classList.remove('visible');
       InfoMod.current = null;
     }
@@ -267,27 +269,27 @@
     init: function() {
       document.querySelectorAll('.route-mode-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          document.querySelectorAll('.route-mode-btn').forEach(function(b) { b.classList.remove('active'); });
+          Dom.queryAll('.route-mode-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           RouteMod.mode = btn.dataset.mode;
         });
       });
-      var btn      = document.getElementById('js-route-btn');
-      var clearBtn = document.getElementById('js-rb-clear');
+      var btn      = Dom.byId('js-route-btn');
+      var clearBtn = Dom.byId('js-rb-clear');
       if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
       if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
       ['js-route-start','js-route-end'].forEach(function(id) {
-        var el = document.getElementById(id);
+        var el = Dom.byId(id);
         if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') RouteMod.analyze(); });
       });
     },
     analyze: function() {
-      var startEl  = document.getElementById('js-route-start');
-      var endEl    = document.getElementById('js-route-end');
+      var startEl  = Dom.byId('js-route-start');
+      var endEl    = Dom.byId('js-route-end');
       var startVal = startEl ? startEl.value.trim() : '';
       var endVal   = endEl   ? endEl.value.trim()   : '';
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
-      var btn = document.getElementById('js-route-btn');
+      var btn = Dom.byId('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
       var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
       var allAddrs = [simplifyAddress(startVal)]
@@ -636,9 +638,9 @@
   window.addEventListener('load', function() {
     ClockMod.init();
     MapMod.init();
-    if (localStorage.getItem('tw_theme') === 'light') {
+    if (Storage.get(THEME_KEY, 'dark') === 'light') {
       document.body.classList.add('light');
-      var _tb = document.getElementById('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
+      var _tb = Dom.byId('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
     }
     ThemeMod.init();
     NavMod.init();

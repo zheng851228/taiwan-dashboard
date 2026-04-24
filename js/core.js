@@ -107,6 +107,62 @@
     }
   };
 
+  window.Dom = {
+    byId: function(id) {
+      return document.getElementById(id);
+    },
+    query: function(selector, root) {
+      return (root || document).querySelector(selector);
+    },
+    queryAll: function(selector, root) {
+      return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+    }
+  };
+
+  window.Storage = {
+    get: function(key, fallback) {
+      try {
+        var value = localStorage.getItem(key);
+        return value === null ? fallback : value;
+      } catch (err) {
+        return fallback;
+      }
+    },
+    set: function(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    },
+    getJson: function(key, fallback) {
+      var raw = Storage.get(key, null);
+      if (raw === null) return fallback;
+      try {
+        return JSON.parse(raw);
+      } catch (err) {
+        return fallback;
+      }
+    },
+    setJson: function(key, value) {
+      try {
+        return Storage.set(key, JSON.stringify(value));
+      } catch (err) {
+        return false;
+      }
+    }
+  };
+
+  window.fetchJson = function(url, options) {
+    return fetch(url, options).then(function(response) {
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+      return response.json();
+    });
+  };
+
   function toRad(d) { return d * Math.PI / 180; }
   function haversine(lat1, lon1, lat2, lon2) {
     var R = 6371;
@@ -146,8 +202,7 @@
     if (_geocodeCache[name]) return Promise.resolve(_geocodeCache[name]);
     var q = encodeURIComponent(name);
     var url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1&countrycodes=tw';
-    return fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
-      .then(function(r) { return r.json(); })
+    return fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
       .then(function(data) {
         if (data && data.length > 0) {
           var result = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
@@ -283,7 +338,7 @@
     var ROUTE_PROXY = 'https://url-expander.lucky851228.workers.dev/route';
     Diag.info('路線查詢: ' + startLatLng[0].toFixed(4) + ',' + startLatLng[1].toFixed(4) + ' → ' + endLatLng[0].toFixed(4) + ',' + endLatLng[1].toFixed(4));
 
-    return fetch(ROUTE_PROXY, {
+    return fetchJson(ROUTE_PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -292,10 +347,9 @@
         mode:     mode
       })
     })
-    .then(function(r) {
-      Diag.add('Worker /route HTTP ' + r.status, r.ok ? 'ok' : 'err');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
+    .then(function(data) {
+      Diag.add('Worker /route HTTP 200', 'ok');
+      return data;
     })
     .then(function(data) {
       if (data.error) throw new Error(data.error);
@@ -355,8 +409,7 @@
       return Promise.resolve(url);
     }
     var workerUrl = 'https://url-expander.lucky851228.workers.dev/?url=' + encodeURIComponent(url);
-    return fetch(workerUrl)
-      .then(function(r) { return r.json(); })
+    return fetchJson(workerUrl)
       .then(function(data) {
         if (data.start !== undefined || data.end) {
           AppState.workerResult = {

@@ -84,10 +84,9 @@
       Diag.info('開始載入資料...');
       var PROXY = 'https://url-expander.lucky851228.workers.dev/cam-list';
 
-      fetch(PROXY).then(function(r){
-        Diag.add('cam-list HTTP ' + r.status, r.ok ? 'ok' : 'err');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
+      fetchJson(PROXY).then(function(apiData) {
+        Diag.add('cam-list HTTP 200', 'ok');
+        return apiData;
       }).catch(function(e){
         Diag.err('cam-list 失敗: ' + e.message);
         return [];
@@ -127,11 +126,7 @@
     },
     fetchWeather: function() {
       var PROXY = 'https://url-expander.lucky851228.workers.dev/weather';
-      fetch(PROXY)
-        .then(function(r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
+      fetchJson(PROXY)
         .then(function(result) {
           // Worker 已整理好：{ 台北市: { temp, weather, name, town }, ... }
           Object.keys(result).forEach(function(county) {
@@ -143,7 +138,7 @@
           // fallback 直連 CWA
           var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001' +
                     '?Authorization=' + Config.CWA_KEY + '&format=JSON';
-          fetch(url).then(function(r){return r.json();}).then(function(json){
+          fetchJson(url).then(function(json){
             var st = json && json.records && json.records.Station;
             if (!Array.isArray(st)) return;
             st.forEach(function(s) {

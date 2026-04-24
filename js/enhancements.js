@@ -21,7 +21,7 @@
     '\u5b9c\u862d\u7e23','\u82b1\u84ee\u7e23','\u53f0\u6771\u7e23','\u6f8e\u6e56\u7e23','\u91d1\u9580\u7e23','\u9023\u6c5f\u7e23'
   ];
   function renderWeather() {
-    var grid = document.getElementById('wx-grid');
+    var grid = Dom.byId('wx-grid');
     if (!grid) return;
     var wx = Data.weather;
     var hasData = Object.keys(wx).length > 0;
@@ -59,7 +59,7 @@
         }
       });
     });
-    var updEl = document.getElementById('wx-updated');
+    var updEl = Dom.byId('wx-updated');
     if (updEl) {
       var now = new Date();
       updEl.textContent = '\u66f4\u65b0\u6642\u9593\uff1a' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
@@ -67,7 +67,7 @@
   }
   window.addEventListener('load', function() {
     Bus.on('weather:updated', function() { renderWeather(); });
-    var refreshBtn = document.getElementById('wx-refresh');
+    var refreshBtn = Dom.byId('wx-refresh');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', function() {
         var icon = refreshBtn.querySelector('i');
@@ -83,7 +83,7 @@
 var NearbyMod = {
   userLat: null, userLng: null, radius: 5, marker: null, circle: null,
   init: function() {
-    var fsBtn = document.getElementById('js-fullscreen');
+    var fsBtn = Dom.byId('js-fullscreen');
     if (fsBtn) {
       fsBtn.addEventListener('click', function() {
         var header = document.querySelector('header');
@@ -103,9 +103,9 @@ var NearbyMod = {
         setTimeout(function(){MapMod.map&&MapMod.map.invalidateSize();},100);
       });
     }
-    var locBtn     = document.getElementById('js-loc');
-    var closeBtn   = document.getElementById('nearby-close');
-    var radiusBtns = document.querySelectorAll('.nearby-r-btn');
+    var locBtn     = Dom.byId('js-loc');
+    var closeBtn   = Dom.byId('nearby-close');
+    var radiusBtns = Dom.queryAll('.nearby-r-btn');
     if (locBtn)   locBtn.addEventListener('click', function() { NearbyMod.locate(); });
     if (closeBtn) closeBtn.addEventListener('click', function() { NearbyMod.hide(); });
     radiusBtns.forEach(function(btn) {
@@ -119,7 +119,7 @@ var NearbyMod = {
   },
   locate: function() {
     if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
-    var btn = document.getElementById('js-loc');
+    var btn = Dom.byId('js-loc');
     if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-lg"></i>';
     Toast.show('\u5b9a\u4f4d\u4e2d...', 8000);
 
@@ -131,10 +131,10 @@ var NearbyMod = {
       NearbyMod.showOnMap();
       NearbyMod.render();
       NearbyMod.show();
-      var sEl = document.getElementById('js-route-start');
+      var sEl = Dom.byId('js-route-start');
       if (sEl && !sEl.value) {
         sEl.value = pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6);
-        var cs = document.getElementById('clear-start');
+        var cs = Dom.byId('clear-start');
         if (cs) cs.classList.remove('hidden');
       }
       Toast.show('\u5b9a\u4f4d\u6210\u529f\uff01\u7cbe\u78ba\u5ea6 \u00b1' + acc + 'm', 3000);
@@ -188,8 +188,8 @@ var NearbyMod = {
     }).sort(function(a,b) { return a._dist - b._dist; });
   },
   render: function() {
-    var list  = document.getElementById('nearby-list');
-    var count = document.getElementById('nearby-count');
+    var list  = Dom.byId('nearby-list');
+    var count = Dom.byId('nearby-count');
     if (!list) return;
     if (NearbyMod.circle) NearbyMod.circle.setRadius(NearbyMod.radius * 1000);
     var cams = NearbyMod.getNearby();
@@ -220,11 +220,11 @@ var NearbyMod = {
     });
   },
   show: function() {
-    var panel = document.getElementById('nearby-panel');
+    var panel = Dom.byId('nearby-panel');
     if (panel) { panel.classList.remove('hidden'); panel.classList.add('flex','flex-col'); }
   },
   hide: function() {
-    var panel = document.getElementById('nearby-panel');
+    var panel = Dom.byId('nearby-panel');
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex','flex-col'); }
     if (NearbyMod.marker) { MapMod.map.removeLayer(NearbyMod.marker); NearbyMod.marker = null; }
     if (NearbyMod.circle) { MapMod.map.removeLayer(NearbyMod.circle); NearbyMod.circle = null; }
@@ -397,9 +397,9 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 var HistoryMod = {
   KEY: 'tw_route_history', MAX: 10,
   load: function() {
-    try { return JSON.parse(localStorage.getItem(HistoryMod.KEY) || '[]'); } catch(e) { return []; }
+    return Storage.getJson(HistoryMod.KEY, []);
   },
-  save: function(list) { try { localStorage.setItem(HistoryMod.KEY, JSON.stringify(list)); } catch(e) {} },
+  save: function(list) { Storage.setJson(HistoryMod.KEY, list); },
   add: function(start, end, wps) {
     if (!start || !end) return;
     var list = HistoryMod.load().filter(function(r) { return !(r.start===start && r.end===end); });
@@ -637,8 +637,7 @@ var PlaceSuggest = {
     PlaceSuggest._timer = setTimeout(function() {
       var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q + ' 台灣')
               + '&format=json&limit=5&countrycodes=tw&accept-language=zh-TW';
-      fetch(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
-        .then(function(r) { return r.json(); })
+      fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
         .then(function(data) {
           var remote = (data || []).map(function(item) {
             var name = item.display_name.split(',')[0].trim();
