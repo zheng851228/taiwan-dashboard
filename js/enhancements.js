@@ -284,13 +284,13 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         if (endEl2)   endEl2.value   = end   || '';
         if (gmapsInput) gmapsInput.value = '';
         if (gmapsStatus) { gmapsStatus.classList.add('hidden'); }
-        window._pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
-        WaypointsMod.render(window._pendingWaypoints);
+        AppState.pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
+        WaypointsMod.render(AppState.pendingWaypoints);
         var cs = document.getElementById('clear-start');
         var ce = document.getElementById('clear-end');
         if (cs) cs.classList.toggle('hidden', !start);
         if (ce) ce.classList.toggle('hidden', !end);
-        var wpCount = window._pendingWaypoints.length;
+        var wpCount = AppState.pendingWaypoints.length;
         if (start && end) {
           var msg = wpCount > 0 ? '起點→' + wpCount + '個停靠點→終點，解析中...' : '起終點已帶入，解析中...';
           Toast.show(msg, 2000);
@@ -375,8 +375,8 @@ function haversineKm(lat1, lon1, lat2, lon2) {
             if (startEl) startEl.value = start || '';
             if (endEl && end) endEl.value = end;
             if (status) status.textContent = '';
-            window._pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
-            WaypointsMod.render(window._pendingWaypoints);
+            AppState.pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
+            WaypointsMod.render(AppState.pendingWaypoints);
             // 填入後自動執行路線解析
             if (start && end) {
               setTimeout(function() { RouteMod.analyze(); }, 200);
@@ -404,8 +404,8 @@ var HistoryMod = {
     if (!start || !end) return;
     var list = HistoryMod.load().filter(function(r) { return !(r.start===start && r.end===end); });
     list.unshift({ start:start, end:end, waypoints:wps||[],
-      distance: window._lastRouteInfo ? window._lastRouteInfo.distance : 0,
-      duration: window._lastRouteInfo ? window._lastRouteInfo.duration : 0,
+      distance: AppState.lastRouteInfo ? AppState.lastRouteInfo.distance : 0,
+      duration: AppState.lastRouteInfo ? AppState.lastRouteInfo.duration : 0,
       mode: RouteMod ? RouteMod.mode : 'motorcycle', time: Date.now() });
     if (list.length > HistoryMod.MAX) list = list.slice(0, HistoryMod.MAX);
     HistoryMod.save(list); HistoryMod.updateCount();
@@ -439,8 +439,8 @@ var HistoryMod = {
         var sEl=document.getElementById('js-route-start'); var eEl=document.getElementById('js-route-end');
         if (sEl) { sEl.value=item.start; var cs=document.getElementById('clear-start'); if(cs) cs.classList.remove('hidden'); }
         if (eEl) { eEl.value=item.end;   var ce=document.getElementById('clear-end');   if(ce) ce.classList.remove('hidden'); }
-        window._pendingWaypoints = item.waypoints||[];
-        if (window.WaypointsMod) WaypointsMod.render(window._pendingWaypoints);
+        AppState.pendingWaypoints = item.waypoints||[];
+        if (window.WaypointsMod) WaypointsMod.render(AppState.pendingWaypoints);
         HistoryMod.hide();
         Toast.show('\u8def\u7dda\u5df2\u5e36\u5165\uff0c\u8acb\u6309\u89e3\u6790');
       });
@@ -469,7 +469,7 @@ var WaypointsMod = {
     var container = document.getElementById('waypoints-container');
     if (!container) return;
     container.innerHTML = '';
-    var wps = waypoints || window._pendingWaypoints || [];
+    var wps = waypoints || AppState.pendingWaypoints || [];
     wps.forEach(function(wp, idx) {
       var color = WaypointsMod.COLORS[idx % WaypointsMod.COLORS.length];
       var label = idx + 1;
@@ -485,11 +485,11 @@ var WaypointsMod = {
         '</div>';
       container.appendChild(div);
       div.querySelector('.wp-clear').addEventListener('click', function() {
-        window._pendingWaypoints.splice(parseInt(this.dataset.idx), 1);
-        WaypointsMod.render(window._pendingWaypoints);
+        AppState.pendingWaypoints.splice(parseInt(this.dataset.idx), 1);
+        WaypointsMod.render(AppState.pendingWaypoints);
       });
       div.querySelector('.wp-input').addEventListener('input', function() {
-        window._pendingWaypoints[parseInt(this.dataset.idx)] = this.value;
+        AppState.pendingWaypoints[parseInt(this.dataset.idx)] = this.value;
       });
     });
   },
@@ -505,9 +505,9 @@ var WaypointsMod = {
   },
 
   clearMarkers: function() {
-    if (window._waypointMapMarkers) {
-      window._waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
-      window._waypointMapMarkers = [];
+    if (AppState.waypointMapMarkers) {
+      AppState.waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
+      AppState.waypointMapMarkers = [];
     }
   }
 };

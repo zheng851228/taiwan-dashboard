@@ -23,6 +23,14 @@
     }
   };
 
+  window.AppState = {
+    workerResult: null,
+    lastRouteInfo: null,
+    routeAllPoints: null,
+    pendingWaypoints: [],
+    waypointMapMarkers: []
+  };
+
   // ===== 螢幕診斷工具 =====
   window.Diag = {
     logs: [],
@@ -210,11 +218,11 @@
       }
     }
     if (text.indexOf('http') === 0) {
-      window._workerResult = null;
+      AppState.workerResult = null;
       expandGoogleUrl(text).then(function(fullUrl) {
-        if (window._workerResult && (window._workerResult.start || window._workerResult.end)) {
-          onFill(window._workerResult.start || '', window._workerResult.end || '', window._workerResult.waypoints || []);
-          window._workerResult = null;
+        if (AppState.workerResult && (AppState.workerResult.start || AppState.workerResult.end)) {
+          onFill(AppState.workerResult.start || '', AppState.workerResult.end || '', AppState.workerResult.waypoints || []);
+          AppState.workerResult = null;
           return;
         }
         var r = parseRouteStartEnd(fullUrl);
@@ -303,7 +311,7 @@
       Diag.info('路線點數: ' + (coords ? coords.length : 0));
       if (!coords || coords.length < 5) throw new Error('empty route');
 
-      window._lastRouteInfo = {
+      AppState.lastRouteInfo = {
         distance: data.distance || 0,
         duration: data.duration || 0
       };
@@ -351,7 +359,7 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.start !== undefined || data.end) {
-          window._workerResult = {
+          AppState.workerResult = {
             start:     data.start     || '',
             end:       data.end       || '',
             waypoints: data.waypoints || [],

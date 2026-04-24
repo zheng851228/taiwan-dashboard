@@ -176,7 +176,7 @@
       });
     },
     redrawStartEnd: function() {
-      var pts = window._routeAllPoints;
+      var pts = AppState.routeAllPoints;
       if (pts && pts.length >= 2) {
         MapMod.drawStartEnd(pts);
       }
@@ -289,11 +289,11 @@
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
       var btn = document.getElementById('js-route-btn');
       if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
-      var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (window._pendingWaypoints || []);
+      var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
       var allAddrs = [simplifyAddress(startVal)]
         .concat(uiWaypoints.map(function(wp) { return simplifyAddress(wp); }))
         .concat([simplifyAddress(endVal)]);
-      window._pendingWaypoints = [];
+      AppState.pendingWaypoints = [];
 
       Promise.all(allAddrs.map(function(addr) { return extractPointFromUrl(addr); }))
         .then(function(results) {
@@ -307,7 +307,7 @@
           Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
           var wpPts = results.slice(1, -1).filter(function(p) { return p; });
           var finalPoints = [startPt].concat(wpPts).concat([endPt]);
-          window._routeAllPoints = finalPoints;
+          AppState.routeAllPoints = finalPoints;
           var segs = [];
           for (var fi = 0; fi < finalPoints.length - 1; fi++) {
             segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
@@ -322,11 +322,11 @@
           if (!coords) {
             if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
             // 路線失敗仍畫標記
-            MapMod.drawStartEnd(window._routeAllPoints);
+            MapMod.drawStartEnd(AppState.routeAllPoints);
             return;
           }
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
-          var info = window._lastRouteInfo;
+          var info = AppState.lastRouteInfo;
           var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
           var msg = info ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418') : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
           Toast.show(msg, 3000);
@@ -341,7 +341,7 @@
         .catch(function() {
           if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
           Toast.show('\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66');
-          MapMod.drawStartEnd(window._routeAllPoints);
+          MapMod.drawStartEnd(AppState.routeAllPoints);
         });
     },
     _doFilter: function(coords) {
@@ -390,7 +390,7 @@
       RouteMod.filteredCams = filteredCctv;
       MapMod.drawRoute(simplified, RouteMod.mode);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
-      MapMod.drawStartEnd(window._routeAllPoints);
+      MapMod.drawStartEnd(AppState.routeAllPoints);
       var st = document.getElementById('js-route-status');
       if (st) st.textContent = '\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f';
       var banner = document.getElementById('js-route-banner');
@@ -402,13 +402,13 @@
       Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
       (function(){
         var _s=document.getElementById('route-summary');
-        var _ri=window._lastRouteInfo;
+        var _ri=AppState.lastRouteInfo;
         if(_s&&_ri){_s.textContent=(RouteMod.mode==='motorcycle'?'\ud83c\udfcd':'\ud83d\ude97')+' '+_ri.distance+'km/'+_ri.duration+'\u5206 \u00b7 '+RouteMod.filteredCams.length+'\u652f';_s.classList.remove('hidden');}
       })();
       (function(){
         var _s=document.getElementById('js-route-start');
         var _e=document.getElementById('js-route-end');
-        if(_s&&_e&&window.HistoryMod) HistoryMod.add(_s.value,_e.value,window._routeAllPoints?window._routeAllPoints.slice(1,-1).map(function(p){return p[0]+','+p[1];}):[]); 
+        if(_s&&_e&&window.HistoryMod) HistoryMod.add(_s.value,_e.value,AppState.routeAllPoints?AppState.routeAllPoints.slice(1,-1).map(function(p){return p[0]+','+p[1];}):[]); 
       })();
       Bus.emit('filter:changed');
       // 沿途影像輪播（自動顯示）
@@ -420,7 +420,7 @@
       MapMod.drawStartEnd(null); // 清除起終點標記
       RouteStripMod.hide();
       WaypointsMod && WaypointsMod.clearMarkers();
-      window._pendingWaypoints = [];
+      AppState.pendingWaypoints = [];
       WaypointsMod && WaypointsMod.render([]);
       var startEl = document.getElementById('js-route-start');
       var endEl   = document.getElementById('js-route-end');
