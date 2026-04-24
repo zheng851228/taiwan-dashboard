@@ -1,0 +1,12 @@
+{
+  "name": "環島路況指揮中心",
+  "short_name": "路況指揮",
+  "description": "整合台灣環島路線、CCTV 與天氣資訊的即時路況儀表板。",
+  "lang": "zh-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#060d1f",
+  "theme_color": "#f97316"
+}

@@ -42,7 +42,6 @@
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     @keyframes ping { 0%,100%{transform:scale(1);opacity:0.3;} 50%{transform:scale(1.8);opacity:0;} }
 
-```
 /* === 沿途影像輪播 === */
 #route-camera-strip {
   position: fixed;
@@ -208,7 +207,6 @@
   animation: shimmer 1.2s linear infinite;
 }
 @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
-```
 
   </style>
 </head>
@@ -240,7 +238,6 @@
 
   <main class="flex-1 relative mt-0 overflow-hidden">
 
-```
 <section id="pg-map" class="pg active" style="position:absolute;inset:0;">
   <div id="map"></div>
 
@@ -468,7 +465,6 @@
     </div>
   </div>
 </section>
-```
 
   </main>
 
@@ -2503,6 +2499,7 @@ var PlaceSuggest = {
     });
   }
 };
+  var modal = document.getElementById('modal');
   var modalSh = document.getElementById('modal-sh');
   window.ModalEffect = {
     open: function() {
