@@ -224,7 +224,13 @@
           var tempStr = (w.temp !== undefined && w.temp !== null && w.temp !== '--') ? (w.temp + '\u00B0C') : '--';
           weatherEl.textContent = _wIcon + ' ' + tempStr + '  ' + (w.weather||'');
         } else {
-          weatherEl.textContent = '\ud83d\udca8 \u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...';
+          if (Data.weatherState === 'error') {
+            weatherEl.textContent = '\u26a0\ufe0f \u5929\u6c23\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165';
+          } else if (Data.weatherState === 'empty') {
+            weatherEl.textContent = '\ud83c\udf21\ufe0f \u66ab\u7121\u5929\u6c23\u8cc7\u6599';
+          } else {
+            weatherEl.textContent = '\ud83d\udca8 \u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...';
+          }
         }
       }
       // 縮圖預覽
@@ -285,10 +291,18 @@
       var info = Dom.byId('js-list-route-info');
       var cnt = Dom.byId('js-list-route-count');
       var summary = Dom.byId('route-summary');
-      if (st) st.textContent = '\u627e\u5230 ' + count + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f';
+      if (st) {
+        st.textContent = count > 0
+          ? '\u627e\u5230 ' + count + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f'
+          : '\u9019\u689d\u8def\u7dda\u9644\u8fd1\u66ab\u6642\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684\u651d\u5f71\u6a5f';
+      }
       setFlexVisible(banner, true);
       setFlexVisible(info, true);
-      if (cnt) cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + count + ' \u652f';
+      if (cnt) {
+        cnt.textContent = count > 0
+          ? '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + count + ' \u652f'
+          : '\u8def\u7dda\u904e\u6ffe\uff1a\u672a\u627e\u5230\u5408\u9069\u651d\u5f71\u6a5f';
+      }
       if (summary && AppState.lastRouteInfo) {
         summary.textContent = (RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd' : '\ud83d\ude97') + ' '
           + AppState.lastRouteInfo.distance + 'km/' + AppState.lastRouteInfo.duration + '\u5206 \u00b7 ' + count + '\u652f';
@@ -436,7 +450,11 @@
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(AppState.routeAllPoints);
       RouteMod.updateRouteUi(RouteMod.filteredCams.length);
-      Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
+      Toast.show(
+        RouteMod.filteredCams.length > 0
+          ? '\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f'
+          : '\u9019\u689d\u8def\u7dda\u9644\u8fd1\u66ab\u6642\u6c92\u6709\u53ef\u986f\u793a\u7684\u651d\u5f71\u6a5f'
+      );
       (function(){
         var startInput = Dom.byId('js-route-start');
         var endInput = Dom.byId('js-route-end');

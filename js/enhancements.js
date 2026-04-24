@@ -195,6 +195,14 @@ var NearbyMod = {
     if (NearbyMod.circle) NearbyMod.circle.setRadius(NearbyMod.radius * 1000);
     var cams = NearbyMod.getNearby();
     if (count) count.textContent = cams.length + ' \u652f';
+    if (Data.camsState === 'loading' || Data.camsState === 'idle') {
+      list.innerHTML = '<div class="px-4 py-6 text-center text-slate-500 text-xs">\u651d\u5f71\u6a5f\u8cc7\u6599\u8f09\u5165\u4e2d...</div>';
+      return;
+    }
+    if (Data.camsState === 'error') {
+      list.innerHTML = '<div class="px-4 py-6 text-center text-amber-400 text-xs">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+      return;
+    }
     if (cams.length === 0) {
       list.innerHTML = '<div class="px-4 py-6 text-center text-slate-500 text-xs">' + NearbyMod.radius + 'km \u5167\u7121\u653d\u5f71\u6a5f</div>';
       return;
@@ -741,7 +749,6 @@ var PlaceSuggest = {
     window.addEventListener('load', function() {
       navigator.serviceWorker.register('./sw.js')
         .then(function(reg) {
-          console.log('SW registered:', reg.scope);
           // 有新版本時提示用戶
           reg.addEventListener('updatefound', function() {
             var newWorker = reg.installing;
@@ -752,8 +759,6 @@ var PlaceSuggest = {
             });
           });
         })
-        .catch(function(err) {
-          console.log('SW registration failed:', err);
-        });
+        .catch(function() {});
     });
   }
