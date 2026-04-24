@@ -79,9 +79,12 @@
 
   window.Data = {
     weather: {},
+    weatherState: 'idle',
+    camsState: 'idle',
     allCams: function() { return _cams; },
     loadDynamic: function() {
       Diag.info('開始載入資料...');
+      Data.camsState = 'loading';
       var PROXY = 'https://url-expander.lucky851228.workers.dev/cam-list';
 
       fetchJson(PROXY).then(function(apiData) {
@@ -89,6 +92,7 @@
         return apiData;
       }).catch(function(e){
         Diag.err('cam-list 失敗: ' + e.message);
+        Data.camsState = 'error';
         return [];
       }).then(function(apiData) {
         Diag.info('cam-list 筆數: ' + (Array.isArray(apiData) ? apiData.length : 'NOT ARRAY'));
@@ -113,8 +117,9 @@
               };
             });
           Diag.ok('CCTV: ' + _cams.length + ' 支');
+          Data.camsState = _cams.length > 0 ? 'ready' : (Data.camsState === 'error' ? 'error' : 'empty');
         }
-        var statEl = document.getElementById('js-stat-cams');
+        var statEl = Dom.byId('js-stat-cams');
         if (statEl) statEl.textContent = _cams.length;
         if (_cams.length === 0) {
           Diag.err('CCTV 為 0，Worker 可能需要更新');
@@ -125,13 +130,16 @@
       });
     },
     fetchWeather: function() {
+      Data.weatherState = 'loading';
       var PROXY = 'https://url-expander.lucky851228.workers.dev/weather';
       fetchJson(PROXY)
         .then(function(result) {
           // Worker 已整理好：{ 台北市: { temp, weather, name, town }, ... }
+          Data.weather = {};
           Object.keys(result).forEach(function(county) {
             Data.weather[county] = result[county];
           });
+          Data.weatherState = Object.keys(Data.weather).length > 0 ? 'ready' : 'empty';
           Bus.emit('weather:updated');
         })
         .catch(function() {
@@ -140,15 +148,24 @@
                     '?Authorization=' + Config.CWA_KEY + '&format=JSON';
           fetchJson(url).then(function(json){
             var st = json && json.records && json.records.Station;
-            if (!Array.isArray(st)) return;
+            if (!Array.isArray(st)) {
+              Data.weatherState = 'error';
+              Bus.emit('weather:updated');
+              return;
+            }
+            Data.weather = {};
             st.forEach(function(s) {
               var c = s.GeoInfo && s.GeoInfo.CountyName;
               if (!c) return;
               var obs = s.WeatherElement;
               Data.weather[c] = { temp: obs && obs.AirTemperature, weather: obs && obs.Weather };
             });
+            Data.weatherState = Object.keys(Data.weather).length > 0 ? 'ready' : 'empty';
             Bus.emit('weather:updated');
-          }).catch(function(){});
+          }).catch(function(){
+            Data.weatherState = 'error';
+            Bus.emit('weather:updated');
+          });
         });
     }
   };

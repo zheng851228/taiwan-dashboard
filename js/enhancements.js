@@ -24,9 +24,18 @@
     var grid = Dom.byId('wx-grid');
     if (!grid) return;
     var wx = Data.weather;
+    var state = Data.weatherState || 'idle';
     var hasData = Object.keys(wx).length > 0;
-    if (!hasData) {
+    if (state === 'loading' || (!hasData && state === 'idle')) {
       grid.innerHTML = '<div class="col-span-2 text-center text-slate-500 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...</div>';
+      return;
+    }
+    if (state === 'error') {
+      grid.innerHTML = '<div class="col-span-2 text-center text-amber-400 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+      return;
+    }
+    if (!hasData) {
+      grid.innerHTML = '<div class="col-span-2 text-center text-slate-500 text-xs py-4">\u66ab\u7121\u5929\u6c23\u8cc7\u6599</div>';
       return;
     }
     var html = '';
@@ -48,8 +57,8 @@
       '</div>';
     });
     grid.innerHTML = html;
-    grid.querySelectorAll('.wx-county-card').forEach(function(card) {
-      card.addEventListener('click', function() {
+    Dom.queryAll('.wx-county-card', grid).forEach(function(card) {
+      Dom.on(card, 'click', function() {
         var county = card.dataset.county;
         var center = window.COUNTY_CENTERS && window.COUNTY_CENTERS[county];
         if (center && MapMod.map) {
@@ -68,15 +77,13 @@
   window.addEventListener('load', function() {
     Bus.on('weather:updated', function() { renderWeather(); });
     var refreshBtn = Dom.byId('wx-refresh');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', function() {
+    Dom.on(refreshBtn, 'click', function() {
         var icon = refreshBtn.querySelector('i');
         if (icon) icon.style.animation = 'spin 1s linear infinite';
         Data.fetchWeather();
         setTimeout(function() { if (icon) icon.style.animation = ''; }, 1500);
-      });
-    }
-    if (Object.keys(Data.weather).length > 0) renderWeather();
+    });
+    renderWeather();
   });
 })();
 
@@ -84,8 +91,7 @@ var NearbyMod = {
   userLat: null, userLng: null, radius: 5, marker: null, circle: null,
   init: function() {
     var fsBtn = Dom.byId('js-fullscreen');
-    if (fsBtn) {
-      fsBtn.addEventListener('click', function() {
+    Dom.on(fsBtn, 'click', function() {
         var header = document.querySelector('header');
         var nav    = document.querySelector('nav');
         var isFS   = fsBtn.querySelector('i').classList.contains('fa-compress');
@@ -101,20 +107,15 @@ var NearbyMod = {
           fsBtn.classList.add('text-orange-500'); fsBtn.classList.remove('text-slate-400');
         }
         setTimeout(function(){MapMod.map&&MapMod.map.invalidateSize();},100);
-      });
-    }
-    var locBtn     = Dom.byId('js-loc');
-    var closeBtn   = Dom.byId('nearby-close');
+    });
     var radiusBtns = Dom.queryAll('.nearby-r-btn');
-    if (locBtn)   locBtn.addEventListener('click', function() { NearbyMod.locate(); });
-    if (closeBtn) closeBtn.addEventListener('click', function() { NearbyMod.hide(); });
-    radiusBtns.forEach(function(btn) {
-      btn.addEventListener('click', function() {
+    Dom.onId('js-loc', 'click', function() { NearbyMod.locate(); });
+    Dom.onId('nearby-close', 'click', function() { NearbyMod.hide(); });
+    Dom.onAll('.nearby-r-btn', 'click', function(btn) {
         radiusBtns.forEach(function(b) { b.classList.remove('text-orange-400','font-bold'); b.classList.add('text-slate-400'); });
         btn.classList.add('text-orange-400','font-bold'); btn.classList.remove('text-slate-400');
         NearbyMod.radius = parseInt(btn.dataset.r);
         if (NearbyMod.userLat !== null) NearbyMod.render();
-      });
     });
   },
   locate: function() {
@@ -212,8 +213,8 @@ var NearbyMod = {
     list.innerHTML = html;
     var camMap = {};
     Data.allCams().forEach(function(c) { camMap[c.id] = c; });
-    list.querySelectorAll('.nearby-cam-item').forEach(function(item) {
-      item.addEventListener('click', function() {
+    Dom.queryAll('.nearby-cam-item', list).forEach(function(item) {
+      Dom.on(item, 'click', function() {
         var cam = camMap[item.dataset.id];
         if (cam) { InfoMod.open(cam); MapMod.map.setView([cam.lat, cam.lng], 14); }
       });
@@ -244,36 +245,35 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 (function() {
   window.addEventListener('load', function() {
-    var histBtn=document.getElementById('history-btn');
-    if(histBtn){histBtn.addEventListener('click',function(){HistoryMod.toggle();});HistoryMod.updateCount();}
-    var toggleBtn = document.getElementById('route-toggle');
-    var closeBtn  = document.getElementById('route-toggle-close');
-    var collapsed = document.getElementById('route-collapsed');
-    var expanded  = document.getElementById('route-expanded');
+    var histBtn = Dom.byId('history-btn');
+    var toggleBtn = Dom.byId('route-toggle');
+    var closeBtn  = Dom.byId('route-toggle-close');
+    var collapsed = Dom.byId('route-collapsed');
+    var expanded  = Dom.byId('route-expanded');
     function openExp() { if (collapsed) collapsed.classList.add('hidden'); if (expanded) expanded.classList.remove('hidden'); }
     function closeExp() { if (collapsed) collapsed.classList.remove('hidden'); if (expanded) expanded.classList.add('hidden'); }
-    if (toggleBtn) toggleBtn.addEventListener('click', openExp);
-    if (closeBtn)  closeBtn.addEventListener('click', closeExp);
+    if (histBtn) HistoryMod.updateCount();
+    Dom.on(histBtn, 'click', function() { HistoryMod.toggle(); });
+    Dom.on(toggleBtn, 'click', openExp);
+    Dom.on(closeBtn, 'click', closeExp);
     Bus.on('filter:changed', function() {
       if (RouteMod && RouteMod.active) {
         closeExp();
-        var clearMini = document.getElementById('js-route-clear-small');
+        var clearMini = Dom.byId('js-route-clear-small');
         if (clearMini) clearMini.classList.remove('hidden');
       }
     });
-    var clearMini = document.getElementById('js-route-clear-small');
-    if (clearMini) {
-      clearMini.addEventListener('click', function() {
-        if (RouteMod) RouteMod.clear();
-        clearMini.classList.add('hidden');
-      });
-    }
+    var clearMini = Dom.byId('js-route-clear-small');
+    Dom.on(clearMini, 'click', function() {
+      if (RouteMod) RouteMod.clear();
+      clearMini.classList.add('hidden');
+    });
 
-    var gmapsInput  = document.getElementById('js-gmaps-url');
-    var gmapsBtn    = document.getElementById('js-gmaps-parse');
-    var gmapsStatus = document.getElementById('js-gmaps-status');
-    var startEl2    = document.getElementById('js-route-start');
-    var endEl2      = document.getElementById('js-route-end');
+    var gmapsInput  = Dom.byId('js-gmaps-url');
+    var gmapsBtn    = Dom.byId('js-gmaps-parse');
+    var gmapsStatus = Dom.byId('js-gmaps-status');
+    var startEl2    = Dom.byId('js-route-start');
+    var endEl2      = Dom.byId('js-route-end');
 
     function doGmapsParse(urlText) {
       urlText = urlText ? urlText.trim() : '';
@@ -286,8 +286,8 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         if (gmapsStatus) { gmapsStatus.classList.add('hidden'); }
         AppState.pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
         WaypointsMod.render(AppState.pendingWaypoints);
-        var cs = document.getElementById('clear-start');
-        var ce = document.getElementById('clear-end');
+        var cs = Dom.byId('clear-start');
+        var ce = Dom.byId('clear-end');
         if (cs) cs.classList.toggle('hidden', !start);
         if (ce) ce.classList.toggle('hidden', !end);
         var wpCount = AppState.pendingWaypoints.length;
@@ -305,29 +305,27 @@ function haversineKm(lat1, lon1, lat2, lon2) {
       });
     }
 
-    if (gmapsBtn) {
-      gmapsBtn.addEventListener('click', function() {
-        if (gmapsInput) doGmapsParse(gmapsInput.value);
-      });
-    }
+    Dom.on(gmapsBtn, 'click', function() {
+      if (gmapsInput) doGmapsParse(gmapsInput.value);
+    });
     if (gmapsInput) {
-      gmapsInput.addEventListener('paste', function(e) {
+      Dom.on(gmapsInput, 'paste', function(e) {
         var txt = (e.clipboardData || window.clipboardData).getData('text');
         setTimeout(function() { doGmapsParse(txt || gmapsInput.value); }, 80);
       });
-      gmapsInput.addEventListener('keydown', function(e) {
+      Dom.on(gmapsInput, 'keydown', function(e) {
         if (e.key === 'Enter') doGmapsParse(gmapsInput.value);
       });
     }
 
     function bindClearBtn(inputId, btnId) {
-      var inp = document.getElementById(inputId);
-      var btn = document.getElementById(btnId);
+      var inp = Dom.byId(inputId);
+      var btn = Dom.byId(btnId);
       if (!inp || !btn) return;
-      inp.addEventListener('input', function() {
+      Dom.on(inp, 'input', function() {
         btn.classList.toggle('hidden', inp.value.length === 0);
       });
-      btn.addEventListener('click', function() {
+      Dom.on(btn, 'click', function() {
         inp.value = '';
         btn.classList.add('hidden');
         inp.focus();
@@ -340,10 +338,10 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     doGmapsParse = function(urlText) {
       _origDoGmaps(urlText);
       setTimeout(function() {
-        var s = document.getElementById('js-route-start');
-        var e = document.getElementById('js-route-end');
-        var cs = document.getElementById('clear-start');
-        var ce = document.getElementById('clear-end');
+        var s = Dom.byId('js-route-start');
+        var e = Dom.byId('js-route-end');
+        var cs = Dom.byId('clear-start');
+        var ce = Dom.byId('clear-end');
         if (s && cs) cs.classList.toggle('hidden', s.value.length === 0);
         if (e && ce) ce.classList.toggle('hidden', e.value.length === 0);
       }, 600);
@@ -353,23 +351,23 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 (function() {
   window.addEventListener('load', function() {
-    var pasteInput = document.getElementById('route-paste-input');
-    var startEl    = document.getElementById('js-route-start');
-    var endEl      = document.getElementById('js-route-end');
-    var expanded   = document.getElementById('route-expanded');
-    var collapsed  = document.getElementById('route-collapsed');
+    var pasteInput = Dom.byId('route-paste-input');
+    var startEl    = Dom.byId('js-route-start');
+    var endEl      = Dom.byId('js-route-end');
+    var expanded   = Dom.byId('route-expanded');
+    var collapsed  = Dom.byId('route-collapsed');
     function doExpand() {
       if (expanded)  expanded.classList.remove('hidden');
       if (collapsed) collapsed.classList.add('hidden');
     }
     if (pasteInput) {
-      pasteInput.addEventListener('focus', doExpand);
-      pasteInput.addEventListener('paste', function(e) {
+      Dom.on(pasteInput, 'focus', doExpand);
+      Dom.on(pasteInput, 'paste', function(e) {
         var text = (e.clipboardData || window.clipboardData).getData('text');
         setTimeout(function() {
           pasteInput.value = '';
           doExpand();
-          var status = document.getElementById('js-route-status');
+          var status = Dom.byId('js-route-status');
           if (status) status.textContent = '\u89e3\u6790\u9023\u7d50\u4e2d...';
           var filled = autoFillRoute(text, function(start, end, waypoints) {
             if (startEl) startEl.value = start || '';
@@ -389,7 +387,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
           }
         }, 50);
       });
-      pasteInput.addEventListener('input', function() { if (pasteInput.value.length > 3) doExpand(); });
+      Dom.on(pasteInput, 'input', function() { if (pasteInput.value.length > 3) doExpand(); });
     }
   });
 })();
@@ -411,12 +409,12 @@ var HistoryMod = {
     HistoryMod.save(list); HistoryMod.updateCount();
   },
   updateCount: function() {
-    var el = document.getElementById('history-count');
+    var el = Dom.byId('history-count');
     var n = HistoryMod.load().length;
     if (el) el.textContent = n > 0 ? n + '\u7b46' : '';
   },
   render: function() {
-    var panel = document.getElementById('history-panel');
+    var panel = Dom.byId('history-panel');
     if (!panel) return;
     var list = HistoryMod.load();
     if (!list.length) { panel.innerHTML = '<div class="text-center text-slate-500 text-xs py-3">\u5c1a\u7121\u8a18\u9304</div>'; return; }
@@ -432,21 +430,30 @@ var HistoryMod = {
         + '<button class="hist-del text-slate-600 hover:text-red-400 text-sm px-1 shrink-0" data-idx="'+idx+'">\u00d7</button></div>';
     });
     panel.innerHTML = html;
-    panel.querySelectorAll('.hist-item').forEach(function(el) {
-      el.addEventListener('click', function(e) {
+    Dom.queryAll('.hist-item', panel).forEach(function(el) {
+      Dom.on(el, 'click', function(e) {
         if (e.target.classList.contains('hist-del')) return;
         var item = list[parseInt(el.dataset.idx)];
-        var sEl=document.getElementById('js-route-start'); var eEl=document.getElementById('js-route-end');
-        if (sEl) { sEl.value=item.start; var cs=document.getElementById('clear-start'); if(cs) cs.classList.remove('hidden'); }
-        if (eEl) { eEl.value=item.end;   var ce=document.getElementById('clear-end');   if(ce) ce.classList.remove('hidden'); }
+        var sEl = Dom.byId('js-route-start');
+        var eEl = Dom.byId('js-route-end');
+        if (sEl) {
+          sEl.value = item.start;
+          var cs = Dom.byId('clear-start');
+          if (cs) cs.classList.remove('hidden');
+        }
+        if (eEl) {
+          eEl.value = item.end;
+          var ce = Dom.byId('clear-end');
+          if (ce) ce.classList.remove('hidden');
+        }
         AppState.pendingWaypoints = item.waypoints||[];
         if (window.WaypointsMod) WaypointsMod.render(AppState.pendingWaypoints);
         HistoryMod.hide();
         Toast.show('\u8def\u7dda\u5df2\u5e36\u5165\uff0c\u8acb\u6309\u89e3\u6790');
       });
     });
-    panel.querySelectorAll('.hist-del').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+    Dom.queryAll('.hist-del', panel).forEach(function(btn) {
+      Dom.on(btn, 'click', function(e) {
         e.stopPropagation();
         var l=HistoryMod.load(); l.splice(parseInt(btn.dataset.idx),1);
         HistoryMod.save(l); HistoryMod.render(); HistoryMod.updateCount();
@@ -454,19 +461,22 @@ var HistoryMod = {
     });
   },
   toggle: function() {
-    var dd=document.getElementById('history-dropdown');
+    var dd = Dom.byId('history-dropdown');
     if (!dd) return;
     if (dd.classList.contains('hidden')) { HistoryMod.render(); dd.classList.remove('hidden'); }
     else dd.classList.add('hidden');
   },
-  hide: function() { var dd=document.getElementById('history-dropdown'); if(dd) dd.classList.add('hidden'); }
+  hide: function() {
+    var dd = Dom.byId('history-dropdown');
+    if(dd) dd.classList.add('hidden');
+  }
 };
 
 var WaypointsMod = {
   COLORS: ['#f97316','#3b82f6','#a855f7','#ec4899','#14b8a6','#f59e0b'],
 
   render: function(waypoints) {
-    var container = document.getElementById('waypoints-container');
+    var container = Dom.byId('waypoints-container');
     if (!container) return;
     container.innerHTML = '';
     var wps = waypoints || AppState.pendingWaypoints || [];
@@ -484,11 +494,11 @@ var WaypointsMod = {
           '<button class="wp-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 text-xs leading-none" data-idx="' + idx + '">&#10005;</button>' +
         '</div>';
       container.appendChild(div);
-      div.querySelector('.wp-clear').addEventListener('click', function() {
+      Dom.on(Dom.query('.wp-clear', div), 'click', function() {
         AppState.pendingWaypoints.splice(parseInt(this.dataset.idx), 1);
         WaypointsMod.render(AppState.pendingWaypoints);
       });
-      div.querySelector('.wp-input').addEventListener('input', function() {
+      Dom.on(Dom.query('.wp-input', div), 'input', function() {
         AppState.pendingWaypoints[parseInt(this.dataset.idx)] = this.value;
       });
     });
@@ -498,7 +508,7 @@ var WaypointsMod = {
 
   getWaypoints: function() {
     var result = [];
-    document.querySelectorAll('.wp-input').forEach(function(inp) {
+    Dom.queryAll('.wp-input').forEach(function(inp) {
       if (inp.value.trim()) result.push(inp.value.trim());
     });
     return result;
@@ -515,9 +525,9 @@ var WaypointsMod = {
 // ===== 沿途影像輪播 =====
 var RouteStripMod = {
   show: function(cams) {
-    var panel   = document.getElementById('route-camera-strip');
-    var scroll  = document.getElementById('route-camera-strip-scroll');
-    var countEl = document.getElementById('strip-count');
+    var panel   = Dom.byId('route-camera-strip');
+    var scroll  = Dom.byId('route-camera-strip-scroll');
+    var countEl = Dom.byId('strip-count');
     if (!panel || !scroll) return;
     if (!cams || cams.length === 0) { RouteStripMod.hide(); return; }
     var sorted = cams.slice();
@@ -549,7 +559,7 @@ var RouteStripMod = {
           '<div class="strip-cam-name">' + cam.name + '</div>' +
           '<div class="strip-cam-meta">' + badgeHtml + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + cam.county + wTxt + '</span></div>' +
         '</div>';
-      card.addEventListener('click', function() {
+      Dom.on(card, 'click', function() {
         var allCams = Data.allCams();
         var found = null;
         for (var i = 0; i < allCams.length; i++) { if (allCams[i].id === cam.id) { found = allCams[i]; break; } }
@@ -579,9 +589,9 @@ var RouteStripMod = {
           obs.unobserve(img);
         });
       }, { root: scroll, rootMargin: '100px' });
-      scroll.querySelectorAll('img[data-src]').forEach(function(img) { obs.observe(img); });
+      Dom.queryAll('img[data-src]', scroll).forEach(function(img) { obs.observe(img); });
     } else {
-      scroll.querySelectorAll('img[data-src]').forEach(function(img) {
+      Dom.queryAll('img[data-src]', scroll).forEach(function(img) {
         img.src = img.dataset.src;
         img.onload = function() {
           img.style.opacity = '1';
@@ -592,11 +602,11 @@ var RouteStripMod = {
     }
   },
   hide: function() {
-    var panel = document.getElementById('route-camera-strip');
+    var panel = Dom.byId('route-camera-strip');
     if (panel) { panel.classList.remove('visible'); panel.style.display = 'none'; }
   },
   toggle: function() {
-    var panel = document.getElementById('route-camera-strip');
+    var panel = Dom.byId('route-camera-strip');
     if (!panel) return;
     var isVisible = panel.classList.contains('visible') || panel.style.display === 'block';
     if (isVisible) {
@@ -660,11 +670,11 @@ var PlaceSuggest = {
 
   // 綁定輸入框和建議框
   bind: function(inputId, suggestId, onSelect) {
-    var inp = document.getElementById(inputId);
-    var box = document.getElementById(suggestId);
+    var inp = Dom.byId(inputId);
+    var box = Dom.byId(suggestId);
     if (!inp || !box) return;
 
-    inp.addEventListener('input', function() {
+    Dom.on(inp, 'input', function() {
       var q = inp.value.trim();
       if (!q) { box.innerHTML = ''; box.classList.remove('visible'); return; }
       PlaceSuggest.search(q, function(results) {
@@ -679,14 +689,14 @@ var PlaceSuggest = {
         }).join('');
         box.innerHTML = html;
         box.classList.add('visible');
-        box.querySelectorAll('.suggest-item').forEach(function(item) {
-          item.addEventListener('click', function() {
+        Dom.queryAll('.suggest-item', box).forEach(function(item) {
+          Dom.on(item, 'click', function() {
             var name = item.dataset.name;
             var lat  = item.dataset.lat;
             var lng  = item.dataset.lng;
             inp.value = (lat && lng) ? (lat + ',' + lng) : name;
             box.innerHTML = ''; box.classList.remove('visible');
-            var cs = document.getElementById('clear-' + inputId.replace('js-route-',''));
+            var cs = Dom.byId('clear-' + inputId.replace('js-route-',''));
             if (cs) cs.classList.remove('hidden');
             if (onSelect) onSelect(name, lat, lng);
           });
@@ -694,15 +704,16 @@ var PlaceSuggest = {
       });
     });
 
-    inp.addEventListener('blur', function() {
+    Dom.on(inp, 'blur', function() {
       setTimeout(function() { box.innerHTML = ''; box.classList.remove('visible'); }, 200);
     });
   }
 };
-  var modal = document.getElementById('modal');
-  var modalSh = document.getElementById('modal-sh');
+  var modal = Dom.byId('modal');
+  var modalSh = Dom.byId('modal-sh');
   window.ModalEffect = {
     open: function() {
+      if (!modal || !modalSh) return;
       modal.classList.remove('hidden');
       modal.classList.add('flex');
       setTimeout(function() {
@@ -711,9 +722,10 @@ var PlaceSuggest = {
       }, 10);
     },
     close: function() {
+      if (!modal || !modalSh) return;
       modalSh.classList.remove('scale-100','opacity-100');
       modalSh.classList.add('scale-95','opacity-0');
-      var med = document.getElementById('m-med');
+      var med = Dom.byId('m-med');
       if (med) med.innerHTML = '';
       setTimeout(function() {
         modal.classList.add('hidden');
@@ -721,8 +733,8 @@ var PlaceSuggest = {
       }, 300);
     }
   };
-  document.getElementById('modal-overlay').addEventListener('click', function() { window.ModalEffect.close(); });
-  document.getElementById('modal-close-btn').addEventListener('click', function() { window.ModalEffect.close(); });
+  Dom.onId('modal-overlay', 'click', function() { window.ModalEffect.close(); });
+  Dom.onId('modal-close-btn', 'click', function() { window.ModalEffect.close(); });
 
   // 註冊 Service Worker
   if ('serviceWorker' in navigator) {

@@ -116,6 +116,22 @@
     },
     queryAll: function(selector, root) {
       return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+    },
+    on: function(target, eventName, handler, options) {
+      if (!target) return null;
+      target.addEventListener(eventName, handler, options);
+      return target;
+    },
+    onId: function(id, eventName, handler, options) {
+      return Dom.on(Dom.byId(id), eventName, handler, options);
+    },
+    onAll: function(selector, eventName, handler, root, options) {
+      return Dom.queryAll(selector, root).map(function(node, index) {
+        node.addEventListener(eventName, function(event) {
+          return handler(node, event, index);
+        }, options);
+        return node;
+      });
     }
   };
 

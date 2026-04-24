@@ -4,12 +4,18 @@
   'use strict';
 
   var THEME_KEY = 'tw_theme';
+  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f';
+
+  function setFlexVisible(el, isVisible) {
+    if (!el) return;
+    el.classList.toggle('hidden', !isVisible);
+    el.classList.toggle('flex', !!isVisible);
+  }
 
   var ThemeMod = {
     dark: Storage.get(THEME_KEY, 'dark') !== 'light',
     init: function() {
-      var btn = Dom.byId('js-theme');
-      if (btn) btn.addEventListener('click', function() { ThemeMod.toggle(); });
+      Dom.onId('js-theme', 'click', function() { ThemeMod.toggle(); });
     },
     toggle: function() {
       ThemeMod.dark = !ThemeMod.dark;
@@ -45,8 +51,7 @@
   var NavMod = {
     init: function() {
       ['map','list','tools'].forEach(function(k) {
-        var btn = Dom.byId('nav-'+k);
-        if (btn) btn.addEventListener('click', function() { NavMod.go(k); });
+        Dom.onId('nav-' + k, 'click', function() { NavMod.go(k); });
       });
     },
     go: function(key) {
@@ -188,10 +193,10 @@
   var InfoMod = {
     current: null,
     init: function() {
-      var closeBtn = Dom.byId('info-close');
-      var playBtn  = Dom.byId('info-play');
-      if (closeBtn) closeBtn.addEventListener('click', function() { InfoMod.close(); });
-      if (playBtn)  playBtn.addEventListener('click', function() { if (InfoMod.current) ModalMod.open(InfoMod.current); });
+      Dom.onId('info-close', 'click', function() { InfoMod.close(); });
+      Dom.onId('info-play', 'click', function() {
+        if (InfoMod.current) ModalMod.open(InfoMod.current);
+      });
     },
     open: function(cam) {
       InfoMod.current = cam;
@@ -266,21 +271,59 @@
   var RouteMod = {
     active: false, filteredCams: [], routeCoords: [],
     mode: 'motorcycle',
+    setAnalyzeBusy: function(isBusy) {
+      var btn = Dom.byId('js-route-btn');
+      if (!btn) return;
+      btn.disabled = !!isBusy;
+      btn.classList.toggle('loading', !!isBusy);
+      btn.textContent = isBusy ? '\u89e3\u6790\u4e2d...' : ROUTE_BTN_IDLE_TEXT;
+    },
+    updateRouteUi: function(cameraCount) {
+      var count = cameraCount || 0;
+      var st = Dom.byId('js-route-status');
+      var banner = Dom.byId('js-route-banner');
+      var info = Dom.byId('js-list-route-info');
+      var cnt = Dom.byId('js-list-route-count');
+      var summary = Dom.byId('route-summary');
+      if (st) st.textContent = '\u627e\u5230 ' + count + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f';
+      setFlexVisible(banner, true);
+      setFlexVisible(info, true);
+      if (cnt) cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + count + ' \u652f';
+      if (summary && AppState.lastRouteInfo) {
+        summary.textContent = (RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd' : '\ud83d\ude97') + ' '
+          + AppState.lastRouteInfo.distance + 'km/' + AppState.lastRouteInfo.duration + '\u5206 \u00b7 ' + count + '\u652f';
+        summary.classList.remove('hidden');
+      }
+    },
+    clearRouteUi: function() {
+      var startEl = Dom.byId('js-route-start');
+      var endEl = Dom.byId('js-route-end');
+      var st = Dom.byId('js-route-status');
+      var banner = Dom.byId('js-route-banner');
+      var info = Dom.byId('js-list-route-info');
+      var summary = Dom.byId('route-summary');
+      if (startEl) startEl.value = '';
+      if (endEl) endEl.value = '';
+      if (st) st.textContent = '';
+      setFlexVisible(banner, false);
+      setFlexVisible(info, false);
+      if (summary) {
+        summary.textContent = '';
+        summary.classList.add('hidden');
+      }
+    },
     init: function() {
-      document.querySelectorAll('.route-mode-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
+      Dom.onAll('.route-mode-btn', 'click', function(btn) {
           Dom.queryAll('.route-mode-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           RouteMod.mode = btn.dataset.mode;
-        });
       });
-      var btn      = Dom.byId('js-route-btn');
-      var clearBtn = Dom.byId('js-rb-clear');
-      if (btn)      btn.addEventListener('click', function() { RouteMod.analyze(); });
-      if (clearBtn) clearBtn.addEventListener('click', function() { RouteMod.clear(); });
+      Dom.onId('js-route-btn', 'click', function() { RouteMod.analyze(); });
+      Dom.onId('js-rb-clear', 'click', function() { RouteMod.clear(); });
       ['js-route-start','js-route-end'].forEach(function(id) {
-        var el = Dom.byId(id);
-        if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') RouteMod.analyze(); });
+        Dom.onId(id, 'keydown', function(e) {
+          if (e.key === 'Enter') RouteMod.analyze();
+        });
       });
     },
     analyze: function() {
@@ -289,8 +332,7 @@
       var startVal = startEl ? startEl.value.trim() : '';
       var endVal   = endEl   ? endEl.value.trim()   : '';
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
-      var btn = Dom.byId('js-route-btn');
-      if (btn) { btn.textContent = '\u89e3\u6790\u4e2d...'; btn.disabled = true; }
+      RouteMod.setAnalyzeBusy(true);
       var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
       var allAddrs = [simplifyAddress(startVal)]
         .concat(uiWaypoints.map(function(wp) { return simplifyAddress(wp); }))
@@ -302,7 +344,7 @@
           var startPt = results[0];
           var endPt   = results[results.length - 1];
           if (!startPt || !endPt) {
-            if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+            RouteMod.setAnalyzeBusy(false);
             Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
             return;
           }
@@ -322,26 +364,26 @@
         })
         .then(function(coords) {
           if (!coords) {
-            if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+            RouteMod.setAnalyzeBusy(false);
             // 路線失敗仍畫標記
             MapMod.drawStartEnd(AppState.routeAllPoints);
             return;
           }
-          if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+          RouteMod.setAnalyzeBusy(false);
           var info = AppState.lastRouteInfo;
           var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
           var msg = info ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418') : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
           Toast.show(msg, 3000);
-          var exp = document.getElementById('route-expanded');
-          var col = document.getElementById('route-collapsed');
+          var exp = Dom.byId('route-expanded');
+          var col = Dom.byId('route-collapsed');
           if (exp) exp.classList.add('hidden');
           if (col) col.classList.remove('hidden');
-          var clearMini = document.getElementById('js-route-clear-small');
+          var clearMini = Dom.byId('js-route-clear-small');
           if (clearMini) clearMini.classList.remove('hidden');
           RouteMod._doFilter(coords);
         })
         .catch(function() {
-          if (btn) { btn.textContent = '\ud83d\udd0d \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f'; btn.disabled = false; }
+          RouteMod.setAnalyzeBusy(false);
           Toast.show('\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66');
           MapMod.drawStartEnd(AppState.routeAllPoints);
         });
@@ -393,24 +435,18 @@
       MapMod.drawRoute(simplified, RouteMod.mode);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(AppState.routeAllPoints);
-      var st = document.getElementById('js-route-status');
-      if (st) st.textContent = '\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f';
-      var banner = document.getElementById('js-route-banner');
-      if (banner) { banner.classList.remove('hidden'); banner.classList.add('flex'); }
-      var info = document.getElementById('js-list-route-info');
-      var cnt  = document.getElementById('js-list-route-count');
-      if (info) { info.classList.remove('hidden'); info.classList.add('flex'); }
-      if (cnt)  cnt.textContent = '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + RouteMod.filteredCams.length + ' \u652f';
+      RouteMod.updateRouteUi(RouteMod.filteredCams.length);
       Toast.show('\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f');
       (function(){
-        var _s=document.getElementById('route-summary');
-        var _ri=AppState.lastRouteInfo;
-        if(_s&&_ri){_s.textContent=(RouteMod.mode==='motorcycle'?'\ud83c\udfcd':'\ud83d\ude97')+' '+_ri.distance+'km/'+_ri.duration+'\u5206 \u00b7 '+RouteMod.filteredCams.length+'\u652f';_s.classList.remove('hidden');}
-      })();
-      (function(){
-        var _s=document.getElementById('js-route-start');
-        var _e=document.getElementById('js-route-end');
-        if(_s&&_e&&window.HistoryMod) HistoryMod.add(_s.value,_e.value,AppState.routeAllPoints?AppState.routeAllPoints.slice(1,-1).map(function(p){return p[0]+','+p[1];}):[]); 
+        var startInput = Dom.byId('js-route-start');
+        var endInput = Dom.byId('js-route-end');
+        if(startInput && endInput && window.HistoryMod) {
+          HistoryMod.add(
+            startInput.value,
+            endInput.value,
+            AppState.routeAllPoints ? AppState.routeAllPoints.slice(1,-1).map(function(p){ return p[0]+','+p[1]; }) : []
+          );
+        }
       })();
       Bus.emit('filter:changed');
       // 沿途影像輪播（自動顯示）
@@ -424,16 +460,7 @@
       WaypointsMod && WaypointsMod.clearMarkers();
       AppState.pendingWaypoints = [];
       WaypointsMod && WaypointsMod.render([]);
-      var startEl = document.getElementById('js-route-start');
-      var endEl   = document.getElementById('js-route-end');
-      var st      = document.getElementById('js-route-status');
-      if (startEl) startEl.value = '';
-      if (endEl)   endEl.value   = '';
-      var banner = document.getElementById('js-route-banner');
-      var info   = document.getElementById('js-list-route-info');
-      if (st)     st.textContent = '';
-      if (banner) { banner.classList.add('hidden'); banner.classList.remove('flex'); }
-      if (info)   { info.classList.add('hidden');   info.classList.remove('flex'); }
+      RouteMod.clearRouteUi();
       Bus.emit('filter:changed');
     }
   };
@@ -442,18 +469,16 @@
     region: 'all', search: '',
     MAP_MARKER_ZOOM: 10, // 縮放 >= 10 才畫 marker
     init: function() {
-      document.querySelectorAll('.rtab').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          document.querySelectorAll('.rtab').forEach(function(b) { b.classList.remove('active'); });
+      Dom.onAll('.rtab', 'click', function(btn) {
+          Dom.queryAll('.rtab').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           ListMod.region = btn.dataset.r;
           Bus.emit('filter:changed');
-        });
       });
-      var s = document.getElementById('js-search');
-      var suggestList = document.getElementById('suggest-list');
+      var s = Dom.byId('js-search');
+      var suggestList = Dom.byId('suggest-list');
       if (s) {
-        s.addEventListener('input', function() {
+        Dom.on(s, 'input', function() {
           ListMod.search = s.value.trim().toLowerCase();
           Bus.emit('filter:changed');
           // 地名建議
@@ -471,8 +496,8 @@
             }).join('');
             suggestList.innerHTML = html;
             suggestList.classList.add('visible');
-            suggestList.querySelectorAll('.suggest-item').forEach(function(item) {
-              item.addEventListener('click', function() {
+            Dom.queryAll('.suggest-item', suggestList).forEach(function(item) {
+              Dom.on(item, 'click', function() {
                 s.value = item.dataset.name;
                 ListMod.search = item.dataset.name.toLowerCase();
                 suggestList.innerHTML=''; suggestList.classList.remove('visible');
@@ -488,7 +513,7 @@
             });
           });
         });
-        s.addEventListener('blur', function() {
+        Dom.on(s, 'blur', function() {
           setTimeout(function() { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } }, 200);
         });
       }
@@ -505,14 +530,20 @@
       });
     },
     render: function() {
-      var el = document.getElementById('js-list-inner');
+      var el = Dom.byId('js-list-inner');
       if (!el) return;
       var cams = ListMod.getFiltered();
       MapMod.clearMarkers();
-      var stat = document.getElementById('js-stat-cams');
+      var stat = Dom.byId('js-stat-cams');
       if (stat) stat.textContent = Data.allCams().length;
       if (cams.length === 0) {
-        el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
+        if (Data.camsState === 'loading' || Data.camsState === 'idle') {
+          el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
+        } else if (Data.camsState === 'error') {
+          el.innerHTML = '<div class="text-center text-amber-400 py-12 text-sm">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+        } else {
+          el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
+        }
         return;
       }
       var map = {};
@@ -571,13 +602,13 @@
             _ob.unobserve(e.target);
           });
         },{rootMargin:'80px'});
-        el.querySelectorAll('.cam-tw').forEach(function(w){_ob.observe(w);});
+        Dom.queryAll('.cam-tw', el).forEach(function(w){_ob.observe(w);});
       }
-      el.querySelectorAll('.cam-card').forEach(function(card) {
-        card.addEventListener('click', function() {
+      Dom.queryAll('.cam-card', el).forEach(function(card) {
+        Dom.on(card, 'click', function() {
           var cam = map[card.dataset.id];
           if (!cam) return;
-          el.querySelectorAll('.cam-card').forEach(function(c){c.style.borderColor='';c.style.background='';});
+          Dom.queryAll('.cam-card', el).forEach(function(c){c.style.borderColor='';c.style.background='';});
           card.style.borderColor='#f97316';
           card.style.background='rgba(249,115,22,0.08)';
           InfoMod.open(cam);
@@ -591,9 +622,9 @@
 
   var ModalMod = {
     open: function(cam) {
-      var ttl = document.getElementById('m-ttl');
-      var org = document.getElementById('m-org');
-      var med = document.getElementById('m-med');
+      var ttl = Dom.byId('m-ttl');
+      var org = Dom.byId('m-org');
+      var med = Dom.byId('m-med');
       if (ttl) ttl.textContent = cam.name;
       if (org) {
         var w = Data.weather[cam.county];
@@ -663,29 +694,11 @@
     // 起終點地名建議
     PlaceSuggest.bind('js-route-start', 'suggest-start');
     PlaceSuggest.bind('js-route-end',   'suggest-end');
-
-    // 路線解析按鈕 loading 動畫
-    var _routeBtn = document.getElementById('js-route-btn');
-    if (_routeBtn) {
-      var _origAnalyze = RouteMod.analyze.bind(RouteMod);
-      RouteMod.analyze = function() {
-        _routeBtn.classList.add('loading');
-        _routeBtn.disabled = true;
-        _origAnalyze();
-      };
-      // 解析完成後移除 loading
-      Bus.on('filter:changed', function() {
-        _routeBtn.classList.remove('loading');
-        _routeBtn.disabled = false;
-      });
-    }
+    RouteMod.setAnalyzeBusy(false);
 
     // iOS Safari：輸入框 font-size 固定 16px，防止縮放（純 CSS 解法更穩定）
 
     // 沿途影像按鈕
-    var stripBtn = document.getElementById('js-strip-btn');
-    if (stripBtn) {
-      stripBtn.addEventListener('click', function() { RouteStripMod.toggle(); });
-    }
+    Dom.onId('js-strip-btn', 'click', function() { RouteStripMod.toggle(); });
   });
 })();
