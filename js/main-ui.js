@@ -5,6 +5,21 @@
 
   var THEME_KEY = 'tw_theme';
   var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f';
+  var REGION_LABELS = {
+    north: '\u5317\u90e8',
+    central: '\u4e2d\u90e8',
+    south: '\u5357\u90e8',
+    east: '\u6771\u90e8',
+    island: '\u96e2\u5cf6'
+  };
+  var SEARCH_HINTS = {
+    all: ['國道', '快速道路', '景點', '台61線', '雪隧', '車站'],
+    north: ['台北', '新北', '基隆', '桃園', '宜蘭', '雪隧'],
+    central: ['台中', '彰化', '南投', '雲林', '清境', '日月潭'],
+    south: ['嘉義', '台南', '高雄', '屏東', '墾丁', '阿里山'],
+    east: ['花蓮', '台東', '太魯閣', '蘇花', '台11線', '台9線'],
+    island: ['澎湖', '金門', '馬祖', '機場', '港', '車站']
+  };
 
   function setFlexVisible(el, isVisible) {
     if (!el) return;
@@ -484,15 +499,78 @@
   };
 
   var ListMod = {
-    region: 'all', search: '',
+    region: 'all', regionCounty: 'all', search: '',
     MAP_MARKER_ZOOM: 10, // 縮放 >= 10 才畫 marker
+    renderSearchHints: function() {
+      var wrap = Dom.byId('js-search-hints');
+      var input = Dom.byId('js-search');
+      if (!wrap) return;
+      var hints = (SEARCH_HINTS[ListMod.region] || SEARCH_HINTS.all).slice();
+      if (ListMod.regionCounty !== 'all') hints.unshift(ListMod.regionCounty);
+      hints = hints.filter(function(value, index, arr) { return arr.indexOf(value) === index; }).slice(0, 6);
+      wrap.innerHTML = '<span class="text-[10px] text-slate-500 py-1">\u63d0\u793a\uff1a</span>' + hints.map(function(hint) {
+        return '<button class="hint-chip px-2.5 py-1 text-[11px] font-bold rounded-full transition-all" data-hint="' + hint + '">' + hint + '</button>';
+      }).join('');
+      Dom.onAll('.hint-chip', 'click', function(btn) {
+        if (input) {
+          input.value = btn.dataset.hint || '';
+          ListMod.search = input.value.trim().toLowerCase();
+        }
+        Bus.emit('filter:changed');
+      }, wrap);
+    },
+    renderCountyTabs: function() {
+      var wrap = Dom.byId('js-region-county-tabs');
+      if (!wrap) return;
+      var counties = Config.REGIONS[ListMod.region] || [];
+      if (ListMod.region === 'all' || !counties.length) {
+        wrap.innerHTML = '';
+        wrap.classList.add('hidden');
+        ListMod.renderSearchHints();
+        return;
+      }
+      var regionLabel = REGION_LABELS[ListMod.region] || '\u5340\u57df';
+      var html = '<button data-county="all" class="county-rtab px-3 py-1.5 text-[11px] font-bold rounded-full transition-all">'
+        + regionLabel + '\u5168\u90e8</button>';
+      counties.forEach(function(county) {
+        html += '<button data-county="' + county + '" class="county-rtab px-3 py-1.5 text-[11px] font-bold rounded-full transition-all">'
+          + county + '</button>';
+      });
+      wrap.innerHTML = html;
+      wrap.classList.remove('hidden');
+      Dom.onAll('.county-rtab', 'click', function(btn) {
+        ListMod.regionCounty = btn.dataset.county || 'all';
+        ListMod.syncCountyTabs();
+        ListMod.renderSearchHints();
+        Bus.emit('filter:changed');
+      }, wrap);
+      ListMod.syncCountyTabs();
+      ListMod.renderSearchHints();
+    },
+    syncCountyTabs: function() {
+      var wrap = Dom.byId('js-region-county-tabs');
+      if (!wrap) return;
+      wrap.classList.toggle('hidden', ListMod.region === 'all');
+      Dom.queryAll('.county-rtab', wrap).forEach(function(btn) {
+        var isActive = btn.dataset.county === ListMod.regionCounty;
+        btn.classList.toggle('active', isActive);
+        btn.classList.toggle('bg-orange-500', isActive);
+        btn.classList.toggle('text-white', isActive);
+        btn.classList.toggle('bg-white/5', !isActive);
+        btn.classList.toggle('text-slate-300', !isActive);
+      });
+    },
     init: function() {
       Dom.onAll('.rtab', 'click', function(btn) {
           Dom.queryAll('.rtab').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           ListMod.region = btn.dataset.r;
+          ListMod.regionCounty = 'all';
+          ListMod.renderCountyTabs();
           Bus.emit('filter:changed');
       });
+      ListMod.renderCountyTabs();
+      ListMod.renderSearchHints();
       var s = Dom.byId('js-search');
       var suggestList = Dom.byId('suggest-list');
       if (s) {
@@ -540,11 +618,12 @@
       var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
       return cams.filter(function(cam) {
         var rOk = ListMod.region === 'all' || getRegion(cam.county) === ListMod.region;
+        var cOk = ListMod.region === 'all' || ListMod.regionCounty === 'all' || cam.county === ListMod.regionCounty;
         var sOk = !ListMod.search ||
           cam.name.toLowerCase().indexOf(ListMod.search) !== -1 ||
           cam.county.toLowerCase().indexOf(ListMod.search) !== -1 ||
           (cam.id && cam.id.toLowerCase().indexOf(ListMod.search) !== -1);
-        return rOk && sOk;
+        return rOk && cOk && sOk;
       });
     },
     render: function() {

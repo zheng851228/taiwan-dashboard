@@ -278,6 +278,32 @@
     return null;
   };
 
+  window.parseAppleMapsRoute = function(url) {
+    try {
+      var parsed = new URL(url);
+      if (parsed.hostname.indexOf('apple.com') === -1) return null;
+      var params = parsed.searchParams;
+      var start = (params.get('saddr') || '').trim();
+      var end = (params.get('daddr') || '').trim();
+      var ll = (params.get('ll') || '').trim();
+      var q = (params.get('q') || '').trim();
+
+      if (start || end) {
+        return { start: start, end: end };
+      }
+      if (ll && q) {
+        return { start: ll, end: q };
+      }
+      if (q) {
+        return { start: '', end: q };
+      }
+      if (ll) {
+        return { start: ll, end: '' };
+      }
+    } catch (err) {}
+    return null;
+  };
+
   window.autoFillRoute = function(text, onFill) {
     text = text.trim();
     if (!text) return false;
@@ -299,6 +325,11 @@
         var r = parseRouteStartEnd(fullUrl);
         if (r && (r.start || r.end)) {
           onFill(r.start || '', r.end || '');
+          return;
+        }
+        var appleRoute = parseAppleMapsRoute(fullUrl);
+        if (appleRoute && (appleRoute.start || appleRoute.end)) {
+          onFill(appleRoute.start || '', appleRoute.end || '');
           return;
         }
         var coords = parseGoogleMapsCoords(fullUrl);
@@ -332,6 +363,19 @@
         if (m2) return [parseFloat(m2[1]), parseFloat(m2[2])];
         var m3 = fullUrl.match(/ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
         if (m3) return [parseFloat(m3[1]), parseFloat(m3[2])];
+        var appleRoute = parseAppleMapsRoute(fullUrl);
+        if (appleRoute) {
+          if (appleRoute.start && /^-?\d+\.?\d+,\s*-?\d+\.?\d+$/.test(appleRoute.start)) {
+            var a1 = appleRoute.start.split(',');
+            return [parseFloat(a1[0]), parseFloat(a1[1])];
+          }
+          if (appleRoute.end && /^-?\d+\.?\d+,\s*-?\d+\.?\d+$/.test(appleRoute.end)) {
+            var a2 = appleRoute.end.split(',');
+            return [parseFloat(a2[0]), parseFloat(a2[1])];
+          }
+          if (appleRoute.end) return geocodeName(appleRoute.end);
+          if (appleRoute.start) return geocodeName(appleRoute.start);
+        }
         var placeM = fullUrl.match(/\/place\/([^/@]+)/);
         if (placeM) return geocodeName(decodeURIComponent(placeM[1].replace(/\+/g,' ')));
         return null;

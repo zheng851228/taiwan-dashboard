@@ -47,43 +47,51 @@
   <div id="map"></div>
 
   <div class="absolute top-[calc(var(--safe-top)+3rem)] left-4 right-4 z-[500] max-w-lg">
-    <div id="route-collapsed" class="glass px-3 py-2 rounded-2xl shadow-xl flex items-center gap-2">
-      <i class="fa-solid fa-route text-orange-500 text-sm shrink-0"></i>
+    <div id="route-collapsed" class="route-shell route-shell-collapsed glass px-3 py-2.5 rounded-[24px] shadow-xl flex items-center gap-3">
+      <div class="route-shell-icon">
+        <i class="fa-solid fa-route text-orange-400 text-sm shrink-0"></i>
+      </div>
       <div class="flex-1 min-w-0">
         <input id="route-paste-input" type="text"
           class="w-full bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
           placeholder="貼上 Google Maps 路線或點此展開..." />
-        <div id="route-summary" class="hidden text-[10px] text-orange-400 font-bold mt-0.5 truncate"></div>
+        <div id="route-summary" class="hidden text-[10px] text-orange-300/90 font-bold mt-0.5 truncate"></div>
       </div>
-      <button id="route-toggle" class="text-orange-500 text-xs shrink-0 hover:text-orange-400">展開</button>
+      <button id="route-toggle" class="route-mini-btn text-orange-300 text-xs shrink-0 hover:text-orange-200">展開</button>
       <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">&#10005;</button>
     </div>
-    <div id="route-expanded" class="hidden glass p-3 rounded-2xl shadow-xl space-y-2 mt-1">
+    <div id="route-expanded" class="route-shell route-shell-expanded hidden glass p-3 rounded-[28px] shadow-xl space-y-3 mt-2">
       <!-- 歷史路線 -->
-      <div class="flex items-center justify-between">
-        <button id="history-btn" class="text-[10px] text-slate-400 hover:text-orange-400 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]"></i> 最近路線</button>
-        <span id="history-count" class="text-[10px] text-slate-600"></span>
+      <div class="flex items-center justify-between px-1">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-400/80 font-black">Route Planner</div>
+          <div class="text-sm font-black text-slate-100">規劃你的沿途攝影機</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="history-btn" class="route-mini-btn text-[10px] text-slate-300 hover:text-orange-300 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]"></i> 最近路線</button>
+          <span id="history-count" class="text-[10px] text-slate-600"></span>
+        </div>
       </div>
       <div id="history-dropdown" class="hidden bg-slate-900/90 rounded-xl border border-white/10 max-h-36 overflow-y-auto">
         <div id="history-panel"></div>
       </div>
-      <!-- Google Maps 貼入 -->
-      <div class="bg-slate-800/60 rounded-xl px-3 py-2 flex items-center gap-2">
-        <i class="fa-brands fa-google text-blue-400 text-xs shrink-0"></i>
+      <!-- Google / Apple Maps 貼入 -->
+      <div class="route-input-card px-3 py-2.5 flex items-center gap-2">
+        <i class="fa-solid fa-map-location-dot text-sky-300 text-xs shrink-0"></i>
         <input type="text" id="js-gmaps-url"
           class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
-          placeholder="貼上 Google Maps 路線網址..." />
-        <button id="js-gmaps-parse" class="text-[10px] text-orange-400 font-black shrink-0 hover:text-orange-300">帶入</button>
+          placeholder="貼上 Google Maps 或 Apple Maps 路線網址..." />
+        <button id="js-gmaps-parse" class="route-mini-btn text-[10px] text-orange-300 font-black shrink-0 hover:text-orange-200">帶入</button>
       </div>
       <div id="js-gmaps-status" class="text-[10px] text-blue-400 px-1 hidden"></div>
       <!-- 起點 -->
-      <div class="flex gap-2 items-center">
-        <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0 shadow shadow-green-500/40">
+      <div class="route-point-row flex gap-2.5 items-center">
+        <div class="route-point-badge route-point-start">
           <span class="text-white text-[9px] font-black">起</span>
         </div>
         <div class="flex-1 relative">
           <input type="text" id="js-route-start" autocomplete="off"
-            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:border-green-500/60"
+            class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
             placeholder="起點地名..." />
           <button id="clear-start" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
         </div>
@@ -92,26 +100,26 @@
       <!-- 停靠點 -->
       <div id="waypoints-container" class="space-y-2"></div>
       <!-- 終點 -->
-      <div class="flex gap-2 items-center">
-        <div id="end-label" class="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center shrink-0 shadow shadow-red-500/40">
+      <div class="route-point-row flex gap-2.5 items-center">
+        <div id="end-label" class="route-point-badge route-point-end">
           <span class="text-white text-[9px] font-black">終</span>
         </div>
         <div class="flex-1 relative">
           <input type="text" id="js-route-end" autocomplete="off"
-            class="w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none focus:border-red-500/60"
+            class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
             placeholder="終點地名..." />
           <button id="clear-end" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
         </div>
       </div>
       <div id="suggest-end" class="hidden bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
       <!-- 交通模式 + 解析 -->
-      <div class="flex gap-1.5">
-        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949; 機車</button>
-        <button data-mode="car" class="route-mode-btn flex-1 py-1.5 rounded-xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">&#128663; 汽車</button>
-        <button id="route-toggle-close" class="px-2.5 py-1.5 rounded-xl text-xs text-slate-500 border border-white/10 bg-slate-800/50">&#8593;</button>
+      <div class="route-mode-row flex gap-2">
+        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-2 rounded-2xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949; 機車</button>
+        <button data-mode="car" class="route-mode-btn flex-1 py-2 rounded-2xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">&#128663; 汽車</button>
+        <button id="route-toggle-close" class="route-mini-btn px-3 py-2 rounded-2xl text-xs text-slate-400 border border-white/10 bg-slate-800/50">&#8593;</button>
       </div>
       <button id="js-route-btn"
-        class="w-full bg-gradient-to-r from-orange-500 to-orange-600 py-2.5 rounded-xl text-white font-bold text-sm transition-all active:scale-95 shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2">
+        class="route-action-btn w-full py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
         <i class="fa-solid fa-magnifying-glass-location text-sm"></i> 找沿途攝影機
       </button>
     </div>
@@ -184,21 +192,35 @@
 
 <section id="pg-list" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-4">
-    <div id="js-tabs" class="flex gap-1 p-1 glass rounded-2xl sticky top-0 z-10">
-      <button data-r="all"     class="rtab active flex-1 py-2 text-xs font-bold rounded-xl transition-all">全部</button>
-      <button data-r="north"   class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">北部</button>
-      <button data-r="central" class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">中部</button>
-      <button data-r="south"   class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">南部</button>
-      <button data-r="east"    class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">東部</button>
-      <button data-r="island"  class="rtab flex-1 py-2 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">離島</button>
+    <div class="list-filter-shell glass rounded-[28px] p-3 sticky top-0 z-10">
+      <div class="flex items-center justify-between px-1 pb-2">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-400/80 font-black">Traffic Browser</div>
+          <div class="text-sm font-black text-slate-100">路況列表分類</div>
+        </div>
+        <div class="text-[10px] text-slate-500">依地區、縣市、關鍵詞快速篩選</div>
+      </div>
+      <div id="js-tabs" class="list-tabs-grid gap-1.5 p-1.5 rounded-2xl">
+        <button data-r="all"     class="rtab active py-2.5 text-xs font-bold rounded-xl transition-all">全部</button>
+        <button data-r="north"   class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">北部</button>
+        <button data-r="central" class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">中部</button>
+        <button data-r="south"   class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">南部</button>
+        <button data-r="east"    class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">東部</button>
+        <button data-r="island"  class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">離島</button>
+      </div>
+      <div id="js-region-county-tabs" class="hidden flex flex-wrap gap-2 px-1 pt-3"></div>
+      <div class="relative mt-3">
+        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-orange-300/70"></i>
+        <input type="text" id="js-search" autocomplete="off"
+          placeholder="搜尋攝影機、地名、縣市..."
+          class="list-search-input w-full py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+      </div>
+      <div id="js-search-hints" class="flex flex-wrap gap-2 px-1 pt-3"></div>
     </div>
-    <div class="relative">
-      <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
-      <input type="text" id="js-search" autocomplete="off"
-        placeholder="搜尋攝影機、地名、縣市..."
-        class="w-full bg-slate-800/50 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    <div class="relative -mt-1">
+      <div class="list-suggest-label text-[10px] text-slate-500 px-1 pb-1">搜尋建議</div>
+      <div id="suggest-list" class="suggest-box bg-slate-900 border border-white/10 rounded-2xl overflow-hidden"></div>
     </div>
-    <div id="suggest-list" class="suggest-box bg-slate-900 border border-white/10 rounded-2xl overflow-hidden"></div>
     <div id="js-list-route-info" class="hidden text-xs font-bold text-orange-400 px-1 flex items-center gap-2">
       <span class="relative flex h-2 w-2">
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
@@ -212,22 +234,26 @@
 
 <section id="pg-tools" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-6">
-    <div class="glass p-5 rounded-3xl space-y-3">
-      <div class="flex items-center justify-between mb-2">
+    <div class="tools-weather-shell glass p-5 rounded-[30px] space-y-4">
+      <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-sky-500/20 rounded-xl flex items-center justify-center">
+          <div class="tools-weather-icon w-11 h-11 rounded-2xl flex items-center justify-center">
             <i class="fa-solid fa-cloud-sun text-sky-400"></i>
           </div>
-          <h2 class="font-black text-base">全台天氣總覽</h2>
+          <div>
+            <div class="text-[10px] uppercase tracking-[0.22em] text-sky-300/80 font-black">Weather Deck</div>
+            <h2 class="font-black text-base">全台天氣總覽</h2>
+          </div>
         </div>
-        <button id="wx-refresh" class="text-xs text-slate-500 hover:text-orange-400 transition-colors flex items-center gap-1">
+        <button id="wx-refresh" class="tools-refresh-btn text-xs text-slate-300 transition-colors flex items-center gap-1">
           <i class="fa-solid fa-rotate-right"></i> 更新
         </button>
       </div>
-      <div id="wx-grid" class="grid grid-cols-2 gap-2">
+      <div class="text-[11px] text-slate-400 leading-relaxed">快速查看各縣市目前天氣，點一下卡片可直接跳到對應地區地圖。</div>
+      <div id="wx-grid" class="grid grid-cols-2 gap-2.5">
         <div class="col-span-2 text-center text-slate-500 text-xs py-4">載入中...</div>
       </div>
-      <div id="wx-updated" class="text-[10px] text-slate-600 text-right"></div>
+      <div id="wx-updated" class="text-[10px] text-slate-500 text-right"></div>
     </div>
 
     <div class="glass p-6 rounded-3xl space-y-3">
