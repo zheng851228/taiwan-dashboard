@@ -3,12 +3,17 @@ import { encodePolyline6, haversineKm, mergeLegShapes } from './polyline.js';
 const TDX_TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
 const DEFAULT_TDX_CONFIG_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/VD/Highway?$format=JSON';
 const DEFAULT_TDX_LIVE_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/VD/Highway?$format=JSON';
-const DEFAULT_TDX_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Incident/Highway?$format=JSON';
+const DEFAULT_TDX_SECTION_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Section/Highway?$format=JSON';
+const DEFAULT_TDX_LIVE_TRAFFIC_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/Highway?$format=JSON';
+const DEFAULT_TDX_CONGESTION_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CongestionLevel/Highway?$format=JSON';
+const DEFAULT_TDX_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Highway?$format=JSON';
 const DEFAULT_CWA_OBSERVATION_URL = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001';
 const DEFAULT_CWA_FORECAST_URL = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-089';
 const DEFAULT_CWA_COUNTY_FORECAST_URL = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001';
 
 let tokenCache = null;
+let tdxStaticCache = null;
+const TDX_STATIC_TTL_MS = 6 * 60 * 60 * 1000;
 
 export async function getValhallaRoute(locations, costing, env, avoidLocations = []) {
   const baseUrl = String(env.VALHALLA_BASE_URL || 'https://valhalla1.openstreetmap.de').replace(/\/$/, '');
@@ -189,6 +194,7 @@ export async function loadLiveProviderData(sections, env) {
   ]);
 
   const traffic = settledValue(trafficResult, { detectors: [], incidents: [] }, 'TDX', issues);
+  (traffic.issues || []).forEach((issue) => issues.push(`TDX: ${issue}`));
   const weather = settledValue(weatherResult, [], 'CWA', issues);
   const cameras = settledValue(cameraResult, [], 'CCTV', issues);
   return {
@@ -213,21 +219,88 @@ async function loadTdxData(env) {
   }
   const token = await getTdxToken(env);
   const headers = { Authorization: `Bearer ${token}` };
-  const configUrl = env.TDX_VD_CONFIG_ENDPOINT || DEFAULT_TDX_CONFIG_URL;
   const liveUrl = env.TDX_VD_LIVE_ENDPOINT || DEFAULT_TDX_LIVE_URL;
   const incidentUrl = env.TDX_INCIDENT_ENDPOINT || DEFAULT_TDX_INCIDENT_URL;
-  const [configResponse, liveResponse, incidentResponse] = await Promise.allSettled([
-    requestJson(configUrl, { headers }, 15000),
+  const [staticResponse, liveResponse, incidentResponse] = await Promise.allSettled([
+    loadTdxStaticData(env, headers),
     requestJson(liveUrl, { headers }, 15000),
     requestJson(incidentUrl, { headers }, 15000)
   ]);
-  if (configResponse.status !== 'fulfilled' || liveResponse.status !== 'fulfilled') {
-    throw new Error('VD configuration or live feed unavailable');
+  if (staticResponse.status !== 'fulfilled') {
+    throw new Error(`VD static feed unavailable: ${resultError(staticResponse)}`);
+  }
+  if (liveResponse.status !== 'fulfilled') {
+    throw new Error(`VD live feed unavailable: ${resultError(liveResponse)}`);
+  }
+  const issues = [...staticResponse.value.issues];
+  if (incidentResponse.status !== 'fulfilled') {
+    issues.push(`road events unavailable: ${resultError(incidentResponse)}`);
   }
   return {
-    detectors: mergeTdxDetectors(configResponse.value, liveResponse.value),
-    incidents: incidentResponse.status === 'fulfilled' ? normalizeTdxIncidents(incidentResponse.value) : []
+    detectors: mergeTdxDetectors(
+      staticResponse.value.config,
+      liveResponse.value,
+      staticResponse.value.referenceSpeedByLink
+    ),
+    incidents: incidentResponse.status === 'fulfilled' ? normalizeTdxIncidents(incidentResponse.value) : [],
+    issues
   };
+}
+
+async function loadTdxStaticData(env, headers) {
+  const urls = {
+    config: env.TDX_VD_CONFIG_ENDPOINT || DEFAULT_TDX_CONFIG_URL,
+    sections: env.TDX_SECTION_ENDPOINT || DEFAULT_TDX_SECTION_URL,
+    liveTraffic: env.TDX_LIVE_TRAFFIC_ENDPOINT || DEFAULT_TDX_LIVE_TRAFFIC_URL,
+    congestion: env.TDX_CONGESTION_ENDPOINT || DEFAULT_TDX_CONGESTION_URL
+  };
+  const cacheKey = Object.values(urls).join('|');
+  if (tdxStaticCache && tdxStaticCache.key === cacheKey && tdxStaticCache.expiresAt > Date.now()) {
+    return tdxStaticCache.value;
+  }
+
+  const [configResult, sectionResult, liveTrafficResult, congestionResult] = await Promise.allSettled([
+    requestJson(urls.config, { headers }, 20000),
+    requestJson(urls.sections, { headers }, 20000),
+    requestJson(urls.liveTraffic, { headers }, 20000),
+    requestJson(urls.congestion, { headers }, 15000)
+  ]);
+  if (configResult.status !== 'fulfilled') {
+    throw new Error(`VD configuration unavailable: ${resultError(configResult)}`);
+  }
+
+  const issues = [];
+  const referenceResults = [
+    ['sections', sectionResult],
+    ['live traffic', liveTrafficResult],
+    ['congestion levels', congestionResult]
+  ];
+  const referenceInputsReady = referenceResults.every(([, result]) => result.status === 'fulfilled');
+  referenceResults.forEach(([label, result]) => {
+    if (result.status !== 'fulfilled') {
+      issues.push(`${label} unavailable: ${resultError(result)}`);
+    }
+  });
+  const referenceSpeedByLink = referenceInputsReady
+    ? buildReferenceSpeedByLink(
+      sectionResult.value,
+      liveTrafficResult.value,
+      congestionResult.value
+    )
+    : new Map();
+  const value = { config: configResult.value, referenceSpeedByLink, issues };
+  if (referenceInputsReady) {
+    tdxStaticCache = {
+      key: cacheKey,
+      value,
+      expiresAt: Date.now() + TDX_STATIC_TTL_MS
+    };
+  }
+  return value;
+}
+
+function resultError(result) {
+  return result.reason && result.reason.message ? result.reason.message : 'unavailable';
 }
 
 async function getTdxToken(env) {
@@ -250,66 +323,149 @@ async function getTdxToken(env) {
   return tokenCache.value;
 }
 
-function mergeTdxDetectors(configPayload, livePayload) {
+export function mergeTdxDetectors(configPayload, livePayload, referenceSpeedByLink = new Map()) {
   const configs = arrayFromPayload(configPayload, ['VDs', 'VDList']);
   const lives = arrayFromPayload(livePayload, ['VDLives', 'VDLiveList']);
   const liveById = new Map(lives.map((item) => [item.VDID || item.VdId || item.id, item]));
-  return configs.map((config) => {
+  return configs.flatMap((config) => {
     const id = config.VDID || config.VdId || config.id;
     const live = liveById.get(id);
-    if (!live) return null;
-    const speed = trafficSpeed(live);
-    const referenceSpeed = numeric(
-      config.SpeedLimit,
-      config.ReferenceSpeed,
-      config.FreeFlowSpeed,
-      config.Speed
-    );
-    return {
-      id,
+    if (!live) return [];
+    if (live.Status !== undefined && Number(live.Status) !== 0) return [];
+    const detectionLinks = Array.isArray(config.DetectionLinks) && config.DetectionLinks.length
+      ? config.DetectionLinks
+      : [{ LinkID: null, Bearing: config.Bearing || config.DirectionAngle }];
+    return detectionLinks.map((link, linkIndex) => ({
+      id: link.LinkID ? `${id}:${link.LinkID}` : `${id}:${linkIndex}`,
       lat: numeric(config.PositionLat, config.Position?.PositionLat, config.lat),
       lng: numeric(config.PositionLon, config.Position?.PositionLon, config.lng),
-      heading: numeric(config.Bearing, config.DirectionAngle, config.heading),
+      heading: directionDegrees(
+        link.Bearing ?? link.RoadDirection ?? config.Bearing ?? config.DirectionAngle
+      ),
       roadRef: config.RoadName || config.RoadID || config.RoadSection || '',
-      speedKph: speed,
-      referenceSpeedKph: referenceSpeed,
+      speedKph: trafficSpeed(live, link.LinkID),
+      referenceSpeedKph: numeric(
+        referenceSpeedByLink.get(link.LinkID),
+        config.SpeedLimit,
+        config.ReferenceSpeed,
+        config.FreeFlowSpeed,
+        config.Speed
+      ),
       observedAt: live.DataCollectTime || live.UpdateTime || live.observedAt,
       source: 'TDX'
-    };
+    }));
   }).filter((item) => item && Number.isFinite(item.lat) && Number.isFinite(item.lng));
 }
 
-function trafficSpeed(live) {
-  const linkFlows = live.LinkFlows || live.linkFlows || [];
+function trafficSpeed(live, linkId) {
+  let linkFlows = live.LinkFlows || live.linkFlows || [];
+  if (linkId) linkFlows = linkFlows.filter((link) => (link.LinkID || link.linkId) === linkId);
   let weightedSpeed = 0;
   let totalVolume = 0;
+  let fallbackSpeed = 0;
+  let fallbackCount = 0;
   for (const link of linkFlows) {
     for (const lane of link.Lanes || link.lanes || []) {
       const speed = Number(lane.Speed ?? lane.speed);
       const volumes = lane.Vehicles || lane.VehicleVolumes || lane.vehicles || [];
-      const volume = volumes.reduce((sum, item) => sum + Number(item.Volume ?? item.volume ?? 0), 0);
+      const volume = volumes.reduce((sum, item) => {
+        const value = Number(item.Volume ?? item.volume);
+        return sum + (Number.isFinite(value) && value > 0 ? value : 0);
+      }, 0);
+      const errorType = String(lane.ErrorType || '').toLowerCase();
+      if (errorType && errorType !== 'diag0') continue;
       if (Number.isFinite(speed) && speed >= 0) {
-        weightedSpeed += speed * Math.max(1, volume);
-        totalVolume += Math.max(1, volume);
+        if (volume > 0) {
+          weightedSpeed += speed * volume;
+          totalVolume += volume;
+        } else if (speed > 0) {
+          fallbackSpeed += speed;
+          fallbackCount += 1;
+        }
       }
     }
   }
-  return totalVolume ? weightedSpeed / totalVolume : null;
+  if (totalVolume) return weightedSpeed / totalVolume;
+  return fallbackCount ? fallbackSpeed / fallbackCount : null;
 }
 
-function normalizeTdxIncidents(payload) {
-  return arrayFromPayload(payload, ['Incidents', 'RoadIncidents']).map((item) => ({
-    id: item.IncidentID || item.EventID || item.id,
-    title: item.IncidentType || item.EventType || item.Title || '道路事件',
-    description: item.Description || item.Comment || '',
-    severity: item.Severity || 'warning',
-    roadRef: item.RoadName || item.RoadID || '',
-    lat: numeric(item.PositionLat, item.Position?.PositionLat, item.lat),
-    lng: numeric(item.PositionLon, item.Position?.PositionLon, item.lng),
-    updatedAt: item.UpdateTime || item.PublishTime || null,
-    expiresAt: item.EndTime || null,
-    source: 'TDX'
-  }));
+export function buildReferenceSpeedByLink(sectionPayload, liveTrafficPayload, congestionPayload) {
+  const sections = arrayFromPayload(sectionPayload, ['Sections', 'SectionList']);
+  const liveTraffics = arrayFromPayload(liveTrafficPayload, ['LiveTraffics', 'LiveTrafficList']);
+  const groups = arrayFromPayload(congestionPayload, ['CongestionLevels', 'CongestionLevelList']);
+  const trafficBySection = new Map(liveTraffics.map((item) => [item.SectionID, item]));
+  const referenceByGroup = new Map(groups.map((group) => [
+    group.CongestionLevelID,
+    referenceSpeedFromCongestionGroup(group)
+  ]));
+  const result = new Map();
+  sections.forEach((section) => {
+    const traffic = trafficBySection.get(section.SectionID);
+    const referenceSpeed = numeric(
+      section.SpeedLimit,
+      traffic && referenceByGroup.get(traffic.CongestionLevelID)
+    );
+    if (!Number.isFinite(referenceSpeed) || referenceSpeed <= 0) return;
+    (section.LinkIDs || []).forEach((link) => {
+      if (link.LinkID) result.set(link.LinkID, referenceSpeed);
+    });
+  });
+  return result;
+}
+
+function referenceSpeedFromCongestionGroup(group) {
+  if (String(group.MeasureIndex || '').toLowerCase() !== 'speed') return null;
+  const clear = (group.Levels || []).find((level) => Number(level.Level) === 1);
+  const clearLowerBound = Number(clear && clear.LowValue);
+  return Number.isFinite(clearLowerBound) && clearLowerBound > 0
+    ? clearLowerBound / 0.75
+    : null;
+}
+
+function directionDegrees(value) {
+  if (value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))) {
+    return Number(value);
+  }
+  const directions = {
+    N: 0,
+    NE: 45,
+    E: 90,
+    SE: 135,
+    S: 180,
+    SW: 225,
+    W: 270,
+    NW: 315
+  };
+  return directions[String(value || '').trim().toUpperCase()] ?? null;
+}
+
+export function normalizeTdxIncidents(payload) {
+  const payloadUpdatedAt = payload?.UpdateTime || payload?.SrcUpdateTime || null;
+  return arrayFromPayload(payload, ['LiveEvents', 'Incidents', 'RoadIncidents']).map((item) => {
+    const point = parseWktPoint(item.Positions || item.Geometry);
+    const roadLocation = item.Location?.FreeExpressHighway || {};
+    const impact = item.Impact || {};
+    return {
+      id: item.IncidentID || item.EventID || item.id,
+      title: item.EventTitle || item.IncidentType || item.Title || '道路事件',
+      description: item.Description || item.Comment || '',
+      severity: impact.Severity ?? item.Severity ?? 'warning',
+      roadRef: roadLocation.Road || item.RoadName || item.RoadID || '',
+      lat: numeric(item.PositionLat, item.Position?.PositionLat, item.lat, point?.lat),
+      lng: numeric(item.PositionLon, item.Position?.PositionLon, item.lng, point?.lng),
+      updatedAt: item.LastUpdateTime || item.UpdateTime || item.PublishTime || payloadUpdatedAt,
+      expiresAt: item.ExpireTime || impact.Duration?.DurationEndTime || item.EndTime || null,
+      source: 'TDX'
+    };
+  });
+}
+
+function parseWktPoint(value) {
+  const match = String(value || '').match(/POINT\s*(?:Z\s*)?\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/i);
+  if (!match) return null;
+  const lng = Number(match[1]);
+  const lat = Number(match[2]);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
 }
 
 export async function loadCwaSamples(sections, env) {
@@ -592,6 +748,7 @@ function arrayFromPayload(payload, keys) {
 
 function numeric(...values) {
   for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }

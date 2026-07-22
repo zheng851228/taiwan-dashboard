@@ -30,6 +30,14 @@ export default {
       return withCors(response);
     } catch (error) {
       const status = error.status || 500;
+      if (status >= 500) {
+        console.error('Worker request failed', {
+          method: request.method,
+          path: new URL(request.url).pathname,
+          message: error.message,
+          stack: error.stack
+        });
+      }
       const publicMessage = status >= 500 ? '上游資料暫時無法使用，請稍後重試。' : error.message;
       return withCors(jsonResponse({
         status: status === 422 ? 'blocked' : 'error',
@@ -173,11 +181,9 @@ async function handleConditions(routeId, env, forceRefresh) {
   const record = await cacheGet(env, `route:${routeId}`);
   if (!record) throw new HttpError(404, '路線已過期，請重新規劃');
   const cachedKey = `conditions:${routeId}`;
-  if (!forceRefresh) {
-    const cached = await cacheGet(env, cachedKey);
-    if (cached && Date.now() - new Date(cached.updatedAt).getTime() < 5 * 60 * 1000) {
-      return jsonResponse(cached);
-    }
+  const cached = await cacheGet(env, cachedKey);
+  if (!forceRefresh && cached && Date.now() - new Date(cached.updatedAt).getTime() < 5 * 60 * 1000) {
+    return jsonResponse(cached);
   }
 
   const baseSections = createRouteSections(record);

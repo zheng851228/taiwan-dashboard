@@ -108,6 +108,106 @@ describe('Worker v2 fixture API', () => {
     expect(body.data.validation.rerouted).toBe(true);
     expect(body.data.geometry).toBeUndefined();
   });
+
+  it('keeps live conditions partial when an optional upstream source is unavailable', async () => {
+    const shape = encodePolyline6([[25.0478, 121.517], [25.02, 121.55], [24.99, 121.58]]);
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const value = String(url);
+      if (value.endsWith('/route')) {
+        return new Response(JSON.stringify({
+          trip: {
+            summary: { length: 12, time: 1200 },
+            legs: [{ shape, summary: { length: 12, time: 1200 } }]
+          }
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (value.endsWith('/trace_attributes')) {
+        return new Response(JSON.stringify({
+          edges: [{
+            names: ['\u53f09\u7dda'],
+            way_id: 9,
+            road_class: 'primary',
+            use: 'road',
+            length: 12,
+            begin_shape_index: 0,
+            end_shape_index: 2
+          }]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (value.includes('/openid-connect/token')) {
+        return new Response(JSON.stringify({ access_token: 'test-token', expires_in: 900 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value.includes('/Road/Traffic/VD/Highway')) {
+        return new Response(JSON.stringify({ VDs: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value.includes('/Road/Traffic/Live/VD/Highway')) {
+        return new Response(JSON.stringify({ VDLives: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value.includes('/Road/Traffic/Section/Highway')) {
+        return new Response(JSON.stringify({ Sections: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value.includes('/Road/Traffic/Live/Highway')) {
+        return new Response(JSON.stringify({ LiveTraffics: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value.includes('/Road/Traffic/CongestionLevel/Highway')) {
+        return new Response(JSON.stringify({ CongestionLevels: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value.includes('/Traffic/RoadEvent/LiveEvent/Highway')) {
+        return new Response(JSON.stringify({ LiveEvents: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (value === 'https://camera.test/list') {
+        return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 404 });
+    }));
+
+    const liveEnv = {
+      USE_FIXTURES: 'false',
+      VALHALLA_BASE_URL: 'https://valhalla.test',
+      CAMERA_SOURCE_URL: 'https://camera.test/list',
+      TDX_CLIENT_ID: 'test-id',
+      TDX_CLIENT_SECRET: 'test-secret'
+    };
+    const createResponse = await worker.fetch(new Request('https://worker.test/v2/routes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        locations: [{ lat: 25.0478, lng: 121.517 }, { lat: 24.99, lng: 121.58 }],
+        vehicle: { type: 'motorcycle', plate: 'yellow' }
+      })
+    }), liveEnv);
+    const created = await createResponse.json();
+
+    const conditionsResponse = await worker.fetch(new Request(
+      `https://worker.test/v2/routes/${created.data.routeId}/conditions?refresh=1`
+    ), liveEnv);
+    const conditions = await conditionsResponse.json();
+    expect(conditionsResponse.status).toBe(200);
+    expect(conditions.status).toBe('partial');
+    expect(conditions.data.issues).toContain('CWA: API key not configured');
+    expect(conditions.data.sections[0].traffic.level).toBe('unknown');
+  });
 });
 
 describe('last-known condition fallback', () => {

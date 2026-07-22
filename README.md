@@ -89,6 +89,9 @@ npx wrangler secret put TDX_CLIENT_SECRET --config worker/wrangler.jsonc
 - `CWA_COUNTY_FORECAST_ENDPOINT`
 - `TDX_VD_CONFIG_ENDPOINT`
 - `TDX_VD_LIVE_ENDPOINT`
+- `TDX_SECTION_ENDPOINT`
+- `TDX_LIVE_TRAFFIC_ENDPOINT`
+- `TDX_CONGESTION_ENDPOINT`
 - `TDX_INCIDENT_ENDPOINT`
 
 部署：
@@ -120,7 +123,7 @@ Vitest 覆蓋牌照規則、國道與快速道路、國 3 甲例外、方向性�
 ## 資料與限制
 
 - 路由與道路屬性使用 [Valhalla API](https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/)。
-- 即時交通與事件使用 [TDX 運輸資料流通服務](https://tdx.transportdata.tw/)。
+- 即時交通使用 [TDX 路況資訊 v2](https://tdx.transportdata.tw/api-service/swagger/basic/7f07d940-91a4-495d-9465-1c9df89d709c)，道路事件使用 [TDX 道路事件 v1](https://tdx.transportdata.tw/api-service/swagger/basic/60abfa19-ffe3-4eef-a4b1-0539435dfca9)。VD 方向來自 `DetectionLinks.Bearing`，參考速度由發布路段的官方壅塞門檻推導；靜態對應在 Worker 內快取六小時。
 - 氣象使用中央氣象署的 `O-A0001-001` 自動氣象站、`F-D0047-089` 鄉鎮三小時預報，以及工具頁的 `F-C0032-001` 縣市預報；資料入口見 [CWA 開放資料](https://opendata.cwa.gov.tw/)。
 - Google 導航交接依 [Google Maps URLs](https://developers.google.com/maps/documentation/urls/get-started)；行動瀏覽器支援的停靠點數可能有限。
 - Apple 導航交接依 [Apple Map Links](https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html)，官方格式只有 `saddr` 與 `daddr`。
