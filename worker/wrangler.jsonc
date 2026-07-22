@@ -10,6 +10,22 @@
   },
   "observability": {
     "enabled": true
+  },
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "vars": {
+        "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
+        "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",
+        "USE_FIXTURES": "false"
+      },
+      "kv_namespaces": [
+        {
+          "binding": "ROUTE_CACHE",
+          "id": "082d40b96d8b4be2b23ac6fa0f55b952"
+        }
+      ]
+    }
   }
   // Production must bind a KV namespace as ROUTE_CACHE. See README.md.
 }
