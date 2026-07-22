@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "taiwan-dashboard-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-01",
+  "vars": {
+    "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
+    "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",
+    "USE_FIXTURES": "false"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // Production must bind a KV namespace as ROUTE_CACHE. See README.md.
+}

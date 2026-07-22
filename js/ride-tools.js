@@ -5,36 +5,6 @@
 
   var FAVORITES_KEY = 'tw_favorites_v2';
 
-  function weatherSummaryForCounties(counties) {
-    var items = counties.map(function(county) {
-      return Data.weather[county];
-    }).filter(Boolean);
-    if (!items.length) return '等待天氣資料';
-    var rainy = items.some(function(item) { return (item.weather || '').indexOf('雨') !== -1; });
-    var cloudy = items.some(function(item) { return (item.weather || '').indexOf('雲') !== -1; });
-    if (rainy) return '部分路段有雨';
-    if (cloudy) return '多雲到陰';
-    return '天氣相對穩定';
-  }
-
-  function countByCategory(cams) {
-    var result = { highway: 0, expressway: 0, scenic: 0, city: 0, provincial: 0 };
-    (cams || []).forEach(function(cam) {
-      if (result[cam.cat] === undefined) result[cam.cat] = 0;
-      result[cam.cat] += 1;
-    });
-    return result;
-  }
-
-  function uniqueCounties(cams) {
-    var seen = {};
-    return (cams || []).map(function(cam) { return cam.county; }).filter(function(county) {
-      if (!county || seen[county]) return false;
-      seen[county] = true;
-      return true;
-    });
-  }
-
   window.FavoritesMod = {
     load: function() {
       return Storage.getJson(FAVORITES_KEY, []);
@@ -96,11 +66,11 @@
       el.innerHTML = list.map(function(item) {
         return '<div class="favorite-item flex items-start gap-3">'
           + '<div class="flex-1 min-w-0">'
-          + '<div class="favorite-title truncate">' + item.name + '</div>'
-          + '<div class="favorite-sub">' + item.county + ' · ' + formatUpdatedAt(item.savedAt) + ' 收藏</div>'
+          + '<div class="favorite-title truncate">' + escapeHtml(item.name) + '</div>'
+          + '<div class="favorite-sub">' + escapeHtml(item.county) + ' · ' + formatUpdatedAt(item.savedAt) + ' 收藏</div>'
           + '</div>'
-          + '<button class="favorite-action active" data-open-favorite="' + item.id + '"><i class="fa-solid fa-location-arrow text-xs"></i></button>'
-          + '<button class="favorite-action" data-remove-favorite="' + item.id + '"><i class="fa-solid fa-trash-can text-xs"></i></button>'
+          + '<button class="favorite-action active" data-open-favorite="' + escapeHtml(item.id) + '"><i class="fa-solid fa-location-arrow text-xs"></i></button>'
+          + '<button class="favorite-action" data-remove-favorite="' + escapeHtml(item.id) + '"><i class="fa-solid fa-trash-can text-xs"></i></button>'
           + '</div>';
       }).join('');
       Dom.queryAll('[data-open-favorite]', el).forEach(function(btn) {
@@ -183,10 +153,10 @@
         return;
       }
       summaryEl.className = 'favorite-item';
-      summaryEl.innerHTML = '<div class="favorite-title">經過 ' + report.counties.join('、') + '</div>'
-        + '<div class="favorite-sub">' + report.weatherSummary + '。' + report.riskNotes.join(' ') + '</div>';
+      summaryEl.innerHTML = '<div class="favorite-title">' + escapeHtml(report.routeLabel || '沿途狀況') + '</div>'
+        + '<div class="favorite-sub">' + escapeHtml(report.weatherSummary + '。' + report.riskNotes.join(' ')) + '</div>';
       tagsEl.innerHTML = report.riskNotes.map(function(note) {
-        return '<span class="risk-chip warn"><i class="fa-solid fa-bolt"></i>' + note + '</span>';
+        return '<span class="risk-chip warn"><i class="fa-solid fa-bolt"></i>' + escapeHtml(note) + '</span>';
       }).join('') + '<span class="risk-chip good"><i class="fa-solid fa-camera"></i>' + report.cameraCount + ' 支沿途影像</span>';
     },
     updateChecklist: function() {
@@ -207,7 +177,11 @@
         },
         {
           title: report ? report.weatherSummary : '等待天氣資料',
-          sub: report ? ('經過 ' + report.counties.length + ' 個縣市，先確認降雨或多雲區段。') : '天氣總覽會在資料更新後提供跨縣市摘要。'
+          sub: report
+            ? (report.weatherCoveragePercent < 100
+              ? ('目前只有 ' + report.weatherCoveragePercent + '% 路段具有效氣象資料，未知路段請保守判斷。')
+              : ('沿途 ' + report.sectionCount + ' 段中有 ' + report.rainSections + ' 段降雨提醒。'))
+            : '沿途天氣會在路線狀況載入後提供摘要。'
         },
         {
           title: report ? ('攝影機覆蓋 ' + report.cameraCount + ' 支') : '尚未有沿途影像',
@@ -217,30 +191,54 @@
         }
       ];
       el.innerHTML = items.map(function(item) {
-        return '<div class="tool-check-item"><div class="tool-check-title">' + item.title + '</div><div class="tool-check-sub">' + item.sub + '</div></div>';
+        return '<div class="tool-check-item"><div class="tool-check-title">' + escapeHtml(item.title) + '</div><div class="tool-check-sub">' + escapeHtml(item.sub) + '</div></div>';
       }).join('');
     },
     buildRouteReport: function() {
-      if (!RouteMod.active || !RouteMod.filteredCams.length || !AppState.lastRouteInfo) {
+      var conditions = AppState.routeConditions;
+      if (!RouteMod.active || !AppState.lastRouteInfo || !conditions || !conditions.sections) {
         AppState.routeReport = null;
         RideInsightsMod.updateStatusCard();
         RideInsightsMod.updateRiskPanel();
         RideInsightsMod.updateChecklist();
         return;
       }
-      var cams = RouteMod.filteredCams.slice();
-      var counties = uniqueCounties(cams);
-      var categories = countByCategory(cams);
+      var sections = conditions.sections;
+      var overall = conditions.overall || {};
+      var trafficCoverage = Number(overall.coveragePercent || 0);
+      var weatherCoverage = Number(overall.weatherCoveragePercent || 0);
+      var cameraIds = {};
+      sections.forEach(function(section) {
+        (section.cameras || []).forEach(function(camera) { cameraIds[camera.id] = true; });
+      });
       var riskNotes = [];
-      if (cams.length < 8) riskNotes.push('攝影機覆蓋偏低，建議多保留機動停靠。');
-      if ((categories.scenic || 0) >= 3) riskNotes.push('景點 / 山線路段較多，天候變化可能較快。');
-      if ((categories.highway || 0) >= (categories.provincial || 0) && (categories.highway || 0) > 0) riskNotes.push('高速與快速道路比例高，適合用影像快速確認車流。');
-      if (!riskNotes.length) riskNotes.push('整體路線資訊穩定，可依沿途影像做即時判斷。');
+      if (overall.congestedSections > 0) riskNotes.push(overall.congestedSections + ' 段壅塞，建議先查看紅色路段。');
+      if (overall.rainSections > 0) riskNotes.push(overall.rainSections + ' 段有降雨提醒，請準備雨具。');
+      if (overall.incidentCount > 0) riskNotes.push(overall.incidentCount + ' 件道路事件需要留意。');
+      if (trafficCoverage < 60) {
+        riskNotes.push('即時交通覆蓋偏低，灰色路段不可視為順暢。');
+      } else if (trafficCoverage < 100) {
+        riskNotes.push('部分路段沒有即時交通資料，請保守判斷灰色路段。');
+      }
+      if (weatherCoverage < 60) {
+        riskNotes.push('沿途氣象覆蓋偏低，無資料路段不可視為無雨。');
+      } else if (weatherCoverage < 100) {
+        riskNotes.push('部分路段缺少氣象觀測，降雨摘要並非全程判斷。');
+      }
+      if (!riskNotes.length) riskNotes.push('目前官方資料未顯示明顯壅塞、降雨或道路事件。');
+      var weatherSummary = overall.rainSections > 0
+        ? ('有 ' + overall.rainSections + ' 段降雨')
+        : (weatherCoverage < 100 ? ('天氣覆蓋 ' + weatherCoverage + '%') : '沿途官方資料暫無降雨訊號');
       AppState.routeReport = {
-        cameraCount: cams.length,
-        counties: counties,
-        weatherSummary: weatherSummaryForCounties(counties),
-        riskNotes: riskNotes
+        cameraCount: Object.keys(cameraIds).length,
+        counties: [],
+        routeLabel: '安全路線 · ' + sections.length + ' 段',
+        sectionCount: sections.length,
+        rainSections: overall.rainSections || 0,
+        weatherSummary: weatherSummary,
+        riskNotes: riskNotes,
+        coveragePercent: trafficCoverage,
+        weatherCoveragePercent: weatherCoverage
       };
       AppState.updatedAt.route = new Date().toISOString();
       RideInsightsMod.updateStatusCard();
@@ -250,6 +248,7 @@
     init: function() {
       Bus.on('route:updated', RideInsightsMod.buildRouteReport);
       Bus.on('route:cleared', RideInsightsMod.buildRouteReport);
+      Bus.on('conditions:updated', RideInsightsMod.buildRouteReport);
       Bus.on('weather:updated', function() {
         RideInsightsMod.buildRouteReport();
         RideInsightsMod.updateStatusCard();

@@ -66,7 +66,7 @@
       <div class="flex items-center justify-between px-1">
         <div>
           <div class="text-[10px] uppercase tracking-[0.22em] text-orange-400/80 font-black">Route Planner</div>
-          <div class="text-sm font-black text-slate-100">規劃你的沿途攝影機</div>
+          <div class="text-sm font-black text-slate-100">規劃機車安全路線</div>
         </div>
         <div class="flex items-center gap-2">
           <button id="history-btn" class="route-mini-btn text-[10px] text-slate-300 hover:text-orange-300 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]"></i> 最近路線</button>
@@ -113,15 +113,26 @@
         </div>
       </div>
       <div id="suggest-end" class="hidden bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
-      <!-- 交通模式 + 解析 -->
-      <div class="route-mode-row flex gap-2">
-        <button data-mode="motorcycle" class="route-mode-btn active flex-1 py-2 rounded-2xl text-xs font-bold transition-all border border-white/10 bg-orange-500 text-white">&#127949; 機車</button>
-        <button data-mode="car" class="route-mode-btn flex-1 py-2 rounded-2xl text-xs font-bold transition-all border border-white/10 bg-slate-800/50 text-slate-400">&#128663; 汽車</button>
-        <button id="route-toggle-close" class="route-mini-btn px-3 py-2 rounded-2xl text-xs text-slate-400 border border-white/10 bg-slate-800/50">&#8593;</button>
+      <!-- 牌照 + 解析 -->
+      <div class="route-vehicle-shell">
+        <div class="route-option-head">
+          <span>機車牌照</span>
+          <span>預設白牌，依牌照驗證可通行道路</span>
+        </div>
+        <div class="route-mode-row route-plate-grid">
+          <button data-mode="motorcycle" data-plate="white" class="route-mode-btn active">白牌</button>
+          <button data-mode="motorcycle" data-plate="yellow" class="route-mode-btn">黃牌</button>
+          <button data-mode="motorcycle" data-plate="red" class="route-mode-btn">紅牌</button>
+        </div>
+        <details class="route-advanced">
+          <summary>進階車種</summary>
+          <button data-mode="car" class="route-mode-btn route-car-btn">&#128663; 汽車路線</button>
+        </details>
+        <button id="route-toggle-close" class="route-collapse-btn" aria-label="收合路線輸入">&#8593; 收合</button>
       </div>
       <button id="js-route-btn"
         class="route-action-btn w-full py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
-        <i class="fa-solid fa-magnifying-glass-location text-sm"></i> 找沿途攝影機
+        <i class="fa-solid fa-shield-halved text-sm"></i> 驗證安全路線與沿途狀況
       </button>
     </div>
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-300 drop-shadow-md"></div>
@@ -156,6 +167,61 @@
       <div id="ride-risk-inline" class="ride-inline-note mt-3">尚未建立路線，先貼上 Google Maps 或手動輸入起終點。</div>
     </section>
   </div>
+
+  <section id="route-conditions-panel" class="route-conditions-panel glass hidden" aria-live="polite">
+    <div class="condition-panel-head">
+      <div>
+        <div class="condition-kicker">Route Intelligence</div>
+        <div class="condition-title-row">
+          <h2>沿途狀況時間軸</h2>
+          <span id="condition-source-badge" class="condition-source-badge">等待資料</span>
+        </div>
+      </div>
+      <div class="condition-head-actions">
+        <button id="condition-refresh" class="condition-icon-btn" aria-label="途中停靠更新" title="途中停靠更新">
+          <i class="fa-solid fa-rotate-right"></i>
+        </button>
+        <button id="condition-toggle" class="condition-icon-btn" aria-label="收合沿途狀況">
+          <i class="fa-solid fa-chevron-down"></i>
+        </button>
+      </div>
+    </div>
+    <div id="condition-demo-warning" class="condition-demo-warning hidden">
+      <i class="fa-solid fa-flask"></i>
+      示範資料僅供介面測試，不代表即時路況、天氣或合法導航。
+    </div>
+    <div id="condition-loading" class="condition-loading hidden">
+      <span class="condition-skeleton wide"></span>
+      <span class="condition-skeleton"></span>
+      <span class="condition-skeleton"></span>
+    </div>
+    <div id="condition-content" class="hidden">
+      <div class="condition-overview-grid">
+        <div class="condition-metric"><span>預估</span><strong id="condition-duration">--</strong></div>
+        <div class="condition-metric rain"><span>降雨</span><strong id="condition-rain">--</strong></div>
+        <div class="condition-metric danger"><span>壅塞</span><strong id="condition-congestion">--</strong></div>
+        <div class="condition-metric warning"><span>事件</span><strong id="condition-incidents">--</strong></div>
+        <div class="condition-metric coverage"><span>覆蓋</span><strong id="condition-coverage">--</strong></div>
+      </div>
+      <div class="condition-update-row">
+        <span id="condition-validation"><i class="fa-solid fa-shield-halved"></i> 安全路線</span>
+        <span id="condition-updated">更新 --:--</span>
+      </div>
+      <div id="condition-alerts" class="condition-alerts"></div>
+      <div class="condition-nav-actions">
+        <button id="nav-google" class="condition-nav-btn google"><i class="fa-brands fa-google"></i> Google Maps</button>
+        <button id="nav-apple" class="condition-nav-btn apple"><i class="fa-brands fa-apple"></i> Apple Maps</button>
+      </div>
+      <div id="apple-leg-links" class="apple-leg-links hidden"></div>
+      <div id="condition-timeline" class="condition-timeline"></div>
+      <div class="condition-footnote">交通、氣象與影像皆附來源及時間；灰色代表資料不足，不代表順暢。監視器僅供現場畫面佐證，未使用 AI 自動判讀。</div>
+    </div>
+    <div id="condition-error" class="condition-error hidden">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>沿途狀況暫時無法載入。</span>
+      <button id="condition-retry">重試</button>
+    </div>
+  </section>
 
   <div class="absolute bottom-[8rem] left-4 z-[500] flex flex-col gap-3">
     <button id="js-fullscreen"
@@ -194,28 +260,32 @@
     class="hidden absolute bottom-[5.5rem] left-4 z-[500] items-center gap-2">
     <div class="glass px-3 py-1.5 rounded-2xl border border-orange-500/30 shadow-lg flex items-center gap-2">
       <span class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 animate-pulse"></span>
-      <span class="text-[10px] font-bold text-orange-400">已過濾沿途攝影機</span>
+      <span class="text-[10px] font-bold text-orange-400">安全路線已驗證</span>
       <button id="js-rb-clear" class="text-[10px] text-slate-400 hover:text-orange-400 font-bold ml-1">清除</button>
       <button id="js-strip-btn" class="text-[10px] text-orange-400 hover:text-orange-300 font-bold ml-1 flex items-center gap-1"><i class="fa-solid fa-images"></i> 影像</button>
     </div>
   </div>
   <aside class="map-legend glass">
-    <div class="map-legend-title">圖例</div>
+    <div class="map-legend-title">即時路況</div>
     <div class="map-legend-item">
-      <div class="map-legend-dot highway"></div>
-      <span>國道</span>
+      <div class="map-legend-dot traffic-clear"></div>
+      <span>順暢</span>
     </div>
     <div class="map-legend-item">
-      <div class="map-legend-dot expressway"></div>
-      <span>快速道路</span>
+      <div class="map-legend-dot traffic-slow"></div>
+      <span>車多</span>
     </div>
     <div class="map-legend-item">
-      <div class="map-legend-dot provincial"></div>
-      <span>省道</span>
+      <div class="map-legend-dot traffic-congested"></div>
+      <span>壅塞</span>
     </div>
     <div class="map-legend-item">
-      <div class="map-legend-dot scenic"></div>
-      <span>景點</span>
+      <div class="map-legend-dot traffic-unknown"></div>
+      <span>資料不足</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-weather"><i class="fa-solid fa-cloud-rain"></i></div>
+      <span>天氣警示</span>
     </div>
   </aside>
 
@@ -360,7 +430,7 @@
         <h2 class="font-black text-base">關於本系統</h2>
       </div>
       <p class="text-xs text-slate-400 leading-relaxed">
-        整合全台 CCTV 路況攝影機與中央氣象代理資料，提供環島騎士即時路況參考。影像若無畫面，可能為 HTTP 混合內容遭瀏覽器攔截。
+        整合官方路況、氣象與 CCTV 現場畫面，提供出發前及途中停靠判斷。灰色路段代表資料不足；攝影機不做 AI 自動判讀，仍請依現場標誌與實際狀況騎乘。
       </p>
       <div class="grid grid-cols-2 gap-3 mt-2">
         <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
@@ -474,6 +544,7 @@
 <script src="js/data.js"></script>
 <script src="js/main-ui.js"></script>
 <script src="js/enhancements.js"></script>
+<script src="js/route-conditions.js"></script>
 <script src="js/ride-tools.js"></script>
 
 </body>

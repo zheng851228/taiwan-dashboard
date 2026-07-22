@@ -1,7 +1,7 @@
 {
   "name": "環島路況指揮中心",
   "short_name": "路況指揮",
-  "description": "整合台灣環島路線、CCTV 與天氣資訊的即時路況儀表板。",
+  "description": "依機車牌照驗證路線，整合沿途官方交通、氣象與 CCTV 現場畫面的出發前助手。",
   "lang": "zh-TW",
   "start_url": "./",
   "scope": "./",

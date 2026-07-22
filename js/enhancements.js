@@ -48,11 +48,11 @@
       html += '<div class="bg-slate-800/50 rounded-2xl p-3 flex items-center gap-2 hover:bg-slate-700/50 transition-colors cursor-pointer wx-county-card" data-county="' + county + '">' +
         '<span class="text-xl">' + icon + '</span>' +
         '<div class="flex-1 min-w-0">' +
-          '<div class="text-xs font-bold truncate">' + shortName + '</div>' +
-          '<div class="text-[10px] text-slate-400 truncate">' + (weather || '--') + '</div>' +
+          '<div class="text-xs font-bold truncate">' + escapeHtml(shortName) + '</div>' +
+          '<div class="text-[10px] text-slate-400 truncate">' + escapeHtml(weather || '--') + '</div>' +
         '</div>' +
         '<div class="text-right shrink-0">' +
-          '<div class="text-sm font-black text-orange-400">' + (temp !== '--' ? temp + '\u00B0' : '--') + '</div>' +
+          '<div class="text-sm font-black text-orange-400">' + escapeHtml(temp !== '--' ? temp + '\u00B0' : '--') + '</div>' +
         '</div>' +
       '</div>';
     });
@@ -211,11 +211,11 @@ var NearbyMod = {
     cams.slice(0,15).forEach(function(cam) {
       var color  = '#f97316';
       var distTx = cam._dist < 1 ? Math.round(cam._dist*1000)+'m' : cam._dist.toFixed(1)+'km';
-      html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors nearby-cam-item" data-id="'+cam.id+'">' +
+      html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors nearby-cam-item" data-id="'+escapeHtml(cam.id)+'">' +
         '<div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style="background:'+color+'22">' +
         '<span class="w-2.5 h-2.5 rounded-full inline-block" style="background:'+color+'"></span></div>' +
-        '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+cam.name+'</div>' +
-        '<div class="text-[10px] text-slate-400">'+cam.county+'</div></div>' +
+        '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+escapeHtml(cam.name)+'</div>' +
+        '<div class="text-[10px] text-slate-400">'+escapeHtml(cam.county)+'</div></div>' +
         '<div class="text-[11px] font-bold text-blue-400 shrink-0">'+distTx+'</div></div>';
     });
     list.innerHTML = html;
@@ -433,7 +433,7 @@ var HistoryMod = {
       var mIco = item.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f' : '\ud83d\ude97';
       var wpTxt = item.waypoints && item.waypoints.length ? ' \u00b7 '+item.waypoints.length+'\u505c\u9760' : '';
       html += '<div class="hist-item flex items-center gap-2 px-3 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0" data-idx="'+idx+'">'
-        + '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+item.start.slice(0,10)+' \u2192 '+item.end.slice(0,10)+'</div>'
+        + '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+escapeHtml(item.start.slice(0,10))+' \u2192 '+escapeHtml(item.end.slice(0,10))+'</div>'
         + '<div class="text-[10px] text-slate-500 mt-0.5">'+mIco+' '+(item.distance||'?')+'km'+wpTxt+' \u00b7 '+ds+'</div></div>'
         + '<button class="hist-del text-slate-600 hover:text-red-400 text-sm px-1 shrink-0" data-idx="'+idx+'">\u00d7</button></div>';
     });
@@ -498,7 +498,7 @@ var WaypointsMod = {
           '<span class="text-white text-[9px] font-black">' + label + '</span>' +
         '</div>' +
         '<div class="flex-1 relative">' +
-          '<input type="text" class="wp-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + (wp || '') + '" placeholder="停靠點 ' + label + '" />' +
+          '<input type="text" class="wp-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + escapeHtml(wp || '') + '" placeholder="停靠點 ' + label + '" />' +
           '<button class="wp-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 text-xs leading-none" data-idx="' + idx + '">&#10005;</button>' +
         '</div>';
       container.appendChild(div);
@@ -549,23 +549,24 @@ var RouteStripMod = {
       var thumbSrc = '';
       if (isYT && cam.videoId) {
         thumbSrc = 'https://img.youtube.com/vi/' + cam.videoId + '/mqdefault.jpg';
-      } else if (cam.url) {
-        thumbSrc = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000);
+      } else if (safeHttpUrl(cam.url)) {
+        var safeStripUrl = safeHttpUrl(cam.url);
+        thumbSrc = safeStripUrl + (safeStripUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000);
       }
       var badgeHtml = isYT
         ? '<span class="strip-cam-badge yt">YT</span>'
         : '<span class="strip-cam-badge cctv">CCTV</span>';
       var w = Data.weather[cam.county];
       var wTxt = w ? (' \u00b7 ' + w.temp + '\u00B0C') : '';
-      var imgHtml = thumbSrc ? '<img data-src="' + thumbSrc + '" alt="" />' : '';
+      var imgHtml = thumbSrc ? '<img data-src="' + escapeHtml(thumbSrc) + '" alt="" />' : '';
       card.innerHTML =
         '<div class="strip-cam-img">' +
           '<div class="ph"><i class="fa-solid fa-camera"></i></div>' +
           imgHtml +
         '</div>' +
         '<div class="strip-cam-info">' +
-          '<div class="strip-cam-name">' + cam.name + '</div>' +
-          '<div class="strip-cam-meta">' + badgeHtml + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + cam.county + wTxt + '</span></div>' +
+          '<div class="strip-cam-name">' + escapeHtml(cam.name) + '</div>' +
+          '<div class="strip-cam-meta">' + badgeHtml + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(cam.county + wTxt) + '</span></div>' +
         '</div>';
       Dom.on(card, 'click', function() {
         var allCams = Data.allCams();
@@ -627,6 +628,7 @@ var RouteStripMod = {
 
 // ===== 地名建議模組 =====
 var PlaceSuggest = {
+  _requestId: 0,
   // 台灣常用地名快速候選
   PLACES: [
     '台北','新北','基隆','桃園','新竹','苗栗','台中','彰化','南投','雲林',
@@ -816,23 +818,26 @@ var PlaceSuggest = {
     return scored.sort(function(a, b) { return b.score - a.score; }).slice(0, 6);
   },
 
-  // 從 Nominatim 搜尋地名（搜尋框用）
+  // 地名搜尋一律經 Worker，避免瀏覽器直接連第三方 API。
   search: function(q, cb) {
     if (!q || q.length < 1) { cb([]); return; }
+    var requestId = ++PlaceSuggest._requestId;
     // 先用本地快速候選
     var local = PlaceSuggest.rankLocal(q);
     var fallback = PlaceSuggest.buildFallbacks(q, local.map(function(item) { return item.name; }));
-    // 再用 Nominatim 遠端搜尋（debounce 400ms）
+    // 再用 Worker 地名服務補足遠端結果（debounce 350ms）
     clearTimeout(PlaceSuggest._timer);
     PlaceSuggest._timer = setTimeout(function() {
-      var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q.replace(/臺/g, '台') + ' 台灣')
-              + '&format=json&limit=5&countrycodes=tw&accept-language=zh-TW';
-      fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
-        .then(function(data) {
-          var remote = (data || []).map(function(item) {
-            var name = item.display_name.split(',')[0].trim();
-            var sub  = item.display_name.split(',').slice(1,3).join(',').trim();
-            return { name: name, sub: sub, lat: parseFloat(item.lat), lng: parseFloat(item.lon) };
+      AppServices.searchPlaces(q, { silent: true })
+        .then(function(payload) {
+          if (requestId !== PlaceSuggest._requestId) return;
+          var remote = (payload.data || []).map(function(item) {
+            return {
+              name: item.name || String(item.displayName || '').split(',')[0].trim(),
+              sub: item.sub || '',
+              lat: parseFloat(item.lat),
+              lng: parseFloat(item.lng)
+            };
           });
           // 合併去重
           var seen = {};
@@ -843,7 +848,9 @@ var PlaceSuggest = {
           });
           cb(merged.slice(0, 6));
         })
-        .catch(function() { cb(local.concat(fallback).slice(0, 6)); });
+        .catch(function() {
+          if (requestId === PlaceSuggest._requestId) cb(local.concat(fallback).slice(0, 6));
+        });
     }, 350);
     // 立即回傳本地結果
     if (local.length > 0 || fallback.length > 0) cb(local.concat(fallback).slice(0, 6));
@@ -862,10 +869,10 @@ var PlaceSuggest = {
         if (!results.length) { box.innerHTML = ''; box.classList.remove('visible'); return; }
         var html = results.map(function(r) {
           var icon = r.lat ? 'fa-location-dot' : 'fa-road';
-          return '<div class="suggest-item" data-name="' + r.name + '" data-lat="' + (r.lat||'') + '" data-lng="' + (r.lng||'') + '">'
+          return '<div class="suggest-item" data-name="' + escapeHtml(r.name) + '" data-lat="' + (Number(r.lat)||'') + '" data-lng="' + (Number(r.lng)||'') + '">'
             + '<i class="fa-solid ' + icon + ' suggest-icon"></i>'
-            + '<span class="suggest-name">' + r.name + '</span>'
-            + '<span class="suggest-sub">' + (r.sub||'') + '</span>'
+            + '<span class="suggest-name">' + escapeHtml(r.name) + '</span>'
+            + '<span class="suggest-sub">' + escapeHtml(r.sub||'') + '</span>'
             + '</div>';
         }).join('');
         box.innerHTML = html;

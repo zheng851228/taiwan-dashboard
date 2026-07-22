@@ -127,21 +127,24 @@
         if (Array.isArray(apiData)) {
           _cams = apiData
             .filter(function(c) {
-              return c.lat > 21 && c.lat < 26 && c.lon > 118 && c.lon < 123;
+              var longitude = c.lon !== undefined ? c.lon : c.lng;
+              return c.lat > 21 && c.lat < 27 && longitude > 118 && longitude < 123;
             })
             .map(function(c) {
-              var cat = classifyCam(c.id);
-              var county = guessCounty(c.name, c.lat, c.lon);
+              var longitude = c.lon !== undefined ? c.lon : c.lng;
+              var cat = classifyCam(String(c.id || ''));
+              var county = guessCounty(String(c.name || ''), c.lat, longitude);
               var mapped = {
-                id:     c.id,
-                name:   c.name,
+                id:     String(c.id || ''),
+                name:   String(c.name || '未命名攝影機'),
                 county: county,
                 lat:    c.lat,
-                lng:    c.lon,
-                url:    c.cam_url,
+                lng:    longitude,
+                url:    c.cam_url || c.imageUrl || c.url || '',
                 type:   'cctv',
                 cat:    cat,
-                status: 'unknown'
+                status: c.status || 'unknown',
+                source: c.source || 'CCTV'
               };
               mapped.searchText = buildCamKeywords(mapped);
               return mapped;
