@@ -634,26 +634,198 @@ var PlaceSuggest = {
     '台北車站','台中車站','高雄車站','台南車站','桃園機場','高雄機場',
     '墾丁','日月潭','阿里山','合歡山','太魯閣','九份','淡水','烏來',
     '北海岸','東海岸','花東縱谷','南橫公路','北橫公路','中橫公路',
-    '蘇花公路','台11線','台9線','台1線','台3線','台17線','台61線',
+    '蘇花公路','蘇花改','北宜公路','淡金公路','羅馬公路','南迴公路',
+    '台11線','台9線','台1線','台3線','台7線','台7乙','台8線','台14甲','台17線','台20線','台26線','台61線',
+    '136縣道','139縣道','182縣道',
+    '武嶺','清境','埔里','霧社','大禹嶺','梨山','奮起湖','太麻里','多良車站',
     '國道1號','國道3號','國道5號','國道6號','國道10號',
-    '中山高','二高','北宜','北二高','北部濱海'
+    '中山高','二高','北宜','北二高','北部濱海','西濱','雪隧'
   ],
+  PLACE_ALIASES: {
+    '台北': ['臺北', '台北市', '信義區', '西門', '士林'],
+    '新北': ['新北市', '板橋', '淡水', '汐止', '三重'],
+    '桃園': ['桃園市', '中壢', '龍潭', '大溪'],
+    '台中': ['臺中', '台中市', '豐原', '大甲', '清水'],
+    '台南': ['臺南', '台南市', '新營', '永康', '仁德'],
+    '台東': ['臺東', '台東市', '池上', '鹿野'],
+    '花蓮': ['花蓮市', '太魯閣', '新城', '秀林'],
+    '高雄': ['高雄市', '岡山', '旗山', '左營'],
+    '墾丁': ['恆春', '南灣', '鵝鑾鼻'],
+    '日月潭': ['魚池', '水社'],
+    '阿里山': ['奮起湖', '石棹'],
+    '合歡山': ['武嶺', '清境'],
+    '蘇花公路': ['蘇花', '台9線', '崇德'],
+    '蘇花改': ['蘇花改路段', '蘇澳', '東澳', '南澳', '和平'],
+    '北宜公路': ['北宜', '新店', '坪林', '頭城', '九彎十八拐'],
+    '淡金公路': ['淡金', '台2線', '三芝', '石門', '金山'],
+    '羅馬公路': ['羅馬', '復興', '關西', '北橫支線'],
+    '南迴公路': ['南迴', '台9線', '楓港', '達仁', '太麻里'],
+    '南橫公路': ['南橫', '台20線', '梅山口', '向陽'],
+    '北橫公路': ['北橫', '台7線', '大溪', '巴陵', '明池'],
+    '中橫公路': ['中橫', '台8線', '太魯閣', '大禹嶺', '梨山'],
+    '台61線': ['西濱', '西濱快速道路'],
+    '台14甲': ['合歡山公路', '武嶺', '清境', '小風口'],
+    '台7線': ['北橫', '棲蘭', '明池', '巴陵'],
+    '台7乙': ['台七乙', '三峽', '復興', '羅浮'],
+    '台8線': ['中橫', '太魯閣', '天祥', '梨山'],
+    '台20線': ['南橫', '向陽', '利稻', '梅山口'],
+    '台26線': ['墾丁', '鵝鑾鼻', '風吹砂', '佳樂水'],
+    '136縣道': ['136', '赤崁頂', '台中山線'],
+    '139縣道': ['139', '彰化139', '八卦山'],
+    '182縣道': ['182', '182線', '龍崎', '台南山線'],
+    '武嶺': ['合歡山', '台14甲', '小風口'],
+    '清境': ['仁愛', '霧社', '台14甲'],
+    '埔里': ['南投埔里', '國6', '台14線'],
+    '太麻里': ['金針山', '南迴', '台東'],
+    '多良車站': ['多良', '南迴', '台9線'],
+    '國道1號': ['國1', '中山高'],
+    '國道3號': ['國3', '二高'],
+    '國道5號': ['國5', '雪隧'],
+    '台9線': ['南迴', '北宜', '蘇花'],
+    '台11線': ['東海岸', '海線']
+  },
   _timer: null,
+
+  isMotorcycleHotspot: function(place) {
+    return [
+      '北宜公路', '淡金公路', '羅馬公路', '北橫公路', '中橫公路', '南橫公路',
+      '蘇花公路', '蘇花改', '南迴公路', '台3線', '台7線', '台7乙', '台8線',
+      '台9線', '台11線', '台14甲', '台20線', '台26線', '台61線', '136縣道',
+      '139縣道', '182縣道', '武嶺', '清境', '阿里山', '墾丁', '太魯閣'
+    ].indexOf(place) !== -1;
+  },
+
+  buildFallbacks: function(q, existingNames) {
+    var nq = normalizeSearchText(q);
+    if (!nq) return [];
+    var seen = {};
+    (existingNames || []).forEach(function(name) { seen[normalizeSearchText(name)] = 1; });
+    var groups = [
+      {
+        trigger: ['坪林', '頭城', '礁溪', '石碇', '九彎十八拐', '北宜'],
+        picks: [
+          { name: '北宜公路', sub: '猜你想找：坪林、頭城、九彎十八拐' },
+          { name: '台9線', sub: '猜你想找：北宜、蘇花、南迴' }
+        ]
+      },
+      {
+        trigger: ['西濱', '新豐', '白沙屯', '芳苑', '布袋', '台61', '台61線'],
+        picks: [
+          { name: '台61線', sub: '猜你想找：西濱快速道路' },
+          { name: '台17線', sub: '猜你想找：濱海平面替代路線' }
+        ]
+      },
+      {
+        trigger: ['武嶺', '清境', '埔里', '霧社', '小風口', '合歡山'],
+        picks: [
+          { name: '台14甲', sub: '猜你想找：清境、武嶺、合歡山公路' },
+          { name: '合歡山', sub: '猜你想找：高山熱門路線' }
+        ]
+      },
+      {
+        trigger: ['蘇花', '崇德', '和仁', '南澳', '東澳', '新城'],
+        picks: [
+          { name: '蘇花公路', sub: '猜你想找：蘇花山海線路段' },
+          { name: '蘇花改', sub: '猜你想找：蘇澳、東澳、南澳' }
+        ]
+      },
+      {
+        trigger: ['南迴', '太麻里', '多良', '楓港', '達仁', '大武'],
+        picks: [
+          { name: '南迴公路', sub: '猜你想找：台東到屏東的山海線' },
+          { name: '台9線', sub: '猜你想找：南迴主線' }
+        ]
+      },
+      {
+        trigger: ['北橫', '巴陵', '羅浮', '明池', '棲蘭', '復興'],
+        picks: [
+          { name: '北橫公路', sub: '猜你想找：大溪、巴陵、明池' },
+          { name: '台7線', sub: '猜你想找：北橫主線' }
+        ]
+      },
+      {
+        trigger: ['羅馬', '關西', '復興', '三民', '羅浮'],
+        picks: [
+          { name: '羅馬公路', sub: '猜你想找：關西到復興的熱門跑法' },
+          { name: '台7乙', sub: '猜你想找：三峽、復興支線' }
+        ]
+      },
+      {
+        trigger: ['淡金', '三芝', '石門', '金山', '北海岸'],
+        picks: [
+          { name: '淡金公路', sub: '猜你想找：北海岸海線巡航' },
+          { name: '北海岸', sub: '猜你想找：三芝、石門、金山' }
+        ]
+      },
+      {
+        trigger: ['182', '龍崎', '關廟', '台南山線'],
+        picks: [
+          { name: '182縣道', sub: '猜你想找：台南熱門山線' },
+          { name: '阿里山', sub: '猜你想找：南部熱門山路' }
+        ]
+      }
+    ];
+    var fallback = [];
+    groups.forEach(function(group) {
+      var matched = group.trigger.some(function(term) {
+        var nt = normalizeSearchText(term);
+        return nt.indexOf(nq) !== -1 || nq.indexOf(nt) !== -1;
+      });
+      if (!matched) return;
+      group.picks.forEach(function(pick) {
+        var key = normalizeSearchText(pick.name);
+        if (seen[key]) return;
+        seen[key] = 1;
+        fallback.push({
+          name: pick.name,
+          sub: pick.sub,
+          lat: null,
+          lng: null,
+          score: 48
+        });
+      });
+    });
+    return fallback.slice(0, 4);
+  },
+
+  rankLocal: function(q) {
+    var nq = normalizeSearchText(q);
+    var isMotorcycleMode = typeof RouteMod !== 'undefined' && RouteMod && RouteMod.mode === 'motorcycle';
+    var scored = [];
+    PlaceSuggest.PLACES.forEach(function(place) {
+      var variants = [place].concat(PlaceSuggest.PLACE_ALIASES[place] || []);
+      var bestScore = -1;
+      variants.forEach(function(variant) {
+        var nv = normalizeSearchText(variant);
+        if (!nv) return;
+        if (nv === nq) bestScore = Math.max(bestScore, 100);
+        else if (nv.indexOf(nq) !== -1) bestScore = Math.max(bestScore, 80 - Math.max(0, nv.length - nq.length));
+        else if (nq.indexOf(nv) !== -1) bestScore = Math.max(bestScore, 60);
+      });
+      if (bestScore >= 0 && isMotorcycleMode && PlaceSuggest.isMotorcycleHotspot(place)) {
+        bestScore += 12;
+      }
+      if (bestScore >= 0) scored.push({
+        name: place,
+        sub: (PlaceSuggest.PLACE_ALIASES[place] || []).slice(0, 2).join('、') || '快速選擇',
+        lat: null,
+        lng: null,
+        score: bestScore
+      });
+    });
+    return scored.sort(function(a, b) { return b.score - a.score; }).slice(0, 6);
+  },
 
   // 從 Nominatim 搜尋地名（搜尋框用）
   search: function(q, cb) {
     if (!q || q.length < 1) { cb([]); return; }
-    var lower = q.toLowerCase();
     // 先用本地快速候選
-    var local = PlaceSuggest.PLACES.filter(function(p) {
-      return p.toLowerCase().indexOf(lower) !== -1;
-    }).slice(0, 4).map(function(p) {
-      return { name: p, sub: '快速選擇', lat: null, lng: null };
-    });
+    var local = PlaceSuggest.rankLocal(q);
+    var fallback = PlaceSuggest.buildFallbacks(q, local.map(function(item) { return item.name; }));
     // 再用 Nominatim 遠端搜尋（debounce 400ms）
     clearTimeout(PlaceSuggest._timer);
     PlaceSuggest._timer = setTimeout(function() {
-      var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q + ' 台灣')
+      var url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q.replace(/臺/g, '台') + ' 台灣')
               + '&format=json&limit=5&countrycodes=tw&accept-language=zh-TW';
       fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
         .then(function(data) {
@@ -664,16 +836,17 @@ var PlaceSuggest = {
           });
           // 合併去重
           var seen = {};
-          var merged = local.concat(remote).filter(function(r) {
-            if (seen[r.name]) return false;
-            seen[r.name] = 1; return true;
+          var merged = local.concat(fallback, remote).filter(function(r) {
+            var key = normalizeSearchText(r.name);
+            if (seen[key]) return false;
+            seen[key] = 1; return true;
           });
           cb(merged.slice(0, 6));
         })
-        .catch(function() { cb(local); });
+        .catch(function() { cb(local.concat(fallback).slice(0, 6)); });
     }, 350);
     // 立即回傳本地結果
-    if (local.length > 0) cb(local);
+    if (local.length > 0 || fallback.length > 0) cb(local.concat(fallback).slice(0, 6));
   },
 
   // 綁定輸入框和建議框

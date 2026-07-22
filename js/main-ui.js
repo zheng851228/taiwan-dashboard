@@ -13,13 +13,16 @@
     island: '\u96e2\u5cf6'
   };
   var SEARCH_HINTS = {
-    all: ['國道', '快速道路', '景點', '台61線', '雪隧', '車站'],
-    north: ['台北', '新北', '基隆', '桃園', '宜蘭', '雪隧'],
-    central: ['台中', '彰化', '南投', '雲林', '清境', '日月潭'],
-    south: ['嘉義', '台南', '高雄', '屏東', '墾丁', '阿里山'],
-    east: ['花蓮', '台東', '太魯閣', '蘇花', '台11線', '台9線'],
+    all: ['北宜', '西濱', '蘇花', '南迴', '台3線', '台61線'],
+    north: ['北宜', '台7線', '台7乙', '淡金', '北海岸', '雪隧'],
+    central: ['台3線', '台14甲', '清境', '日月潭', '139縣道', '中橫'],
+    south: ['台1線', '182縣道', '阿里山', '墾丁', '南橫', '台26線'],
+    east: ['花蓮', '台東', '太魯閣', '蘇花', '台11線', '南迴'],
     island: ['澎湖', '金門', '馬祖', '機場', '港', '車站']
   };
+  var RIDE_ROUTE_CHIPS = [
+    '北宜公路', '台61線', '蘇花公路', '南迴公路', '台14甲', '北橫公路', '182縣道', '淡金公路'
+  ];
 
   function setFlexVisible(el, isVisible) {
     if (!el) return;
@@ -279,6 +282,7 @@
       }
       panel.classList.remove('hidden');
       panel.classList.add('flex');
+      Bus.emit('camera:selected', cam);
     },
     close: function() {
       var panel = Dom.byId('info-panel');
@@ -323,6 +327,11 @@
           + AppState.lastRouteInfo.distance + 'km/' + AppState.lastRouteInfo.duration + '\u5206 \u00b7 ' + count + '\u652f';
         summary.classList.remove('hidden');
       }
+      Bus.emit('route:updated', {
+        cameraCount: count,
+        routeInfo: AppState.lastRouteInfo,
+        cams: RouteMod.filteredCams.slice()
+      });
     },
     clearRouteUi: function() {
       var startEl = Dom.byId('js-route-start');
@@ -495,15 +504,22 @@
       WaypointsMod && WaypointsMod.render([]);
       RouteMod.clearRouteUi();
       Bus.emit('filter:changed');
+      Bus.emit('route:cleared');
     }
   };
 
   var ListMod = {
     region: 'all', regionCounty: 'all', search: '',
     MAP_MARKER_ZOOM: 10, // 縮放 >= 10 才畫 marker
+    applySearch: function(value) {
+      var nextValue = value || '';
+      var input = Dom.byId('js-search');
+      if (input) input.value = nextValue;
+      ListMod.search = nextValue.trim().toLowerCase();
+      Bus.emit('filter:changed');
+    },
     renderSearchHints: function() {
       var wrap = Dom.byId('js-search-hints');
-      var input = Dom.byId('js-search');
       if (!wrap) return;
       var hints = (SEARCH_HINTS[ListMod.region] || SEARCH_HINTS.all).slice();
       if (ListMod.regionCounty !== 'all') hints.unshift(ListMod.regionCounty);
@@ -512,12 +528,105 @@
         return '<button class="hint-chip px-2.5 py-1 text-[11px] font-bold rounded-full transition-all" data-hint="' + hint + '">' + hint + '</button>';
       }).join('');
       Dom.onAll('.hint-chip', 'click', function(btn) {
-        if (input) {
-          input.value = btn.dataset.hint || '';
-          ListMod.search = input.value.trim().toLowerCase();
-        }
-        Bus.emit('filter:changed');
+        ListMod.applySearch(btn.dataset.hint || '');
       }, wrap);
+    },
+    renderRideRouteChips: function() {
+      var wrap = Dom.byId('js-ride-route-chips');
+      if (!wrap) return;
+      wrap.innerHTML = RIDE_ROUTE_CHIPS.map(function(route) {
+        return '<button class="ride-route-chip" data-route="' + route + '">' + route + '</button>';
+      }).join('');
+      Dom.onAll('.ride-route-chip', 'click', function(btn) {
+        ListMod.applySearch(btn.dataset.route || '');
+      }, wrap);
+    },
+    buildCameraSuggestions: function(query) {
+      var nq = normalizeSearchText(query);
+      if (!nq) return [];
+      var cams = (RouteMod.active ? RouteMod.filteredCams : Data.allCams()).slice();
+      var scored = [];
+      cams.forEach(function(cam) {
+        var haystack = cam.searchText || normalizeSearchText([cam.name, cam.county, cam.id].join(' '));
+        if (!haystack) return;
+        var score = -1;
+        if (haystack.indexOf(nq) !== -1) score = 92 - Math.max(0, haystack.length - nq.length);
+        else if (haystack.split(' ').some(function(part) { return part.indexOf(nq) !== -1; })) score = 72;
+        if (score < 0) return;
+        scored.push({
+          name: cam.name,
+          sub: [cam.county, getRoadCategoryLabel(cam.cat)].filter(Boolean).join(' · '),
+          lat: cam.lat,
+          lng: cam.lng,
+          camId: cam.id,
+          score: score
+        });
+      });
+      return scored.sort(function(a, b) { return b.score - a.score; }).slice(0, 4);
+    },
+    renderSuggestGroups: function(query) {
+      var wrap = Dom.byId('suggest-list');
+      if (!wrap) return;
+      if (!query) {
+        wrap.innerHTML = '';
+        wrap.classList.remove('visible');
+        return;
+      }
+      PlaceSuggest.search(query, function(results) {
+        var routeItems = [];
+        var placeItems = [];
+        (results || []).forEach(function(item) {
+          var normalized = {
+            name: item.name,
+            sub: item.sub || '',
+            lat: item.lat,
+            lng: item.lng
+          };
+          if (PlaceSuggest.isMotorcycleHotspot(item.name)) routeItems.push(normalized);
+          else placeItems.push(normalized);
+        });
+        var cameraItems = ListMod.buildCameraSuggestions(query);
+        var groups = [];
+        if (routeItems.length) groups.push({ key: 'route', title: '熱門路線', icon: 'fa-road', items: routeItems.slice(0, 4) });
+        if (placeItems.length) groups.push({ key: 'place', title: '地點', icon: 'fa-location-dot', items: placeItems.slice(0, 3) });
+        if (cameraItems.length) groups.push({ key: 'camera', title: '攝影機', icon: 'fa-camera', items: cameraItems });
+        if (!groups.length) {
+          wrap.innerHTML = '';
+          wrap.classList.remove('visible');
+          return;
+        }
+        wrap.innerHTML = groups.map(function(group) {
+          var itemsHtml = group.items.map(function(item) {
+            return '<div class="suggest-item" data-type="' + group.key + '" data-name="' + item.name + '" data-lat="' + (item.lat || '') + '" data-lng="' + (item.lng || '') + '" data-cam-id="' + (item.camId || '') + '">'
+              + '<i class="fa-solid ' + group.icon + ' suggest-icon"></i>'
+              + '<span class="suggest-name">' + item.name + '</span>'
+              + '<span class="suggest-sub">' + (item.sub || '') + '</span>'
+              + '</div>';
+          }).join('');
+          return '<div class="suggest-group"><div class="suggest-group-title"><i class="fa-solid ' + group.icon + '"></i><span>' + group.title + '</span></div>' + itemsHtml + '</div>';
+        }).join('');
+        wrap.classList.add('visible');
+        Dom.onAll('.suggest-item', 'click', function(item) {
+          ListMod.applySearch(item.dataset.name || '');
+          wrap.innerHTML = '';
+          wrap.classList.remove('visible');
+          var camId = item.dataset.camId;
+          var lat = parseFloat(item.dataset.lat);
+          var lng = parseFloat(item.dataset.lng);
+          if (camId) {
+            var cam = Data.allCams().find(function(entry) { return entry.id === camId; });
+            if (cam) {
+              NavMod.go('map');
+              MapMod.focusCam(cam);
+              return;
+            }
+          }
+          if (lat && lng && MapMod.map) {
+            NavMod.go('map');
+            MapMod.map.setView([lat, lng], 13);
+          }
+        }, wrap);
+      });
     },
     renderCountyTabs: function() {
       var wrap = Dom.byId('js-region-county-tabs');
@@ -571,43 +680,16 @@
       });
       ListMod.renderCountyTabs();
       ListMod.renderSearchHints();
+      ListMod.renderRideRouteChips();
       var s = Dom.byId('js-search');
       var suggestList = Dom.byId('suggest-list');
       if (s) {
         Dom.on(s, 'input', function() {
           ListMod.search = s.value.trim().toLowerCase();
           Bus.emit('filter:changed');
-          // 地名建議
           var q = s.value.trim();
           if (!q || q.length < 1) { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } return; }
-          PlaceSuggest.search(q, function(results) {
-            if (!suggestList) return;
-            if (!results.length) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); return; }
-            var html = results.map(function(r) {
-              return '<div class="suggest-item" data-name="'+r.name+'" data-lat="'+(r.lat||'')+'" data-lng="'+(r.lng||'')+'">'
-                + '<i class="fa-solid fa-location-dot suggest-icon"></i>'
-                + '<span class="suggest-name">'+r.name+'</span>'
-                + '<span class="suggest-sub">'+(r.sub||'')+'</span>'
-                + '</div>';
-            }).join('');
-            suggestList.innerHTML = html;
-            suggestList.classList.add('visible');
-            Dom.queryAll('.suggest-item', suggestList).forEach(function(item) {
-              Dom.on(item, 'click', function() {
-                s.value = item.dataset.name;
-                ListMod.search = item.dataset.name.toLowerCase();
-                suggestList.innerHTML=''; suggestList.classList.remove('visible');
-                Bus.emit('filter:changed');
-                // 若有座標，飛到地圖
-                var lat = parseFloat(item.dataset.lat);
-                var lng = parseFloat(item.dataset.lng);
-                if (lat && lng && MapMod.map) {
-                  NavMod.go('map');
-                  MapMod.map.setView([lat, lng], 13);
-                }
-              });
-            });
-          });
+          ListMod.renderSuggestGroups(q);
         });
         Dom.on(s, 'blur', function() {
           setTimeout(function() { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } }, 200);
@@ -616,24 +698,33 @@
     },
     getFiltered: function() {
       var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
+      var normalizedQuery = normalizeSearchText(ListMod.search);
+      var queryTerms = normalizedQuery ? normalizedQuery.split(' ').filter(Boolean) : [];
       return cams.filter(function(cam) {
         var rOk = ListMod.region === 'all' || getRegion(cam.county) === ListMod.region;
         var cOk = ListMod.region === 'all' || ListMod.regionCounty === 'all' || cam.county === ListMod.regionCounty;
-        var sOk = !ListMod.search ||
-          cam.name.toLowerCase().indexOf(ListMod.search) !== -1 ||
-          cam.county.toLowerCase().indexOf(ListMod.search) !== -1 ||
-          (cam.id && cam.id.toLowerCase().indexOf(ListMod.search) !== -1);
+        var haystack = cam.searchText || normalizeSearchText([cam.name, cam.county, cam.id].join(' '));
+        var sOk = !queryTerms.length || queryTerms.every(function(term) {
+          return haystack.indexOf(term) !== -1;
+        });
         return rOk && cOk && sOk;
       });
     },
     render: function() {
       var el = Dom.byId('js-list-inner');
+      var stateEl = Dom.byId('js-list-state');
       if (!el) return;
       var cams = ListMod.getFiltered();
       MapMod.clearMarkers();
       var stat = Dom.byId('js-stat-cams');
       if (stat) stat.textContent = Data.allCams().length;
       if (cams.length === 0) {
+        if (stateEl) {
+          stateEl.classList.remove('hidden');
+          stateEl.textContent = RouteMod.active
+            ? '目前是沿途結果模式，試著放寬條件或清除路線。'
+            : '可切換區域、縣市或搜尋關鍵字來縮小範圍。';
+        }
         if (Data.camsState === 'loading' || Data.camsState === 'idle') {
           el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
         } else if (Data.camsState === 'error') {
@@ -642,6 +733,12 @@
           el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
         }
         return;
+      }
+      if (stateEl) {
+        stateEl.classList.remove('hidden');
+        stateEl.textContent = RouteMod.active
+          ? '沿途模式：已依目前路線過濾並優先顯示可快速判斷的影像點。'
+          : '列表模式：可收藏常用停靠點，並從這裡直接跳回地圖。';
       }
       var map = {};
       Data.allCams().forEach(function(c) { map[c.id] = c; });
@@ -673,18 +770,30 @@
       listCams.forEach(function(cam) {
         var w  = Data.weather[cam.county];
         var wt = w ? (w.temp + '\u00B0C') : '';
-        var catLabel = cam.cat === 'highway' ? '\u570b\u9053' : cam.cat === 'expressway' ? '\u5feb\u9053' : cam.cat === 'scenic' ? '\u666f\u9ede' : '\u7701\u9053';
+        var catLabel = getRoadCategoryLabel(cam.cat);
         var _ts = cam.url ? (cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000)) : '';
+        var isRouteCam = RouteMod.active && RouteMod.filteredCams.some(function(routeCam) { return routeCam.id === cam.id; });
+        var distLabel = '';
+        if (NearbyMod.userLat !== null && NearbyMod.userLng !== null) {
+          distLabel = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng).toFixed(1) + 'km';
+        }
         html += '<div class="cam-card glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
+          + '<div class="cam-card-top w-full">'
           + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
           + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
           + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+_ts+'" />'
           + '</div>'
           + '<div class="flex-1 min-w-0">'
-          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+cam.name+' <span class="text-[10px] bg-white/10 text-slate-400 px-1.5 py-0.5 rounded-full shrink-0">'+catLabel+'</span></div>'
+          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+cam.name+'</div>'
           + '<div class="text-[10px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
+          + '<div class="cam-card-meta">'
+          + '<span class="meta-chip">'+catLabel+'</span>'
+          + (isRouteCam ? '<span class="meta-chip">\u6cbf\u9014</span>' : '')
+          + (distLabel ? '<span class="meta-chip">\u8ddd\u96e2 ' + distLabel + '</span>' : '')
           + '</div>'
-          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div>';
+          + '</div>'
+          + '<button class="card-favorite-btn" data-favorite-id="' + cam.id + '"><i class="fa-regular fa-bookmark text-xs"></i></button>'
+          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div></div>';
       });
       if (hasMore) {
         html += '<div class="text-center text-slate-500 text-xs py-4">顯示前 200 支，請選擇縣市或搜尋查看更多</div>';
@@ -711,6 +820,12 @@
           InfoMod.open(cam);
           NavMod.go('map');
           MapMod.map.setView([cam.lat, cam.lng], 14);
+        });
+      });
+      Dom.queryAll('.card-favorite-btn', el).forEach(function(btn) {
+        Dom.on(btn, 'click', function(event) {
+          event.stopPropagation();
+          Bus.emit('favorite:toggle', map[btn.dataset.favoriteId]);
         });
       });
       // clearMarkers 裡的 setTimeout 會自動補畫，這裡不需要再呼叫

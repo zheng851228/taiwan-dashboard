@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>環島路況指揮中心</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#f97316" />
   <meta name="apple-mobile-web-app-title" content="路況指揮" />
@@ -123,7 +124,37 @@
         <i class="fa-solid fa-magnifying-glass-location text-sm"></i> 找沿途攝影機
       </button>
     </div>
-    <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-400 drop-shadow-md"></div>
+    <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-300 drop-shadow-md"></div>
+    <section id="ride-status-card" class="ride-status-shell glass mt-3 p-3 rounded-[28px]">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Ride Status</div>
+          <div class="text-sm font-black text-slate-100">旅行狀態列</div>
+        </div>
+        <button id="js-open-favorites" class="route-mini-btn text-[11px] text-cyan-200 hover:text-cyan-100 flex items-center gap-1">
+          <i class="fa-solid fa-bookmark"></i> 收藏
+        </button>
+      </div>
+      <div class="ride-status-grid mt-3">
+        <div class="ride-metric-card">
+          <span class="ride-metric-label">路線</span>
+          <span id="ride-metric-distance" class="ride-metric-value">未規劃</span>
+        </div>
+        <div class="ride-metric-card">
+          <span class="ride-metric-label">沿途影像</span>
+          <span id="ride-metric-cameras" class="ride-metric-value">0 支</span>
+        </div>
+        <div class="ride-metric-card">
+          <span class="ride-metric-label">天氣摘要</span>
+          <span id="ride-metric-weather" class="ride-metric-value">待命中</span>
+        </div>
+        <div class="ride-metric-card">
+          <span class="ride-metric-label">更新時間</span>
+          <span id="ride-metric-updated" class="ride-metric-value">--:--</span>
+        </div>
+      </div>
+      <div id="ride-risk-inline" class="ride-inline-note mt-3">尚未建立路線，先貼上 Google Maps 或手動輸入起終點。</div>
+    </section>
   </div>
 
   <div class="absolute bottom-[8rem] left-4 z-[500] flex flex-col gap-3">
@@ -168,26 +199,41 @@
       <button id="js-strip-btn" class="text-[10px] text-orange-400 hover:text-orange-300 font-bold ml-1 flex items-center gap-1"><i class="fa-solid fa-images"></i> 影像</button>
     </div>
   </div>
-<!-- 圖例 -->
-<div style="position:absolute;bottom:5.5rem;right:1rem;z-index:400;background:rgba(15,23,42,0.82);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:7px 10px;min-width:80px;">
-  <div style="font-size:9px;font-weight:900;color:#f97316;margin-bottom:5px;letter-spacing:0.05em;">圖例</div>
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-    <div style="width:10px;height:10px;border-radius:50%;background:#3b82f6;flex-shrink:0;box-shadow:0 0 4px #3b82f6;"></div>
-    <span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">國道</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-    <div style="width:10px;height:10px;border-radius:50%;background:#a855f7;flex-shrink:0;box-shadow:0 0 4px #a855f7;"></div>
-    <span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">快速道路</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-    <div style="width:10px;height:10px;border-radius:50%;background:#f97316;flex-shrink:0;box-shadow:0 0 4px #f97316;"></div>
-    <span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">省道</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-    <div style="width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0;box-shadow:0 0 4px #22c55e;"></div>
-    <span style="font-size:10px;color:#cbd5e1;white-space:nowrap;">景點</span>
-  </div>
-</div>
+  <aside class="map-legend glass">
+    <div class="map-legend-title">圖例</div>
+    <div class="map-legend-item">
+      <div class="map-legend-dot highway"></div>
+      <span>國道</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-dot expressway"></div>
+      <span>快速道路</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-dot provincial"></div>
+      <span>省道</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-dot scenic"></div>
+      <span>景點</span>
+    </div>
+  </aside>
+
+  <aside id="favorites-panel" class="hidden absolute right-4 top-[calc(var(--safe-top)+12.5rem)] z-[520] w-[min(22rem,calc(100vw-2rem))] glass rounded-[28px] overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div>
+        <div class="text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Favorites</div>
+        <div class="font-black text-sm text-slate-100">我的停靠點 / 收藏</div>
+      </div>
+      <button id="favorites-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
+        <i class="fa-solid fa-xmark text-xs"></i>
+      </button>
+    </div>
+    <div id="favorites-list" class="max-h-72 overflow-y-auto divide-y divide-white/5"></div>
+    <div class="px-4 py-3 text-[11px] text-slate-400 border-t border-white/10">
+      可從資訊卡與列表卡片加入收藏，作為下次環島停靠點。
+    </div>
+  </aside>
 </section>
 
 <section id="pg-list" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
@@ -215,6 +261,11 @@
           placeholder="搜尋攝影機、地名、縣市..."
           class="list-search-input w-full py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
       </div>
+      <div class="list-chip-head px-1 pt-3">
+        <span>熱門跑法</span>
+        <span class="text-slate-500">點一下直接搜路線</span>
+      </div>
+      <div id="js-ride-route-chips" class="flex flex-wrap gap-2 px-1 pt-2"></div>
       <div id="js-search-hints" class="flex flex-wrap gap-2 px-1 pt-3"></div>
     </div>
     <div class="relative -mt-1">
@@ -228,12 +279,28 @@
       </span>
       <span id="js-list-route-count"></span>
     </div>
+    <div id="js-list-state" class="list-state-banner hidden"></div>
     <div id="js-list-inner" class="space-y-3"></div>
   </div>
 </section>
 
 <section id="pg-tools" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
   <div class="max-w-xl mx-auto space-y-6">
+    <div class="tools-hero-shell glass p-5 rounded-[30px] space-y-4">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-300/80 font-black">Rider Console</div>
+          <h2 class="font-black text-lg">出發前先看這三件事</h2>
+        </div>
+        <div class="w-12 h-12 rounded-2xl tools-hero-icon flex items-center justify-center">
+          <i class="fa-solid fa-compass text-orange-300"></i>
+        </div>
+      </div>
+      <div id="ride-checklist" class="space-y-2">
+        <div class="tool-empty">尚未建立檢查清單。</div>
+      </div>
+    </div>
+
     <div class="tools-weather-shell glass p-5 rounded-[30px] space-y-4">
       <div class="flex items-center justify-between mb-1">
         <div class="flex items-center gap-3">
@@ -256,20 +323,32 @@
       <div id="wx-updated" class="text-[10px] text-slate-500 text-right"></div>
     </div>
 
-    <div class="glass p-6 rounded-3xl space-y-3">
-      <div class="flex items-center gap-3 mb-2">
+    <div class="glass p-6 rounded-3xl space-y-4">
+      <div class="flex items-center gap-3 mb-1">
         <div class="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
-          <i class="fa-solid fa-route text-orange-500"></i>
+          <i class="fa-solid fa-triangle-exclamation text-orange-400"></i>
         </div>
-        <h2 class="font-black text-base">路線解析工具</h2>
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-300/80 font-black">Risk Brief</div>
+          <h2 class="font-black text-base">路線風險摘要</h2>
+        </div>
       </div>
-      <p class="text-xs text-slate-400 leading-relaxed">
-        將 Google Maps 規劃好的路線網址貼入地圖頁面的輸入框，系統會自動解析座標並過濾出沿途 15km 內的 CCTV 攝影機。
-      </p>
-      <div class="bg-slate-800/60 rounded-2xl p-4 text-xs text-slate-300 space-y-2 mt-2">
-        <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">1</span><span>前往 Google Maps 規劃路線</span></div>
-        <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">2</span><span>點選「分享」→ 複製連結</span></div>
-        <div class="flex items-start gap-2"><span class="text-orange-500 font-bold shrink-0">3</span><span>回到地圖頁面貼入並按「解析」</span></div>
+      <div id="route-risk-summary" class="tool-empty">建立路線後，這裡會彙整天氣、攝影機覆蓋與道路型態提醒。</div>
+      <div id="route-risk-tags" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <div class="glass p-6 rounded-3xl space-y-4">
+      <div class="flex items-center gap-3 mb-1">
+        <div class="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
+          <i class="fa-solid fa-bookmark text-cyan-300"></i>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Stops</div>
+          <h2 class="font-black text-base">我的停靠點 / 收藏</h2>
+        </div>
+      </div>
+      <div id="favorites-tools-list" class="space-y-2">
+        <div class="tool-empty">目前還沒有收藏任何停靠點。</div>
       </div>
     </div>
 
@@ -281,7 +360,7 @@
         <h2 class="font-black text-base">關於本系統</h2>
       </div>
       <p class="text-xs text-slate-400 leading-relaxed">
-        整合全台 CCTV 路況攝影機與 CWA 氣象資料，提供環島騎士即時路況參考。影像若無畫面，可能為 HTTP 混合內容遭瀏覽器攔截。
+        整合全台 CCTV 路況攝影機與中央氣象代理資料，提供環島騎士即時路況參考。影像若無畫面，可能為 HTTP 混合內容遭瀏覽器攔截。
       </p>
       <div class="grid grid-cols-2 gap-3 mt-2">
         <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
@@ -366,9 +445,14 @@
         <div id="info-type" class="text-xs text-slate-500 mt-0.5"></div>
         <div id="info-weather" class="text-xs text-blue-400 mt-1"></div>
       </div>
-      <button id="info-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 shrink-0 ml-3">
-        <i class="fa-solid fa-xmark text-sm"></i>
-      </button>
+      <div class="flex items-center gap-2 shrink-0 ml-3">
+        <button id="info-favorite" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
+          <i class="fa-regular fa-bookmark text-sm"></i>
+        </button>
+        <button id="info-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
     </div>
     <div id="info-thumb">
       <div class="ph"><i class="fa-solid fa-camera"></i></div>
@@ -386,9 +470,11 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/core.js"></script>
+<script src="js/services.js"></script>
 <script src="js/data.js"></script>
 <script src="js/main-ui.js"></script>
 <script src="js/enhancements.js"></script>
+<script src="js/ride-tools.js"></script>
 
 </body>
 </html>

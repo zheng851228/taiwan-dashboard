@@ -6,11 +6,11 @@
   'use strict';
 
   window.Config = {
-    CWA_KEY: 'CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB',
     MAP_CENTER: [23.9, 121.0],
     MAP_ZOOM: 7,
     ROUTE_FILTER_KM: 20.0,
     SIMPLIFY_STEP: 2,
+    WORKER_BASE: 'https://url-expander.lucky851228.workers.dev',
     TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
@@ -27,8 +27,20 @@
     workerResult: null,
     lastRouteInfo: null,
     routeAllPoints: null,
+    routeReport: null,
     pendingWaypoints: [],
-    waypointMapMarkers: []
+    waypointMapMarkers: [],
+    updatedAt: {
+      cams: null,
+      weather: null,
+      route: null
+    },
+    dataStatus: {
+      cams: 'idle',
+      weather: 'idle',
+      geocode: 'idle',
+      route: 'idle'
+    }
   };
 
   // ===== 螢幕診斷工具 =====
@@ -212,28 +224,114 @@
     return 'other';
   };
 
+  window.setDataStatus = function(key, status, updatedAt) {
+    if (!AppState.dataStatus) AppState.dataStatus = {};
+    AppState.dataStatus[key] = status;
+    if (updatedAt) {
+      if (!AppState.updatedAt) AppState.updatedAt = {};
+      AppState.updatedAt[key] = updatedAt;
+    }
+    if (window.Bus) Bus.emit('status:changed', {
+      key: key,
+      status: status,
+      updatedAt: updatedAt || null
+    });
+  };
+
+  window.getDataStatus = function(key) {
+    return AppState.dataStatus && AppState.dataStatus[key] ? AppState.dataStatus[key] : 'idle';
+  };
+
+  window.formatUpdatedAt = function(value) {
+    if (!value) return '--';
+    var date = typeof value === 'string' || typeof value === 'number' ? new Date(value) : value;
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '--';
+    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+  };
+
+  window.getRoadCategoryLabel = function(cat) {
+    if (cat === 'highway') return '國道';
+    if (cat === 'expressway') return '快速道路';
+    if (cat === 'scenic') return '景點';
+    if (cat === 'city') return '市區';
+    return '省道';
+  };
+
+  window.normalizeSearchText = function(value) {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/臺/g, '台')
+      .replace(/台灣/g, '台')
+      .replace(/臺灣/g, '台')
+      .replace(/國道/g, '國')
+      .replace(/快速道路/g, '快')
+      .replace(/省道/g, '省')
+      .replace(/台9線/g, '台9')
+      .replace(/台11線/g, '台11')
+      .replace(/台61線/g, '台61')
+      .replace(/[縣市鄉鎮區路街道里村]/g, ' ')
+      .replace(/[_\-\/,，.。()（）]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  window.getSearchVariants = function(value) {
+    var base = String(value || '').trim();
+    if (!base) return [];
+    var set = {};
+    function add(v) {
+      if (!v) return;
+      set[v] = true;
+      set[normalizeSearchText(v)] = true;
+    }
+    add(base);
+    add(base.replace(/臺/g, '台'));
+    add(base.replace(/台/g, '臺'));
+    add(base.replace(/台灣|臺灣/g, ''));
+    add(base.replace(/縣|市/g, ''));
+    add(base.replace(/國道/g, '國'));
+    add(base.replace(/快速道路/g, '快'));
+    add(base.replace(/省道/g, '省'));
+    return Object.keys(set).filter(Boolean);
+  };
+
   var _geocodeCache = {};
   window.geocodeName = function(name) {
     name = name.trim();
     if (_geocodeCache[name]) return Promise.resolve(_geocodeCache[name]);
-    var q = encodeURIComponent(name);
-    var url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1&countrycodes=tw';
-    return fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
-      .then(function(data) {
-        if (data && data.length > 0) {
-          var result = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-          _geocodeCache[name] = result;
-          Diag.ok('\u5730\u540d\u89e3\u6790: ' + name + ' \u2192 ' + result[0].toFixed(4) + ',' + result[1].toFixed(4));
-          return result;
-        }
-        Diag.err('\u5730\u540d\u89e3\u6790\u5931\u6557: ' + name);
-        Diag.show();
-        return null;
-      })
-      .catch(function() {
-        Diag.err('\u5730\u540d API \u932f\u8aa4: ' + name);
-        return null;
+    var variants = getSearchVariants(name).concat([name + ' 台灣', name + ' Taiwan']);
+    var tried = {};
+    var chain = Promise.resolve(null);
+
+    variants.forEach(function(variant) {
+      chain = chain.then(function(found) {
+        if (found || tried[variant]) return found;
+        tried[variant] = true;
+        var q = encodeURIComponent(variant);
+        var url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=5&countrycodes=tw&accept-language=zh-TW';
+        return fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
+          .then(function(data) {
+            if (data && data.length > 0) {
+              var result = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+              _geocodeCache[name] = result;
+              Diag.ok('\u5730\u540d\u89e3\u6790: ' + name + ' \u2192 ' + result[0].toFixed(4) + ',' + result[1].toFixed(4));
+              return result;
+            }
+            return null;
+          })
+          .catch(function() { return null; });
       });
+    });
+
+    return chain.then(function(result) {
+      if (result) return result;
+      Diag.err('\u5730\u540d\u89e3\u6790\u5931\u6557: ' + name);
+      Diag.show();
+      return null;
+    }).catch(function() {
+      Diag.err('\u5730\u540d API \u932f\u8aa4: ' + name);
+      return null;
+    });
   };
 
   window.parseRouteStartEnd = function(url) {
@@ -395,19 +493,11 @@
   };
 
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
-    var ROUTE_PROXY = 'https://url-expander.lucky851228.workers.dev/route';
     Diag.info('路線查詢: ' + startLatLng[0].toFixed(4) + ',' + startLatLng[1].toFixed(4) + ' → ' + endLatLng[0].toFixed(4) + ',' + endLatLng[1].toFixed(4));
 
-    return fetchJson(ROUTE_PROXY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        startLat: startLatLng[0], startLng: startLatLng[1],
-        endLat:   endLatLng[0],   endLng:   endLatLng[1],
-        mode:     mode
-      })
-    })
-    .then(function(data) {
+    return AppServices.parseRoute(startLatLng, endLatLng, mode)
+    .then(function(payload) {
+      var data = payload.data || {};
       Diag.add('Worker /route HTTP 200', 'ok');
       return data;
     })
@@ -465,12 +555,9 @@
   }
 
   window.expandGoogleUrl = function(url) {
-    if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) {
-      return Promise.resolve(url);
-    }
-    var workerUrl = 'https://url-expander.lucky851228.workers.dev/?url=' + encodeURIComponent(url);
-    return fetchJson(workerUrl)
-      .then(function(data) {
+    return AppServices.expandShortUrl(url)
+      .then(function(payload) {
+        var data = payload.data || {};
         if (data.start !== undefined || data.end) {
           AppState.workerResult = {
             start:     data.start     || '',
