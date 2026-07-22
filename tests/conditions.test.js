@@ -248,4 +248,23 @@ describe('camera fusion', () => {
     expect(cameras[0].status).toBe('offline');
     expect(cameras.some((camera) => camera.id === 'prohibited')).toBe(false);
   });
+
+  it('rejects distant cameras before reading road metadata', () => {
+    const distantCamera = { id: 'distant', name: '遠端鏡頭', lat: 23.5, lng: 120.4 };
+    Object.defineProperty(distantCamera, 'roadRef', {
+      get() {
+        throw new Error('distant camera road metadata should not be inspected');
+      }
+    });
+
+    const result = fuseConditions(route, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: [distantCamera]
+    }, NOW);
+
+    expect(result.sections[0].cameras).toEqual([]);
+  });
 });

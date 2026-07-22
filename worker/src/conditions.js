@@ -245,19 +245,19 @@ function matchIncidents(section, incidents, now) {
 }
 
 function matchCameras(section, cameras, vehicle) {
-  return (cameras || [])
-    .filter((camera) => (
-      Number.isFinite(camera.lat)
-      && Number.isFinite(camera.lng)
-      && !camera.prohibited
-      && !cameraRoadIsProhibited(camera, vehicle)
-    ))
-    .map((camera) => ({
+  const sectionRoadRef = normalizeRoadRef(section.roadRef);
+  const nearby = [];
+  for (const camera of cameras || []) {
+    if (!Number.isFinite(camera.lat) || !Number.isFinite(camera.lng) || camera.prohibited) continue;
+    const distanceKm = haversineKm(section.sample, [camera.lat, camera.lng]);
+    if (distanceKm > 5 || cameraRoadIsProhibited(camera, vehicle)) continue;
+    nearby.push({
       camera,
-      sameRoad: normalizeRoadRef(camera.roadRef || camera.name).includes(normalizeRoadRef(section.roadRef)),
-      distanceKm: haversineKm(section.sample, [camera.lat, camera.lng])
-    }))
-    .filter((item) => item.distanceKm <= 5)
+      sameRoad: normalizeRoadRef(camera.roadRef || camera.name).includes(sectionRoadRef),
+      distanceKm
+    });
+  }
+  return nearby
     .sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || a.distanceKm - b.distanceKm)
     .slice(0, 2)
     .map(({ camera, distanceKm }) => ({
