@@ -40,12 +40,42 @@ export function matchTrafficDetector(section, detectors, now = new Date()) {
       distanceKm <= 1
       && headingDifference(section.heading, detector.heading) < 60
       && isFresh(detector.observedAt, 10, now)
+      && Number.isFinite(detector.speedKph)
+      && Number.isFinite(detector.referenceSpeedKph)
+      && detector.referenceSpeedKph > 0
     ))
     .sort((a, b) => {
       const aRoad = normalizeRoadRef(a.detector.roadRef) === normalizeRoadRef(section.roadRef) ? 0 : 1;
       const bRoad = normalizeRoadRef(b.detector.roadRef) === normalizeRoadRef(section.roadRef) ? 0 : 1;
       return aRoad - bRoad || a.distanceKm - b.distanceKm;
     })[0] || null;
+}
+
+export function matchPublishedTraffic(section, publishedSections, now = new Date()) {
+  return (publishedSections || [])
+    .filter((published) => (
+      published.available !== false
+      && normalizeRoadRef(published.roadRef) === normalizeRoadRef(section.roadRef)
+      && headingDifference(section.heading, published.heading) < 60
+      && isFresh(published.observedAt, 10, now)
+      && Number.isFinite(published.speedKph)
+      && Number.isFinite(published.referenceSpeedKph)
+      && published.referenceSpeedKph > 0
+      && Array.isArray(published.geometry)
+      && published.geometry.length > 1
+    ))
+    .map((published) => ({
+      published,
+      distanceKm: distanceToGeometry(section.sample, published.geometry)
+    }))
+    .filter(({ distanceKm }) => distanceKm <= 1)
+    .sort((a, b) => a.distanceKm - b.distanceKm)[0] || null;
+}
+
+function distanceToGeometry(point, geometry) {
+  return geometry.reduce((nearest, coordinate) => (
+    Math.min(nearest, haversineKm(point, coordinate))
+  ), Infinity);
 }
 
 function normalizeRoadRef(value) {
@@ -101,9 +131,14 @@ export function fuseConditions(route, providerData, now = new Date()) {
   const sections = createRouteSections(route);
   const fused = sections.map((section) => {
     const trafficMatch = matchTrafficDetector(section, providerData.detectors, now);
+    const publishedMatch = trafficMatch
+      ? null
+      : matchPublishedTraffic(section, providerData.publishedTraffic, now);
     const traffic = trafficMatch
       ? trafficFromDetector(trafficMatch.detector)
-      : unknownTraffic(providerData.trafficSource || 'TDX');
+      : (publishedMatch
+        ? trafficFromPublishedSection(publishedMatch.published, publishedMatch.distanceKm)
+        : unknownTraffic(providerData.trafficSource || 'TDX'));
     const weather = matchWeather(section, providerData.weather, now);
     const incidents = matchIncidents(section, providerData.incidents, now);
     const cameras = matchCameras(section, providerData.cameras, route.vehicle);
@@ -133,7 +168,22 @@ function trafficFromDetector(detector) {
     speedKph: round(detector.speedKph, 0),
     referenceSpeedKph: round(detector.referenceSpeedKph, 0),
     observedAt: detector.observedAt,
-    source: detector.source || 'TDX'
+    source: detector.source || 'TDX',
+    method: 'vd',
+    detectorId: detector.id || null
+  };
+}
+
+function trafficFromPublishedSection(published, distanceKm) {
+  return {
+    level: classifyTraffic(published.speedKph, published.referenceSpeedKph),
+    speedKph: round(published.speedKph, 0),
+    referenceSpeedKph: round(published.referenceSpeedKph, 0),
+    observedAt: published.observedAt,
+    source: published.source || 'TDX',
+    method: 'published-section',
+    sectionId: published.id || null,
+    matchedDistanceKm: round(distanceKm, 2)
   };
 }
 
@@ -319,6 +369,7 @@ export function buildFixtureProviderData(sections, now = new Date()) {
 }
 
 function round(value, digits) {
+  if (value === null || value === undefined || value === '') return null;
   if (!Number.isFinite(Number(value))) return null;
   const factor = 10 ** digits;
   return Math.round(Number(value) * factor) / factor;

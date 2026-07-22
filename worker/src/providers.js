@@ -4,16 +4,30 @@ const TDX_TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/proto
 const DEFAULT_TDX_CONFIG_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/VD/Highway?$format=JSON';
 const DEFAULT_TDX_LIVE_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/VD/Highway?$format=JSON';
 const DEFAULT_TDX_SECTION_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Section/Highway?$format=JSON';
-const DEFAULT_TDX_LIVE_TRAFFIC_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/Highway?$format=JSON';
-const DEFAULT_TDX_CONGESTION_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/CongestionLevel/Highway?$format=JSON';
 const DEFAULT_TDX_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Highway?$format=JSON';
+const DEFAULT_THB_SECTION_URL = 'https://thbapp.thb.gov.tw/opendata/section/sectioninfo/SectionList.xml';
+const DEFAULT_THB_SECTION_SHAPE_URL = 'https://thbapp.thb.gov.tw/opendata/section/sectionshapeinfo/SectionShapeList.xml';
+const DEFAULT_THB_LIVE_TRAFFIC_URL = 'https://thbapp.thb.gov.tw/opendata/section/livetrafficdata/LiveTrafficList.xml';
+const DEFAULT_THB_CONGESTION_URL = 'https://thbapp.thb.gov.tw/opendata/section/congetioninfo/CongestionLevelList.xml';
 const DEFAULT_CWA_OBSERVATION_URL = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001';
 const DEFAULT_CWA_FORECAST_URL = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-089';
 const DEFAULT_CWA_COUNTY_FORECAST_URL = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001';
 
 let tokenCache = null;
 let tdxStaticCache = null;
+let thbStaticCache = null;
+let thbStaticPromise = null;
+let thbLiveCache = null;
+let thbLivePromise = null;
+const jsonResponseCache = new Map();
+const jsonResponsePromises = new Map();
 const TDX_STATIC_TTL_MS = 6 * 60 * 60 * 1000;
+const THB_STATIC_TTL_MS = 6 * 60 * 60 * 1000;
+const THB_LIVE_TTL_MS = 60 * 1000;
+const TDX_LIVE_TTL_MS = 60 * 1000;
+const CWA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const CAMERA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const TRACE_CHUNK_DISTANCE_KM = 150;
 
 export async function getValhallaRoute(locations, costing, env, avoidLocations = []) {
   const baseUrl = String(env.VALHALLA_BASE_URL || 'https://valhalla1.openstreetmap.de').replace(/\/$/, '');
@@ -68,32 +82,64 @@ function sumLegValue(legs, key) {
 
 export async function traceRouteAttributes(route, costing, env) {
   const baseUrl = String(env.VALHALLA_BASE_URL || 'https://valhalla1.openstreetmap.de').replace(/\/$/, '');
-  const result = await requestJson(`${baseUrl}/trace_attributes`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      encoded_polyline: route.encodedShape,
-      costing,
-      shape_match: 'edge_walk',
-      filters: {
-        action: 'include',
-        attributes: [
-          'edge.names',
-          'edge.way_id',
-          'edge.road_class',
-          'edge.use',
-          'edge.forward',
-          'edge.traversability',
-          'edge.length',
-          'edge.begin_shape_index',
-          'edge.end_shape_index'
-        ]
-      }
-    })
-  }, 20000);
-  const edges = Array.isArray(result.edges) ? result.edges : [];
+  const chunks = splitTraceGeometry(route.geometry);
+  const shapeMatch = chunks.length > 1 ? 'walk_or_snap' : 'edge_walk';
+  const edges = [];
+  for (const chunk of chunks) {
+    const result = await requestJson(`${baseUrl}/trace_attributes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        encoded_polyline: encodePolyline6(chunk.geometry),
+        costing,
+        shape_match: shapeMatch,
+        filters: {
+          action: 'include',
+          attributes: [
+            'edge.names',
+            'edge.way_id',
+            'edge.road_class',
+            'edge.use',
+            'edge.forward',
+            'edge.traversability',
+            'edge.length',
+            'edge.begin_shape_index',
+            'edge.end_shape_index'
+          ]
+        }
+      })
+    }, 20000);
+    const chunkEdges = Array.isArray(result.edges) ? result.edges : [];
+    chunkEdges.forEach((edge) => appendTraceEdge(edges, normalizeTraceEdge(edge, chunk.startShapeIndex)));
+  }
   if (!edges.length) throw new Error('Valhalla trace_attributes returned no road edges');
-  return edges.map((edge) => ({
+  return edges;
+}
+
+export function splitTraceGeometry(geometry, maxDistanceKm = TRACE_CHUNK_DISTANCE_KM) {
+  if (!Array.isArray(geometry) || geometry.length < 2) return [];
+  const chunks = [];
+  let startShapeIndex = 0;
+  let distanceKm = 0;
+  for (let index = 1; index < geometry.length; index += 1) {
+    const segmentKm = haversineKm(geometry[index - 1], geometry[index]);
+    if (distanceKm + segmentKm > maxDistanceKm && index - 1 > startShapeIndex) {
+      chunks.push({
+        geometry: geometry.slice(startShapeIndex, index),
+        startShapeIndex
+      });
+      startShapeIndex = index - 1;
+      distanceKm = segmentKm;
+    } else {
+      distanceKm += segmentKm;
+    }
+  }
+  chunks.push({ geometry: geometry.slice(startShapeIndex), startShapeIndex });
+  return chunks;
+}
+
+function normalizeTraceEdge(edge, startShapeIndex) {
+  return {
     names: normalizeNames(edge.names),
     wayId: edge.way_id ?? edge.wayId ?? null,
     roadClass: edge.road_class || edge.roadClass || '',
@@ -102,9 +148,23 @@ export async function traceRouteAttributes(route, costing, env) {
     traversability: edge.traversability || '',
     motorcycleAccess: edge.motorcycle_access ?? edge.motorcycleAccess,
     lengthKm: Number(edge.length || 0),
-    beginShapeIndex: Number(edge.begin_shape_index ?? edge.beginShapeIndex ?? 0),
-    endShapeIndex: Number(edge.end_shape_index ?? edge.endShapeIndex ?? edge.begin_shape_index ?? 0)
-  }));
+    beginShapeIndex: startShapeIndex + Number(edge.begin_shape_index ?? edge.beginShapeIndex ?? 0),
+    endShapeIndex: startShapeIndex + Number(edge.end_shape_index ?? edge.endShapeIndex ?? edge.begin_shape_index ?? 0)
+  };
+}
+
+function appendTraceEdge(edges, edge) {
+  const previous = edges.at(-1);
+  const sameWay = previous
+    && edge.wayId !== null
+    && previous.wayId === edge.wayId
+    && previous.forward === edge.forward;
+  if (sameWay && edge.beginShapeIndex <= previous.endShapeIndex) {
+    previous.endShapeIndex = Math.max(previous.endShapeIndex, edge.endShapeIndex);
+    previous.lengthKm = round(previous.lengthKm + edge.lengthKm, 4);
+    return;
+  }
+  edges.push(edge);
 }
 
 function normalizeNames(names) {
@@ -187,22 +247,40 @@ export function buildFixtureCountyWeather(now = new Date()) {
 
 export async function loadLiveProviderData(sections, env) {
   const issues = [];
-  const [trafficResult, weatherResult, cameraResult] = await Promise.allSettled([
+  const [tdxResult, thbResult, weatherResult, cameraResult] = await Promise.allSettled([
     loadTdxData(env),
+    loadThbPublishedData(sections, env),
     loadCwaSamples(sections, env),
     loadCameras(env)
   ]);
 
-  const traffic = settledValue(trafficResult, { detectors: [], incidents: [] }, 'TDX', issues);
-  (traffic.issues || []).forEach((issue) => issues.push(`TDX: ${issue}`));
+  const tdx = settledValue(
+    tdxResult,
+    { config: null, sections: null, live: null, incidents: [], issues: [] },
+    'TDX',
+    issues
+  );
+  const thb = settledValue(
+    thbResult,
+    { publishedTraffic: [], liveTraffic: null, congestion: null },
+    'THB',
+    issues
+  );
+  (tdx.issues || []).forEach((issue) => issues.push(`TDX: ${issue}`));
   const weather = settledValue(weatherResult, [], 'CWA', issues);
   const cameras = settledValue(cameraResult, [], 'CCTV', issues);
+  const referenceSpeedByLink = tdx.sections && thb.liveTraffic && thb.congestion
+    ? buildReferenceSpeedByLink(tdx.sections, thb.liveTraffic, thb.congestion)
+    : new Map();
   return {
-    detectors: traffic.detectors || [],
-    incidents: traffic.incidents || [],
+    detectors: tdx.config && tdx.live
+      ? mergeTdxDetectors(tdx.config, tdx.live, referenceSpeedByLink)
+      : [],
+    publishedTraffic: thb.publishedTraffic || [],
+    incidents: tdx.incidents || [],
     weather,
     cameras,
-    trafficSource: 'TDX',
+    trafficSource: 'TDX/THB',
     issues
   };
 }
@@ -223,25 +301,22 @@ async function loadTdxData(env) {
   const incidentUrl = env.TDX_INCIDENT_ENDPOINT || DEFAULT_TDX_INCIDENT_URL;
   const [staticResponse, liveResponse, incidentResponse] = await Promise.allSettled([
     loadTdxStaticData(env, headers),
-    requestJson(liveUrl, { headers }, 15000),
-    requestJson(incidentUrl, { headers }, 15000)
+    requestJsonCached(liveUrl, { headers }, 15000, TDX_LIVE_TTL_MS),
+    requestJsonCached(incidentUrl, { headers }, 15000, TDX_LIVE_TTL_MS)
   ]);
-  if (staticResponse.status !== 'fulfilled') {
-    throw new Error(`VD static feed unavailable: ${resultError(staticResponse)}`);
-  }
+  const issues = staticResponse.status === 'fulfilled'
+    ? [...staticResponse.value.issues]
+    : [`static feeds unavailable: ${resultError(staticResponse)}`];
   if (liveResponse.status !== 'fulfilled') {
-    throw new Error(`VD live feed unavailable: ${resultError(liveResponse)}`);
+    issues.push(`VD live feed unavailable: ${resultError(liveResponse)}`);
   }
-  const issues = [...staticResponse.value.issues];
   if (incidentResponse.status !== 'fulfilled') {
     issues.push(`road events unavailable: ${resultError(incidentResponse)}`);
   }
   return {
-    detectors: mergeTdxDetectors(
-      staticResponse.value.config,
-      liveResponse.value,
-      staticResponse.value.referenceSpeedByLink
-    ),
+    config: staticResponse.status === 'fulfilled' ? staticResponse.value.config : null,
+    sections: staticResponse.status === 'fulfilled' ? staticResponse.value.sections : null,
+    live: liveResponse.status === 'fulfilled' ? liveResponse.value : null,
     incidents: incidentResponse.status === 'fulfilled' ? normalizeTdxIncidents(incidentResponse.value) : [],
     issues
   };
@@ -250,46 +325,38 @@ async function loadTdxData(env) {
 async function loadTdxStaticData(env, headers) {
   const urls = {
     config: env.TDX_VD_CONFIG_ENDPOINT || DEFAULT_TDX_CONFIG_URL,
-    sections: env.TDX_SECTION_ENDPOINT || DEFAULT_TDX_SECTION_URL,
-    liveTraffic: env.TDX_LIVE_TRAFFIC_ENDPOINT || DEFAULT_TDX_LIVE_TRAFFIC_URL,
-    congestion: env.TDX_CONGESTION_ENDPOINT || DEFAULT_TDX_CONGESTION_URL
+    sections: env.TDX_SECTION_ENDPOINT || DEFAULT_TDX_SECTION_URL
   };
   const cacheKey = Object.values(urls).join('|');
   if (tdxStaticCache && tdxStaticCache.key === cacheKey && tdxStaticCache.expiresAt > Date.now()) {
     return tdxStaticCache.value;
   }
 
-  const [configResult, sectionResult, liveTrafficResult, congestionResult] = await Promise.allSettled([
+  const [configResult, sectionResult] = await Promise.allSettled([
     requestJson(urls.config, { headers }, 20000),
-    requestJson(urls.sections, { headers }, 20000),
-    requestJson(urls.liveTraffic, { headers }, 20000),
-    requestJson(urls.congestion, { headers }, 15000)
+    requestJson(urls.sections, { headers }, 20000)
   ]);
-  if (configResult.status !== 'fulfilled') {
-    throw new Error(`VD configuration unavailable: ${resultError(configResult)}`);
-  }
 
   const issues = [];
-  const referenceResults = [
-    ['sections', sectionResult],
-    ['live traffic', liveTrafficResult],
-    ['congestion levels', congestionResult]
+  const staticResults = [
+    ['VD configuration', configResult],
+    ['sections', sectionResult]
   ];
-  const referenceInputsReady = referenceResults.every(([, result]) => result.status === 'fulfilled');
-  referenceResults.forEach(([label, result]) => {
+  staticResults.forEach(([label, result]) => {
     if (result.status !== 'fulfilled') {
       issues.push(`${label} unavailable: ${resultError(result)}`);
     }
   });
-  const referenceSpeedByLink = referenceInputsReady
-    ? buildReferenceSpeedByLink(
-      sectionResult.value,
-      liveTrafficResult.value,
-      congestionResult.value
-    )
-    : new Map();
-  const value = { config: configResult.value, referenceSpeedByLink, issues };
-  if (referenceInputsReady) {
+  if (staticResults.every(([, result]) => result.status !== 'fulfilled')) {
+    throw new Error(issues.join('; ') || 'no usable TDX static feed');
+  }
+
+  const value = {
+    config: configResult.status === 'fulfilled' ? configResult.value : null,
+    sections: sectionResult.status === 'fulfilled' ? sectionResult.value : null,
+    issues
+  };
+  if (staticResults.every(([, result]) => result.status === 'fulfilled')) {
     tdxStaticCache = {
       key: cacheKey,
       value,
@@ -297,6 +364,87 @@ async function loadTdxStaticData(env, headers) {
     };
   }
   return value;
+}
+
+async function loadThbPublishedData(routeSections, env) {
+  const [staticData, liveTraffic] = await Promise.all([
+    loadThbStaticData(env),
+    loadThbLiveTraffic(env)
+  ]);
+  return {
+    publishedTraffic: mergePublishedSections(
+      staticData.sections,
+      staticData.sectionShapes,
+      liveTraffic,
+      staticData.congestion,
+      routeSections,
+      'THB'
+    ),
+    liveTraffic,
+    congestion: staticData.congestion
+  };
+}
+
+async function loadThbStaticData(env) {
+  const urls = {
+    sections: env.THB_SECTION_ENDPOINT || DEFAULT_THB_SECTION_URL,
+    sectionShapes: env.THB_SECTION_SHAPE_ENDPOINT || DEFAULT_THB_SECTION_SHAPE_URL,
+    congestion: env.THB_CONGESTION_ENDPOINT || DEFAULT_THB_CONGESTION_URL
+  };
+  const cacheKey = Object.values(urls).join('|');
+  if (thbStaticCache && thbStaticCache.key === cacheKey && thbStaticCache.expiresAt > Date.now()) {
+    return thbStaticCache.value;
+  }
+  if (thbStaticPromise && thbStaticPromise.key === cacheKey) return thbStaticPromise.promise;
+
+  const promise = (async () => {
+    const [sectionXml, shapeXml, congestionXml] = await Promise.all([
+      requestText(urls.sections, {}, 30000),
+      requestText(urls.sectionShapes, {}, 30000),
+      requestText(urls.congestion, {}, 15000)
+    ]);
+    const value = {
+      sections: parseThbSectionsXml(sectionXml),
+      sectionShapes: parseThbSectionShapesXml(shapeXml),
+      congestion: parseThbCongestionXml(congestionXml)
+    };
+    thbStaticCache = {
+      key: cacheKey,
+      value,
+      expiresAt: Date.now() + THB_STATIC_TTL_MS
+    };
+    return value;
+  })();
+  thbStaticPromise = { key: cacheKey, promise };
+  try {
+    return await promise;
+  } finally {
+    if (thbStaticPromise?.promise === promise) thbStaticPromise = null;
+  }
+}
+
+async function loadThbLiveTraffic(env) {
+  const url = env.THB_LIVE_TRAFFIC_ENDPOINT || DEFAULT_THB_LIVE_TRAFFIC_URL;
+  if (thbLiveCache && thbLiveCache.key === url && thbLiveCache.expiresAt > Date.now()) {
+    return thbLiveCache.value;
+  }
+  if (thbLivePromise && thbLivePromise.key === url) return thbLivePromise.promise;
+
+  const promise = requestText(url, {}, 30000).then((xml) => {
+    const value = parseThbLiveTrafficXml(xml);
+    thbLiveCache = {
+      key: url,
+      value,
+      expiresAt: Date.now() + THB_LIVE_TTL_MS
+    };
+    return value;
+  });
+  thbLivePromise = { key: url, promise };
+  try {
+    return await promise;
+  } finally {
+    if (thbLivePromise?.promise === promise) thbLivePromise = null;
+  }
 }
 
 function resultError(result) {
@@ -413,6 +561,160 @@ export function buildReferenceSpeedByLink(sectionPayload, liveTrafficPayload, co
   return result;
 }
 
+export function mergePublishedSections(
+  sectionPayload,
+  shapePayload,
+  liveTrafficPayload,
+  congestionPayload,
+  routeSections = [],
+  source = 'TDX'
+) {
+  const sections = arrayFromPayload(sectionPayload, ['Sections', 'SectionList']);
+  const shapes = arrayFromPayload(shapePayload, ['SectionShapes', 'SectionShapeList']);
+  const liveTraffics = arrayFromPayload(liveTrafficPayload, ['LiveTraffics', 'LiveTrafficList']);
+  const groups = arrayFromPayload(congestionPayload, ['CongestionLevels', 'CongestionLevelList']);
+  const routeRoads = new Set((routeSections || []).map((section) => normalizeRoadKey(section.roadRef)).filter(Boolean));
+  const shapeBySection = new Map(shapes.map((shape) => [shape.SectionID, shape]));
+  const trafficBySection = new Map(liveTraffics.map((traffic) => [traffic.SectionID, traffic]));
+  const referenceByGroup = new Map(groups.map((group) => [
+    group.CongestionLevelID,
+    referenceSpeedFromCongestionGroup(group)
+  ]));
+
+  return sections.flatMap((section) => {
+    const id = section.SectionID || section.sectionId;
+    const roadRef = section.RoadName || section.RoadID || section.SectionName || '';
+    if (routeRoads.size && !routeRoads.has(normalizeRoadKey(roadRef))) return [];
+    const shape = shapeBySection.get(id);
+    const traffic = trafficBySection.get(id);
+    if (!shape || !traffic) return [];
+    const geometry = parseLineString(shape.Geometry || shape.geometry);
+    if (geometry.length < 2) return [];
+    const congestionLevel = numeric(traffic.CongestionLevel, traffic.congestionLevel);
+    return [{
+      id,
+      roadRef,
+      heading: directionDegrees(section.RoadDirection || section.Direction),
+      geometry,
+      speedKph: numeric(traffic.TravelSpeed, traffic.travelSpeed),
+      referenceSpeedKph: numeric(
+        section.SpeedLimit,
+        referenceByGroup.get(traffic.CongestionLevelID)
+      ),
+      congestionLevel,
+      observedAt: traffic.DataCollectTime || traffic.UpdateTime || liveTrafficPayload?.UpdateTime || null,
+      available: congestionLevel === null || congestionLevel >= 0,
+      source,
+      method: 'published-section'
+    }];
+  });
+}
+
+export function parseThbSectionsXml(xml) {
+  return {
+    UpdateTime: xmlValue(xml, 'UpdateTime'),
+    Sections: xmlBlocks(xml, 'Section').map((block) => ({
+      SectionID: xmlValue(block, 'SectionID'),
+      SectionName: xmlValue(block, 'SectionName'),
+      RoadID: xmlValue(block, 'RoadID'),
+      RoadName: xmlValue(block, 'RoadName'),
+      RoadClass: numeric(xmlValue(block, 'RoadClass')),
+      RoadDirection: xmlValue(block, 'RoadDirection')
+    })).filter((section) => section.SectionID && section.RoadName)
+  };
+}
+
+export function parseThbSectionShapesXml(xml) {
+  return {
+    UpdateTime: xmlValue(xml, 'UpdateTime'),
+    SectionShapes: xmlBlocks(xml, 'SectionShape').map((block) => ({
+      SectionID: xmlValue(block, 'SectionID'),
+      Geometry: xmlValue(block, 'Geometry')
+    })).filter((shape) => shape.SectionID && shape.Geometry)
+  };
+}
+
+export function parseThbLiveTrafficXml(xml) {
+  return {
+    UpdateTime: normalizeDateTime(xmlValue(xml, 'UpdateTime')),
+    LiveTraffics: xmlBlocks(xml, 'LiveTraffic').map((block) => ({
+      SectionID: xmlValue(block, 'SectionID'),
+      TravelTime: numeric(xmlValue(block, 'TravelTime')),
+      TravelSpeed: numeric(xmlValue(block, 'TravelSpeed')),
+      CongestionLevelID: xmlValue(block, 'CongestionLevelID'),
+      CongestionLevel: numeric(xmlValue(block, 'CongestionLevel')),
+      DataCollectTime: normalizeDateTime(xmlValue(block, 'DataCollectTime'))
+    })).filter((traffic) => traffic.SectionID)
+  };
+}
+
+export function parseThbCongestionXml(xml) {
+  const groups = [];
+  const groupPattern = /<CongestionLevel>\s*<CongestionLevelID>([^<]+)<\/CongestionLevelID>[\s\S]*?<MeasureIndex>([^<]+)<\/MeasureIndex>\s*<Levels>([\s\S]*?)<\/Levels>\s*<\/CongestionLevel>/g;
+  for (const match of String(xml || '').matchAll(groupPattern)) {
+    const levels = [];
+    const levelPattern = /<Level>\s*<Level>(-?\d+)<\/Level>([\s\S]*?)<\/Level>/g;
+    for (const levelMatch of match[3].matchAll(levelPattern)) {
+      levels.push({
+        Level: Number(levelMatch[1]),
+        LowValue: numeric(xmlValue(levelMatch[2], 'LowValue')),
+        TopValue: numeric(xmlValue(levelMatch[2], 'TopValue'))
+      });
+    }
+    groups.push({
+      CongestionLevelID: decodeXml(match[1]),
+      MeasureIndex: decodeXml(match[2]),
+      Levels: levels
+    });
+  }
+  return {
+    UpdateTime: xmlValue(xml, 'UpdateTime'),
+    CongestionLevels: groups
+  };
+}
+
+function xmlBlocks(xml, tagName) {
+  const pattern = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, 'g');
+  return [...String(xml || '').matchAll(pattern)].map((match) => match[1]);
+}
+
+function xmlValue(xml, tagName) {
+  const pattern = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`);
+  const match = String(xml || '').match(pattern);
+  return match ? decodeXml(match[1].trim()) : '';
+}
+
+function decodeXml(value) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'");
+}
+
+function normalizeDateTime(value) {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T')
+    .replace(/(\.\d{3})\d+([+-]\d{2}:\d{2}|Z)$/, '$1$2');
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function parseLineString(value) {
+  const match = String(value || '').trim().match(/^LINESTRING\s*\((.+)\)$/i);
+  if (!match) return [];
+  return match[1].split(',').map((pair) => {
+    const [lng, lat] = pair.trim().split(/\s+/).map(Number);
+    return [lat, lng];
+  }).filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+}
+
+function normalizeRoadKey(value) {
+  return String(value || '').replace(/臺/g, '台').replace(/線|公路|\s/g, '');
+}
+
 function referenceSpeedFromCongestionGroup(group) {
   if (String(group.MeasureIndex || '').toLowerCase() !== 'speed') return null;
   const clear = (group.Levels || []).find((level) => Number(level.Level) === 1);
@@ -524,7 +826,7 @@ async function fetchCwa(url, apiKey) {
   const parsed = new URL(url);
   parsed.searchParams.set('Authorization', apiKey);
   parsed.searchParams.set('format', 'JSON');
-  return requestJson(parsed.toString(), {}, 15000);
+  return requestJsonCached(parsed.toString(), {}, 15000, CWA_SNAPSHOT_TTL_MS);
 }
 
 function normalizeCwaStations(payload) {
@@ -671,7 +973,7 @@ function nearestPoint(point, values) {
 
 export async function loadCameras(env) {
   const url = env.CAMERA_SOURCE_URL || 'https://www.twipcam.com/api/v1/cam-list.json';
-  const payload = await requestJson(url, {}, 15000);
+  const payload = await requestJsonCached(url, {}, 15000, CAMERA_SNAPSHOT_TTL_MS);
   const list = Array.isArray(payload) ? payload : payload.data || payload.cams || [];
   return list.map((camera, index) => ({
     id: String(camera.id || camera.CCTVID || `cam-${index}`),
@@ -767,8 +1069,48 @@ async function requestJson(url, options = {}, timeoutMs = 12000) {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+    if (!response.ok) {
+      const rawBody = await response.text();
+      let detail = rawBody.slice(0, 300);
+      try {
+        const body = JSON.parse(rawBody);
+        detail = body.error || body.message || body.error_code || detail;
+      } catch {
+        // Keep the bounded text response when the upstream does not return JSON.
+      }
+      throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}${detail ? `: ${detail}` : ''}`);
+    }
     return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function requestJsonCached(url, options = {}, timeoutMs = 12000, ttlMs = 60000) {
+  const key = `${String(options.method || 'GET').toUpperCase()} ${url}`;
+  const cached = jsonResponseCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (jsonResponsePromises.has(key)) return jsonResponsePromises.get(key);
+
+  const promise = requestJson(url, options, timeoutMs).then((value) => {
+    jsonResponseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+    return value;
+  });
+  jsonResponsePromises.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    if (jsonResponsePromises.get(key) === promise) jsonResponsePromises.delete(key);
+  }
+}
+
+async function requestText(url, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+    return await response.text();
   } finally {
     clearTimeout(timeout);
   }

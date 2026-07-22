@@ -20,6 +20,8 @@ node --check worker/src/rules.js
 node --check worker/src/conditions.js
 node --check worker/src/providers.js
 node --check worker/src/index.js
+node --check scripts/taiwan-route-cases.mjs
+node --check scripts/audit-taiwan-routes.mjs
 
 node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); console.log('manifest ok')"
 node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console.log('package ok')"

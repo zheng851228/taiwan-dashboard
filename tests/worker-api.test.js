@@ -106,11 +106,13 @@ describe('Worker v2 fixture API', () => {
     expect(response.status).toBe(422);
     expect(body.status).toBe('blocked');
     expect(body.data.validation.rerouted).toBe(true);
+    expect(body.data.validation.rerouteCount).toBe(1);
     expect(body.data.geometry).toBeUndefined();
   });
 
   it('keeps live conditions partial when an optional upstream source is unavailable', async () => {
     const shape = encodePolyline6([[25.0478, 121.517], [25.02, 121.55], [24.99, 121.58]]);
+    const observedAt = new Date().toISOString();
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       const value = String(url);
       if (value.endsWith('/route')) {
@@ -152,12 +154,18 @@ describe('Worker v2 fixture API', () => {
           headers: { 'Content-Type': 'application/json' }
         });
       }
-      if (value.includes('/Road/Traffic/Section/Highway')) {
-        return new Response(JSON.stringify({ Sections: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
+        if (value.includes('/Road/Traffic/Section/Highway')) {
+          return new Response(JSON.stringify({ Sections: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        if (value.includes('/Road/Traffic/SectionShape/Highway')) {
+          return new Response(JSON.stringify({ SectionShapes: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
       if (value.includes('/Road/Traffic/Live/Highway')) {
         return new Response(JSON.stringify({ LiveTraffics: [] }), {
           status: 200,
@@ -170,13 +178,43 @@ describe('Worker v2 fixture API', () => {
           headers: { 'Content-Type': 'application/json' }
         });
       }
-      if (value.includes('/Traffic/RoadEvent/LiveEvent/Highway')) {
-        return new Response(JSON.stringify({ LiveEvents: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      if (value === 'https://camera.test/list') {
+        if (value.includes('/Traffic/RoadEvent/LiveEvent/Highway')) {
+          return new Response(JSON.stringify({ LiveEvents: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        if (value.includes('/section/sectioninfo/SectionList.xml')) {
+          return new Response(`
+            <SectionList><Sections><Section><SectionID>section-1</SectionID>
+            <SectionName>route</SectionName><RoadID>300090</RoadID><RoadName>\u53f09\u7dda</RoadName>
+            <RoadClass>3</RoadClass><RoadDirection>SE</RoadDirection></Section></Sections></SectionList>
+          `, { status: 200, headers: { 'Content-Type': 'application/xml' } });
+        }
+        if (value.includes('/section/sectionshapeinfo/SectionShapeList.xml')) {
+          return new Response(`
+            <SectionShapeList><SectionShapes><SectionShape><SectionID>section-1</SectionID>
+            <Geometry>LINESTRING(121.517 25.0478,121.55 25.02,121.58 24.99)</Geometry>
+            </SectionShape></SectionShapes></SectionShapeList>
+          `, { status: 200, headers: { 'Content-Type': 'application/xml' } });
+        }
+        if (value.includes('/section/livetrafficdata/LiveTrafficList.xml')) {
+          return new Response(`
+            <LiveTrafficList><UpdateTime>${observedAt}</UpdateTime><LiveTraffics><LiveTraffic>
+            <SectionID>section-1</SectionID><TravelTime>80</TravelTime><TravelSpeed>45</TravelSpeed>
+            <CongestionLevelID>D</CongestionLevelID><CongestionLevel>2</CongestionLevel>
+            <DataCollectTime>${observedAt}</DataCollectTime></LiveTraffic></LiveTraffics></LiveTrafficList>
+          `, { status: 200, headers: { 'Content-Type': 'application/xml' } });
+        }
+        if (value.includes('/section/congetioninfo/CongestionLevelList.xml')) {
+          return new Response(`
+            <CongestionLevelList><CongestionLevels><CongestionLevel><CongestionLevelID>D</CongestionLevelID>
+            <CongestionLevelName>group</CongestionLevelName><MeasureIndex>Speed</MeasureIndex><Levels>
+            <Level><Level>1</Level><LevelName>clear</LevelName><LowValue>60</LowValue></Level>
+            </Levels></CongestionLevel></CongestionLevels></CongestionLevelList>
+          `, { status: 200, headers: { 'Content-Type': 'application/xml' } });
+        }
+        if (value === 'https://camera.test/list') {
         return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       return new Response('{}', { status: 404 });
@@ -204,10 +242,14 @@ describe('Worker v2 fixture API', () => {
     ), liveEnv);
     const conditions = await conditionsResponse.json();
     expect(conditionsResponse.status).toBe(200);
-    expect(conditions.status).toBe('partial');
-    expect(conditions.data.issues).toContain('CWA: API key not configured');
-    expect(conditions.data.sections[0].traffic.level).toBe('unknown');
-  });
+      expect(conditions.status).toBe('partial');
+      expect(conditions.data.issues).toContain('CWA: API key not configured');
+      expect(conditions.data.sections[0].traffic).toMatchObject({
+        level: 'slow',
+        method: 'published-section',
+        source: 'THB'
+      });
+    });
 });
 
 describe('last-known condition fallback', () => {

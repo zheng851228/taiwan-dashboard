@@ -28,6 +28,38 @@ describe('Taiwan motorcycle route rules', () => {
     expect(result.violations[0].code).toBe('white-plate-expressway');
   });
 
+  it.each([
+    '堤頂大道',
+    '環東大道',
+    '建國高架道路',
+    '市民大道高架道路',
+    '基隆高架道路',
+    '新生北路高架橋'
+  ])('blocks the named Taipei elevated road %s for white plates', (roadName) => {
+    const result = validateRouteEdges([edge(roadName, 'trunk')], {
+      type: 'motorcycle',
+      plate: 'white'
+    });
+    expect(result.status).toBe('blocked');
+    expect(result.violations[0].code).toBe('white-plate-expressway');
+  });
+
+  it('does not confuse Civic Boulevard surface streets with the elevated road', () => {
+    const result = validateRouteEdges([edge('市民大道', 'primary')], {
+      type: 'motorcycle',
+      plate: 'white'
+    });
+    expect(result.status).toBe('safe');
+  });
+
+  it.each(['yellow', 'red'])('allows Taipei elevated roads and their ramps for %s plates', (plate) => {
+    const result = validateRouteEdges([
+      edge('市民大道高架道路', 'trunk', { beginShapeIndex: 0, endShapeIndex: 1 }),
+      edge('重慶南路出口匝道', 'trunk', { use: 'ramp', beginShapeIndex: 1, endShapeIndex: 2 })
+    ], { type: 'motorcycle', plate });
+    expect(result.status).toBe('safe');
+  });
+
   it('allows an ordinary open expressway for yellow and red plates', () => {
     expect(validateRouteEdges([edge('台61線')], { type: 'motorcycle', plate: 'yellow' }).status).toBe('safe');
     expect(validateRouteEdges([edge('台61線')], { type: 'motorcycle', plate: 'red' }).status).toBe('safe');
@@ -69,15 +101,25 @@ describe('Taiwan motorcycle route rules', () => {
     expect(result.violations[0].confidence).toBe('uncertain');
   });
 
-  it('blocks a direction-specific access restriction only in the traversed direction', () => {
-    const blocked = validateRouteEdges([
-      edge('台9線', 'primary', { forward: true, traversability: 'backward' })
-    ], { type: 'motorcycle', plate: 'white' });
-    const allowed = validateRouteEdges([
+  it('does not reinterpret graph digitization direction as a motorcycle restriction', () => {
+    const result = validateRouteEdges([
       edge('台9線', 'primary', { forward: false, traversability: 'backward' })
     ], { type: 'motorcycle', plate: 'white' });
-    expect(blocked.violations[0].code).toBe('directional-motorcycle-restriction');
-    expect(allowed.status).toBe('safe');
+    expect(result.status).toBe('safe');
+  });
+
+  it('does not treat endpoint traversability metadata as an access restriction', () => {
+    const result = validateRouteEdges([
+      edge('莒光路', 'residential', { traversability: 'none' })
+    ], { type: 'motorcycle', plate: 'white' });
+    expect(result.status).toBe('safe');
+  });
+
+  it('blocks an explicit motorcycle access restriction', () => {
+    const result = validateRouteEdges([
+      edge('台9線', 'primary', { motorcycleAccess: 'no' })
+    ], { type: 'motorcycle', plate: 'white' });
+    expect(result.violations[0].code).toBe('directional-motorcycle-restriction');
   });
 
   it('returns deduplicated avoid points from violations', () => {
@@ -86,7 +128,25 @@ describe('Taiwan motorcycle route rules', () => {
       { beginShapeIndex: 0, endShapeIndex: 2 }
     ];
     expect(buildAvoidLocations(violations, [[25, 121], [24.9, 121.1], [24.8, 121.2]])).toEqual([
-      { lat: 24.9, lon: 121.1 }
+      {
+        lat: 24.9,
+        lon: 121.1,
+        heading: 138,
+        heading_tolerance: 20,
+        radius: 10
+      }
     ]);
+  });
+
+  it('spreads up to 50 avoid points across a long controlled-road segment', () => {
+    const coordinates = Array.from({ length: 101 }, (_, index) => [25 - index / 1000, 121 + index / 1000]);
+    const violations = coordinates.map((_, index) => ({
+      beginShapeIndex: index,
+      endShapeIndex: index
+    }));
+    const locations = buildAvoidLocations(violations, coordinates);
+    expect(locations).toHaveLength(50);
+    expect(locations[0]).toMatchObject({ lat: 25, lon: 121, heading_tolerance: 20, radius: 10 });
+    expect(locations.at(-1)).toMatchObject({ lat: 24.9, lon: 121.1, heading_tolerance: 20, radius: 10 });
   });
 });

@@ -4,6 +4,7 @@ import {
   createRouteSections,
   fuseConditions,
   headingDifference,
+  matchPublishedTraffic,
   matchTrafficDetector
 } from '../worker/src/conditions.js';
 
@@ -39,9 +40,97 @@ describe('traffic fusion', () => {
       lng: 121.505,
       heading: 140,
       observedAt: '2026-07-22T03:51:00.000Z',
-      roadRef: '台9'
+      roadRef: '台9',
+      speedKph: 45,
+      referenceSpeedKph: 80
     };
     expect(matchTrafficDetector(section, [detector], NOW)?.detector).toBe(detector);
+  });
+
+  it('rejects a detector without a usable speed and reference speed', () => {
+    const section = { sample: [25, 121.5], heading: 90, roadRef: '台9' };
+    const detector = {
+      lat: 25,
+      lng: 121.505,
+      heading: 90,
+      observedAt: NOW.toISOString(),
+      roadRef: '台9',
+      speedKph: null,
+      referenceSpeedKph: 80
+    };
+    expect(matchTrafficDetector(section, [detector], NOW)).toBeNull();
+  });
+
+  it('matches a fresh official published section on the same road and direction', () => {
+    const section = { sample: [25, 121.5], heading: 90, roadRef: '台9' };
+    const published = {
+      id: 'section-1',
+      roadRef: '台9線',
+      heading: 90,
+      geometry: [[25, 121.495], [25, 121.505]],
+      speedKph: 45,
+      referenceSpeedKph: 80,
+      observedAt: '2026-07-22T03:55:00.000Z'
+    };
+    expect(matchPublishedTraffic(section, [published], NOW)?.published).toBe(published);
+  });
+
+  it('does not match an opposite, stale, or distant published section', () => {
+    const section = { sample: [25, 121.5], heading: 90, roadRef: '台9' };
+    const base = {
+      roadRef: '台9線',
+      speedKph: 45,
+      referenceSpeedKph: 80,
+      observedAt: NOW.toISOString()
+    };
+    const published = [
+      { ...base, id: 'opposite', heading: 270, geometry: [[25, 121.5], [25, 121.51]] },
+      { ...base, id: 'stale', heading: 90, observedAt: '2026-07-22T03:49:59.000Z', geometry: [[25, 121.5], [25, 121.51]] },
+      { ...base, id: 'distant', heading: 90, geometry: [[25.02, 121.5], [25.02, 121.51]] }
+    ];
+    expect(matchPublishedTraffic(section, published, NOW)).toBeNull();
+  });
+
+  it('falls back to official published traffic when no valid VD is available', () => {
+    const route = {
+      geometry: [[25, 121.5], [25, 121.51]],
+      distanceKm: 1,
+      edges: [{ names: ['台9線'], beginShapeIndex: 0, endShapeIndex: 1 }]
+    };
+    const result = fuseConditions(route, {
+      detectors: [{
+        lat: 25,
+        lng: 121.505,
+        heading: 90,
+        roadRef: '台9',
+        speedKph: null,
+        referenceSpeedKph: 80,
+        observedAt: NOW.toISOString()
+      }],
+      publishedTraffic: [{
+        id: 'section-1',
+        roadRef: '台9線',
+        heading: 90,
+        geometry: [[25, 121.5], [25, 121.51]],
+        speedKph: 45,
+        referenceSpeedKph: 80,
+        observedAt: NOW.toISOString(),
+        source: 'TDX'
+      }],
+      weather: [],
+      incidents: [],
+      cameras: [],
+      trafficSource: 'TDX'
+    }, NOW);
+
+    expect(result.sections[0].traffic).toMatchObject({
+      level: 'slow',
+      speedKph: 45,
+      referenceSpeedKph: 80,
+      method: 'published-section',
+      sectionId: 'section-1'
+    });
+    expect(result.overall.coveragePercent).toBe(100);
   });
 
   it('keeps unknown traffic gray and reports actual coverage', () => {

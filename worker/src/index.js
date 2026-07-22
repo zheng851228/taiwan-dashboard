@@ -135,12 +135,12 @@ async function createRouteRecord(body, env) {
     : await getValhallaRoute(locations, costing, env);
   let edges = fixtureMode ? route.edges : await traceRouteAttributes(route, costing, env);
   let validation = validateRouteEdges(edges, vehicle);
-  let rerouted = false;
+  let rerouteCount = 0;
 
   if (validation.status !== 'safe' && !fixtureMode) {
     const avoidLocations = buildAvoidLocations(validation.violations, route.geometry);
     if (avoidLocations.length) {
-      rerouted = true;
+      rerouteCount = 1;
       route = await getValhallaRoute(locations, costing, env, avoidLocations);
       edges = await traceRouteAttributes(route, costing, env);
       validation = validateRouteEdges(edges, vehicle);
@@ -149,7 +149,7 @@ async function createRouteRecord(body, env) {
 
   if (validation.status !== 'safe') {
     throw new HttpError(422, '找不到可確認合法的機車路線，請調整停靠點或改用其他道路。', {
-      validation: { ...validation, rerouted }
+      validation: { ...validation, rerouted: rerouteCount > 0, rerouteCount }
     });
   }
 
@@ -164,7 +164,7 @@ async function createRouteRecord(body, env) {
     distanceKm: route.distanceKm,
     durationMinutes: route.durationMinutes,
     edges,
-    validation: { ...validation, rerouted },
+    validation: { ...validation, rerouted: rerouteCount > 0, rerouteCount },
     source: route.source,
     dataMode: fixtureMode ? 'fixture' : 'live',
     createdAt: new Date().toISOString()
@@ -197,7 +197,7 @@ async function handleConditions(routeId, env, forceRefresh) {
   }
   conditionData.routeId = routeId;
   conditionData.dataMode = fixtureMode ? 'fixture' : 'live';
-  conditionData.sources = fixtureMode ? ['DEMO'] : ['TDX', 'CWA', 'CCTV'];
+  conditionData.sources = fixtureMode ? ['DEMO'] : ['TDX', 'THB', 'CWA', 'CCTV'];
   conditionData.issues = providerData.issues || [];
   const isPartial = conditionData.sections.some((section) => (
     section.traffic.level === 'unknown' || section.weather.condition === '未知'
@@ -216,6 +216,7 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
   const failedSources = new Set((issues || []).map((issue) => String(issue).split(':')[0]));
   const cachedByOrder = new Map(cachedData.sections.map((section) => [Number(section.order), section]));
   const cacheUpdatedAt = cachedEnvelope.updatedAt;
+  const trafficSourceFailed = failedSources.has('TDX') || failedSources.has('THB');
 
   const sections = current.sections.map((section) => {
     const previous = cachedByOrder.get(Number(section.order));
@@ -223,7 +224,7 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
     const next = { ...section };
 
     if (
-      failedSources.has('TDX')
+      trafficSourceFailed
       && section.traffic.level === 'unknown'
       && previous.traffic?.level !== 'unknown'
       && isFresh(previous.traffic?.observedAt, 10, now)
