@@ -25,7 +25,28 @@
           "id": "082d40b96d8b4be2b23ac6fa0f55b952"
         }
       ]
+    },
+    "production": {
+      "workers_dev": true,
+      "vars": {
+        "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
+        "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",
+        "USE_FIXTURES": "false"
+      },
+      "secrets": {
+        "required": [
+          "CWA_API_KEY",
+          "TDX_CLIENT_ID",
+          "TDX_CLIENT_SECRET"
+        ]
+      },
+      "kv_namespaces": [
+        {
+          "binding": "ROUTE_CACHE",
+          "id": "168d20d195614bd8be9ecc79be7419de"
+        }
+      ]
     }
   }
-  // Production must bind a KV namespace as ROUTE_CACHE. See README.md.
+  // Staging and production use isolated ROUTE_CACHE namespaces. See README.md.
 }

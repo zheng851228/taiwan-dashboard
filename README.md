@@ -60,13 +60,14 @@ Fixture 模式會在畫面明確顯示 `DEMO 示範`，只用於本機與 CI，�
 
 ## Worker 設定
 
-先建立六小時路線快取用 KV：
+Staging 與 production 必須使用不同的六小時路線快取 KV。重新建立環境時，以環境名稱建立 namespace：
 
 ```bash
-npx wrangler kv namespace create ROUTE_CACHE --config worker/wrangler.jsonc
+npx wrangler kv namespace create taiwan-dashboard-route-cache-staging
+npx wrangler kv namespace create taiwan-dashboard-route-cache-production
 ```
 
-把回傳的 namespace id 加到 `worker/wrangler.jsonc`：
+把各自回傳的 namespace id 加到 `worker/wrangler.jsonc` 對應環境：
 
 ```jsonc
 "kv_namespaces": [
@@ -74,12 +75,12 @@ npx wrangler kv namespace create ROUTE_CACHE --config worker/wrangler.jsonc
 ]
 ```
 
-設定 secrets：
+新憑證只寫入 Git 已忽略的 `worker/.dev.vars.production`，不要重用 staging 值、貼到終端參數或提交 Git：
 
-```bash
-npx wrangler secret put CWA_API_KEY --config worker/wrangler.jsonc
-npx wrangler secret put TDX_CLIENT_ID --config worker/wrangler.jsonc
-npx wrangler secret put TDX_CLIENT_SECRET --config worker/wrangler.jsonc
+```dotenv
+CWA_API_KEY="ROTATED_VALUE"
+TDX_CLIENT_ID="ROTATED_VALUE"
+TDX_CLIENT_SECRET="ROTATED_VALUE"
 ```
 
 沒有 TDX credentials 時，正式模式會把交通標示為未知，不會當成順暢；在配置正式 credentials 並完成上游驗收前，不應對外宣稱即時壅塞功能已正式上線。可用以下變數覆寫上游端點：
@@ -98,10 +99,11 @@ npx wrangler secret put TDX_CLIENT_SECRET --config worker/wrangler.jsonc
 - `THB_LIVE_TRAFFIC_ENDPOINT`
 - `THB_CONGESTION_ENDPOINT`
 
-部署：
+先 dry-run，再明確指定 production environment 部署；禁止省略 `--env production`，避免誤碰 root Worker：
 
 ```bash
-npm run worker:deploy
+npx wrangler deploy --config worker/wrangler.jsonc --env production --strict --dry-run
+npm run worker:deploy -- --env production --strict --secrets-file worker/.dev.vars.production
 ```
 
 ## API
