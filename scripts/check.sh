@@ -27,6 +27,8 @@ node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); consol
 node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console.log('package ok')"
 
 grep -q 'css/style.css' index.html
+grep -q 'css/tailwind.generated.css' index.html
+! grep -q 'cdn.tailwindcss.com' index.html
 grep -q 'js/core.js' index.html
 grep -q 'js/services.js' index.html
 grep -q 'js/data.js' index.html
@@ -37,6 +39,9 @@ grep -q 'js/ride-tools.js' index.html
 grep -q 'manifest.json' index.html
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
+grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
+grep -q 'taiwan-dashboard-api-production.lucky851228.workers.dev' sw.js
+test -s css/tailwind.generated.css
 
 npm test
 

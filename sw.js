@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `twdash-runtime-${CACHE_VERSION}`;
 
@@ -7,6 +7,7 @@ const SHELL_URLS = [
   "./index.html",
   "./manifest.json",
   "./favicon.svg",
+  "./css/tailwind.generated.css",
   "./css/style.css",
   "./js/core.js",
   "./js/services.js",
@@ -26,6 +27,7 @@ const CACHE_FIRST_HOSTS = [
 ];
 
 const API_PATTERNS = [
+  "taiwan-dashboard-api-production.lucky851228.workers.dev",
   "url-expander.lucky851228.workers.dev",
   "127.0.0.1"
 ];

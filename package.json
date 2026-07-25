@@ -9,13 +9,18 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:routes:live": "node scripts/audit-taiwan-routes.mjs",
+    "build": "npm run build:css",
+    "build:css": "tailwindcss -i ./css/tailwind.input.css -o ./css/tailwind.generated.css --minify",
+    "start": "npm run build && python3 -m http.server 4173",
     "dev": "python3 -m http.server 4173",
     "worker:dev": "wrangler dev --config worker/wrangler.jsonc",
     "worker:dev:fixture": "wrangler dev --config worker/wrangler.jsonc --var USE_FIXTURES:true",
     "worker:deploy": "wrangler deploy --config worker/wrangler.jsonc"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
     "@playwright/test": "^1.53.0",
+    "tailwindcss": "4.3.3",
     "vitest": "^3.2.4",
     "wrangler": "4.113.0"
   },

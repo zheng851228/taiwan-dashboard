@@ -35,22 +35,28 @@ Cloudflare Worker /v2
 
 前端不保存 CWA 或 TDX 金鑰，也不直接呼叫第三方資料服務。短網址展開只允許 Google Maps 與 Apple Maps 網域。
 
-## 本機執行
+## 開始使用
 
 需求：Node.js 20+、npm、Python 3。
 
 ```bash
 npm install
-npm run worker:dev:fixture
-```
-
-另開一個終端：
-
-```bash
-npm run dev
+npm start
 ```
 
 開啟：
+
+```text
+http://127.0.0.1:4173/
+```
+
+此入口預設連接已驗收的 production Worker，使用即時道路、交通與氣象資料。若只要開發或離線驗證，先另開一個終端啟動 fixture Worker：
+
+```bash
+npm run worker:dev:fixture
+```
+
+再以測試覆寫參數開啟：
 
 ```text
 http://127.0.0.1:4173/?worker=http://127.0.0.1:8787
@@ -75,13 +81,15 @@ npx wrangler kv namespace create taiwan-dashboard-route-cache-production
 ]
 ```
 
-新憑證只寫入 Git 已忽略的 `worker/.dev.vars.production`，不要重用 staging 值、貼到終端參數或提交 Git：
+正式環境憑證只寫入 Git 已忽略的 `worker/.dev.vars.production`；平台允許時不要重用 staging 值，也不要把值貼到終端參數或提交 Git：
 
 ```dotenv
 CWA_API_KEY="ROTATED_VALUE"
 TDX_CLIENT_ID="ROTATED_VALUE"
 TDX_CLIENT_SECRET="ROTATED_VALUE"
 ```
+
+目前 production 的 CWA key 已輪替；TDX 平台不允許更換既有 Client ID／Secret，因此經明確核准與 staging 共用。撤銷 TDX 憑證會同時影響兩個環境，後續若平台支援重發或能建立獨立應用，應優先拆分。
 
 沒有 TDX credentials 時，正式模式會把交通標示為未知，不會當成順暢；在配置正式 credentials 並完成上游驗收前，不應對外宣稱即時壅塞功能已正式上線。可用以下變數覆寫上游端點：
 
