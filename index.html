@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=11" />
+  <link rel="stylesheet" href="css/style.css?v=12" />
 </head>
 <body class="text-slate-100">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -137,10 +137,10 @@
     </div>
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-300 drop-shadow-md"></div>
     <section id="ride-status-card" class="ride-status-shell glass mt-3 p-3 rounded-[28px]">
-      <div class="flex items-center justify-between gap-3">
+      <div class="ride-status-head flex items-center justify-between gap-3">
         <div>
-          <div class="text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Ride Status</div>
-          <div class="text-sm font-black text-slate-100">旅行狀態列</div>
+          <div class="ride-status-kicker text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Ride Status</div>
+          <div class="ride-status-title text-sm font-black text-slate-100">旅行狀態列</div>
         </div>
         <button id="js-open-favorites" class="route-mini-btn text-[11px] text-cyan-200 hover:text-cyan-100 flex items-center gap-1">
           <i class="fa-solid fa-bookmark"></i> 收藏

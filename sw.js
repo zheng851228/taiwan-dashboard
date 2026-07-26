@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v11";
+const CACHE_VERSION = "v12";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `twdash-runtime-${CACHE_VERSION}`;
 
@@ -8,7 +8,7 @@ const SHELL_URLS = [
   "./manifest.json",
   "./favicon.svg",
   "./css/tailwind.generated.css",
-  "./css/style.css?v=11",
+  "./css/style.css?v=12",
   "./js/core.js",
   "./js/services.js",
   "./js/data.js",
