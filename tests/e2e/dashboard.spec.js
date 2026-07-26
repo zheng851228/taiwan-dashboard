@@ -20,6 +20,7 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expect(page.locator('.condition-section').first()).toBeVisible();
   await expect(page.locator('#condition-validation')).toContainText('安全路線');
   await expect(page.locator('#condition-coverage')).not.toHaveText('--');
+  await expect(page.locator('#condition-loading')).toBeHidden();
   await expect(page.locator('#route-camera-strip')).not.toBeVisible();
   expect(browserErrors).toEqual([]);
 });
@@ -29,6 +30,24 @@ test('keeps traffic unknown semantics and safety guidance visible', async ({ pag
   await expect(page.getByText('資料不足', { exact: true })).toBeVisible();
   await page.locator('#nav-tools').click();
   await expect(page.getByText(/灰色路段代表資料不足/)).toBeVisible();
+});
+
+test('keeps the mobile route planner focused on the active task', async ({ page }) => {
+  const viewport = page.viewportSize();
+  test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
+
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+
+  await expect(page.locator('#route-expanded')).toBeVisible();
+  await expect(page.locator('#ride-status-card')).toBeHidden();
+  await expect(page.locator('.map-legend-item').filter({ hasText: '資料不足' })).toBeVisible();
+  await expect(page.locator('.route-title-kicker')).toBeHidden();
+
+  const plannerBox = await page.locator('#route-expanded').boundingBox();
+  const navBox = await page.locator('.bottom-navigation').boundingBox();
+  expect(plannerBox?.height).toBeLessThanOrEqual(390);
+  expect(navBox?.height).toBeLessThanOrEqual(70);
 });
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
