@@ -75,6 +75,36 @@
     return 'other';
   }
 
+  function buildCamKeywords(cam) {
+    var parts = [
+      cam.name,
+      cam.county,
+      cam.id,
+      getRoadCategoryLabel(cam.cat)
+    ];
+    if (cam.cat === 'highway') parts.push('國道', '中山高', '高速公路');
+    if (cam.cat === 'expressway') parts.push('快速道路', '快道');
+    if (cam.cat === 'provincial') parts.push('省道');
+    if (cam.cat === 'scenic') parts.push('景點', '觀景');
+    if (cam.county) parts.push(cam.county.replace(/市|縣/g, ''));
+    var routeAliases = [
+      { match: /坪林|頭城|礁溪|石碇|北宜|九彎十八拐|台9/i, keywords: ['北宜', '北宜公路', '台9線'] },
+      { match: /蘇澳|東澳|南澳|和平|崇德|新城|蘇花/i, keywords: ['蘇花', '蘇花公路', '蘇花改', '台9線'] },
+      { match: /太麻里|多良|大武|達仁|楓港|南迴/i, keywords: ['南迴', '南迴公路', '台9線'] },
+      { match: /三芝|石門|金山|新豐|白沙屯|芳苑|布袋|西濱|台61/i, keywords: ['西濱', '台61線', '濱海'] },
+      { match: /埔里|霧社|清境|武嶺|合歡|小風口|台14甲/i, keywords: ['台14甲', '武嶺', '合歡山', '清境'] },
+      { match: /大溪|巴陵|明池|棲蘭|羅浮|台7/i, keywords: ['北橫', '台7線', '山線'] },
+      { match: /關西|復興|羅馬|台7乙/i, keywords: ['羅馬公路', '台7乙'] },
+      { match: /龍崎|關廟|182/i, keywords: ['182縣道', '台南山線'] },
+      { match: /彰化|八卦山|139/i, keywords: ['139縣道', '八卦山'] },
+      { match: /赤崁頂|136/i, keywords: ['136縣道', '台中山線'] }
+    ];
+    routeAliases.forEach(function(rule) {
+      if (rule.match.test(cam.name)) parts = parts.concat(rule.keywords);
+    });
+    return normalizeSearchText(parts.join(' '));
+  }
+
   var _cams = [];
 
   window.Data = {
@@ -85,11 +115,9 @@
     loadDynamic: function() {
       Diag.info('開始載入資料...');
       Data.camsState = 'loading';
-      var PROXY = 'https://url-expander.lucky851228.workers.dev/cam-list';
-
-      fetchJson(PROXY).then(function(apiData) {
+      AppServices.loadCams().then(function(payload) {
         Diag.add('cam-list HTTP 200', 'ok');
-        return apiData;
+        return payload.data;
       }).catch(function(e){
         Diag.err('cam-list 失敗: ' + e.message);
         Data.camsState = 'error';
@@ -99,24 +127,30 @@
         if (Array.isArray(apiData)) {
           _cams = apiData
             .filter(function(c) {
-              return c.lat > 21 && c.lat < 26 && c.lon > 118 && c.lon < 123;
+              var longitude = c.lon !== undefined ? c.lon : c.lng;
+              return c.lat > 21 && c.lat < 27 && longitude > 118 && longitude < 123;
             })
             .map(function(c) {
-              var cat = classifyCam(c.id);
-              var county = guessCounty(c.name, c.lat, c.lon);
-              return {
-                id:     c.id,
-                name:   c.name,
+              var longitude = c.lon !== undefined ? c.lon : c.lng;
+              var cat = classifyCam(String(c.id || ''));
+              var county = guessCounty(String(c.name || ''), c.lat, longitude);
+              var mapped = {
+                id:     String(c.id || ''),
+                name:   String(c.name || '未命名攝影機'),
                 county: county,
                 lat:    c.lat,
-                lng:    c.lon,
-                url:    c.cam_url,
+                lng:    longitude,
+                url:    c.cam_url || c.imageUrl || c.url || '',
                 type:   'cctv',
                 cat:    cat,
-                status: 'unknown'
+                status: c.status || 'unknown',
+                source: c.source || 'CCTV'
               };
+              mapped.searchText = buildCamKeywords(mapped);
+              return mapped;
             });
           Diag.ok('CCTV: ' + _cams.length + ' 支');
+          AppState.updatedAt.cams = AppState.updatedAt.cams || new Date().toISOString();
           Data.camsState = _cams.length > 0 ? 'ready' : (Data.camsState === 'error' ? 'error' : 'empty');
         }
         var statEl = Dom.byId('js-stat-cams');
@@ -131,41 +165,21 @@
     },
     fetchWeather: function() {
       Data.weatherState = 'loading';
-      var PROXY = 'https://url-expander.lucky851228.workers.dev/weather';
-      fetchJson(PROXY)
-        .then(function(result) {
+      AppServices.loadWeather()
+        .then(function(payload) {
+          var result = payload.data || {};
           // Worker 已整理好：{ 台北市: { temp, weather, name, town }, ... }
           Data.weather = {};
           Object.keys(result).forEach(function(county) {
             Data.weather[county] = result[county];
           });
+          AppState.updatedAt.weather = payload.updatedAt || new Date().toISOString();
           Data.weatherState = Object.keys(Data.weather).length > 0 ? 'ready' : 'empty';
           Bus.emit('weather:updated');
         })
         .catch(function() {
-          // fallback 直連 CWA
-          var url = 'https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001' +
-                    '?Authorization=' + Config.CWA_KEY + '&format=JSON';
-          fetchJson(url).then(function(json){
-            var st = json && json.records && json.records.Station;
-            if (!Array.isArray(st)) {
-              Data.weatherState = 'error';
-              Bus.emit('weather:updated');
-              return;
-            }
-            Data.weather = {};
-            st.forEach(function(s) {
-              var c = s.GeoInfo && s.GeoInfo.CountyName;
-              if (!c) return;
-              var obs = s.WeatherElement;
-              Data.weather[c] = { temp: obs && obs.AirTemperature, weather: obs && obs.Weather };
-            });
-            Data.weatherState = Object.keys(Data.weather).length > 0 ? 'ready' : 'empty';
-            Bus.emit('weather:updated');
-          }).catch(function(){
-            Data.weatherState = 'error';
-            Bus.emit('weather:updated');
-          });
+          Data.weatherState = 'error';
+          Bus.emit('weather:updated');
         });
     }
   };

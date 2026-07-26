@@ -1,0 +1,410 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildReferenceSpeedByLink,
+  mergeTdxDetectors,
+  mergePublishedSections,
+  normalizeCwaForecasts,
+  normalizeTdxIncidents,
+  parseThbCongestionXml,
+  parseThbLiveTrafficXml,
+  parseThbSectionsXml,
+  parseThbSectionShapesXml,
+  requestJsonCached,
+  splitTraceGeometry,
+  traceRouteAttributes
+} from '../worker/src/providers.js';
+
+const NOW = new Date('2026-07-22T04:00:00.000Z');
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('shared provider snapshots', () => {
+  it('deduplicates concurrent requests and reuses a fresh response', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ value: 42 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const url = 'https://snapshot.test/shared-success';
+
+    const [first, second] = await Promise.all([
+      requestJsonCached(url, {}, 1000, 60000),
+      requestJsonCached(url, {}, 1000, 60000)
+    ]);
+    const third = await requestJsonCached(url, {}, 1000, 60000);
+
+    expect(first).toEqual({ value: 42 });
+    expect(second).toEqual(first);
+    expect(third).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache a failed upstream response', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ recovered: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const url = 'https://snapshot.test/retry-after-failure';
+
+    await expect(requestJsonCached(url, {}, 1000, 60000)).rejects.toThrow('HTTP 503');
+    await expect(requestJsonCached(url, {}, 1000, 60000)).resolves.toEqual({ recovered: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Valhalla route attribution', () => {
+  it('splits long route geometry below the trace service distance limit', () => {
+    const chunks = splitTraceGeometry([
+      [25, 121],
+      [24, 121],
+      [23, 121],
+      [22, 121]
+    ], 150);
+
+    expect(chunks.map((chunk) => chunk.startShapeIndex)).toEqual([0, 1, 2]);
+    expect(chunks.map((chunk) => chunk.geometry.length)).toEqual([2, 2, 2]);
+    expect(chunks[1].geometry[0]).toEqual(chunks[0].geometry.at(-1));
+  });
+
+  it('merges chunk-relative shape indexes into the full route', async () => {
+    let requestIndex = 0;
+    const fetchMock = vi.fn(async () => {
+      requestIndex += 1;
+      return new Response(JSON.stringify({
+        edges: [{
+          names: [`road-${requestIndex}`],
+          way_id: requestIndex,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 100,
+          begin_shape_index: 0,
+          end_shape_index: 1
+        }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const edges = await traceRouteAttributes({
+      geometry: [[25, 121], [24, 121], [23, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(edges.map((edge) => [edge.beginShapeIndex, edge.endShapeIndex])).toEqual([[0, 1], [1, 2]]);
+    const payloads = fetchMock.mock.calls.map(([, options]) => JSON.parse(options.body));
+    expect(payloads.every((payload) => payload.shape_match === 'walk_or_snap')).toBe(true);
+  });
+});
+
+describe('CWA township forecast normalization', () => {
+  it('selects the forecast period that overlaps the next three hours', () => {
+    const payload = {
+      records: {
+        Locations: [{
+          LocationsName: '\u81fa\u5317\u5e02',
+          Update: '2026-07-22T11:30:00+08:00',
+          Location: [{
+            LocationName: '\u4e2d\u6b63\u5340',
+            Latitude: '25.0324',
+            Longitude: '121.5199',
+            WeatherElement: [
+              {
+                ElementName: '\u6eab\u5ea6',
+                Time: [
+                  { DataTime: '2026-07-22T03:00:00.000Z', ElementValue: [{ Temperature: '26' }] },
+                  { DataTime: '2026-07-22T06:00:00.000Z', ElementValue: [{ Temperature: '28' }] }
+                ]
+              },
+              {
+                ElementName: '3\u5c0f\u6642\u964d\u96e8\u6a5f\u7387',
+                Time: [
+                  {
+                    StartTime: '2026-07-22T03:00:00.000Z',
+                    EndTime: '2026-07-22T06:00:00.000Z',
+                    ElementValue: [{ ProbabilityOfPrecipitation: '70' }]
+                  }
+                ]
+              },
+              {
+                ElementName: '\u5929\u6c23\u73fe\u8c61',
+                Time: [{
+                  StartTime: '2026-07-22T03:00:00.000Z',
+                  EndTime: '2026-07-22T06:00:00.000Z',
+                  ElementValue: [{ Weather: '\u77ed\u66ab\u96e8' }]
+                }]
+              }
+            ]
+          }]
+        }]
+      }
+    };
+
+    const [forecast] = normalizeCwaForecasts(payload, NOW);
+    expect(forecast.county).toBe('\u53f0\u5317\u5e02');
+    expect(forecast.town).toBe('\u4e2d\u6b63\u5340');
+    expect(forecast.temperatureC).toBe(28);
+    expect(forecast.rainChance).toBe(70);
+    expect(forecast.condition).toBe('\u77ed\u66ab\u96e8');
+    expect(forecast.forecastAt).toBe('2026-07-22T03:00:00.000Z');
+  });
+
+  it('keeps the legacy county forecast format compatible', () => {
+    const payload = {
+      records: {
+        location: [{
+          locationName: '\u81fa\u5317\u5e02',
+          weatherElement: [
+            { elementName: 'Wx', time: [{ startTime: '2026-07-22T06:00:00.000Z', parameter: { parameterName: '\u591a\u96f2' } }] },
+            { elementName: 'PoP', time: [{ parameter: { parameterName: '20' } }] },
+            { elementName: 'MinT', time: [{ parameter: { parameterName: '24' } }] },
+            { elementName: 'MaxT', time: [{ parameter: { parameterName: '30' } }] }
+          ]
+        }]
+      }
+    };
+
+    const [forecast] = normalizeCwaForecasts(payload, NOW);
+    expect(forecast.county).toBe('\u53f0\u5317\u5e02');
+    expect(forecast.condition).toBe('\u591a\u96f2');
+    expect(forecast.temperatureC).toBe(27);
+    expect(forecast.rainChance).toBe(20);
+  });
+});
+
+describe('TDX road-event normalization', () => {
+  it('maps the current LiveEvent schema and WKT coordinates', () => {
+    const [incident] = normalizeTdxIncidents({
+      UpdateTime: '2026-07-23T00:20:00+08:00',
+      LiveEvents: [{
+        EventID: 'event-1',
+        EventTitle: '道路施工',
+        Description: '外側車道施工',
+        Positions: 'POINT (120.7055929 24.2005723)',
+        Location: { FreeExpressHighway: { Road: '台74' } },
+        Impact: {
+          Severity: 1,
+          Duration: { DurationEndTime: '2026-07-23T02:00:00+08:00' }
+        },
+        LastUpdateTime: '2026-07-23T00:15:01+08:00'
+      }]
+    });
+
+    expect(incident).toMatchObject({
+      id: 'event-1',
+      title: '道路施工',
+      roadRef: '台74',
+      lat: 24.2005723,
+      lng: 120.7055929,
+      severity: 1,
+      updatedAt: '2026-07-23T00:15:01+08:00',
+      expiresAt: '2026-07-23T02:00:00+08:00',
+      source: 'TDX'
+    });
+  });
+});
+
+describe('TDX directional detector fusion', () => {
+  it('uses DetectionLink bearing and official congestion thresholds as the reference speed', () => {
+    const referenceByLink = buildReferenceSpeedByLink(
+      { Sections: [{ SectionID: 'section-1', LinkIDs: [{ LinkID: 'link-1' }] }] },
+      { LiveTraffics: [{ SectionID: 'section-1', CongestionLevelID: 'D' }] },
+      {
+        CongestionLevels: [{
+          CongestionLevelID: 'D',
+          MeasureIndex: 'Speed',
+          Levels: [{ Level: 1, LowValue: 60 }]
+        }]
+      }
+    );
+    const [detector] = mergeTdxDetectors(
+      {
+        VDs: [{
+          VDID: 'vd-1',
+          PositionLat: 25.05,
+          PositionLon: 121.52,
+          RoadName: '\u53f09\u7dda',
+          DetectionLinks: [{ LinkID: 'link-1', Bearing: 'E' }]
+        }]
+      },
+      {
+        VDLives: [{
+          VDID: 'vd-1',
+          DataCollectTime: '2026-07-23T00:20:00+08:00',
+          LinkFlows: [{
+            LinkID: 'link-1',
+            Lanes: [
+              { Speed: 60, Vehicles: [{ Volume: 2 }] },
+              { Speed: 30, Vehicles: [{ Volume: 2 }] },
+              { Speed: 0, Vehicles: [{ Volume: 0 }] }
+            ]
+          }]
+        }]
+      },
+      referenceByLink
+    );
+
+    expect(detector).toMatchObject({
+      id: 'vd-1:link-1',
+      heading: 90,
+      roadRef: '\u53f09\u7dda',
+      speedKph: 45,
+      referenceSpeedKph: 80,
+      source: 'TDX'
+    });
+  });
+
+  it('keeps a missing reference speed unknown instead of coercing null to zero', () => {
+    const [detector] = mergeTdxDetectors(
+      {
+        VDs: [{
+          VDID: 'vd-null',
+          PositionLat: 25.05,
+          PositionLon: 121.52,
+          SpeedLimit: null,
+          DetectionLinks: [{ LinkID: 'link-null', Bearing: 0 }]
+        }]
+      },
+      {
+        VDLives: [{
+          VDID: 'vd-null',
+          Status: 0,
+          LinkFlows: [{
+            LinkID: 'link-null',
+            Lanes: [{ Speed: 40, Vehicles: [{ Volume: 1 }] }]
+          }]
+        }]
+      }
+    );
+
+    expect(detector).toMatchObject({ heading: 0, referenceSpeedKph: null });
+  });
+});
+
+describe('TDX published-section fusion', () => {
+  it('joins official metadata, line geometry, live speed, and congestion thresholds', () => {
+    const [published] = mergePublishedSections(
+      {
+        Sections: [{
+          SectionID: 'section-1',
+          RoadName: '\u53f09\u7dda',
+          RoadDirection: 'E'
+        }]
+      },
+      {
+        SectionShapes: [{
+          SectionID: 'section-1',
+          Geometry: 'LINESTRING(121.5000 25.0000,121.5100 25.0000)'
+        }]
+      },
+      {
+        UpdateTime: '2026-07-22T03:55:00.000Z',
+        LiveTraffics: [{
+          SectionID: 'section-1',
+          TravelSpeed: 45,
+          CongestionLevelID: 'D',
+          CongestionLevel: 2,
+          DataCollectTime: '2026-07-22T03:54:00.000Z'
+        }]
+      },
+      {
+        CongestionLevels: [{
+          CongestionLevelID: 'D',
+          MeasureIndex: 'Speed',
+          Levels: [{ Level: 1, LowValue: 60 }]
+        }]
+      },
+      [{ roadRef: '\u53f09' }]
+    );
+
+    expect(published).toMatchObject({
+      id: 'section-1',
+      roadRef: '\u53f09\u7dda',
+      heading: 90,
+      speedKph: 45,
+      referenceSpeedKph: 80,
+      congestionLevel: 2,
+      observedAt: '2026-07-22T03:54:00.000Z',
+      available: true,
+      source: 'TDX',
+      method: 'published-section'
+    });
+    expect(published.geometry).toEqual([[25, 121.5], [25, 121.51]]);
+  });
+
+  it('keeps unavailable official segments from being treated as live traffic', () => {
+    const [published] = mergePublishedSections(
+      { Sections: [{ SectionID: 'section-1', RoadName: '\u53f09\u7dda', RoadDirection: 'S' }] },
+      { SectionShapes: [{ SectionID: 'section-1', Geometry: 'LINESTRING(121.5 25,121.5 24.9)' }] },
+      {
+        LiveTraffics: [{
+          SectionID: 'section-1',
+          TravelSpeed: 0,
+          CongestionLevelID: 'D',
+          CongestionLevel: -1,
+          DataCollectTime: NOW.toISOString()
+        }]
+      },
+      {
+        CongestionLevels: [{
+          CongestionLevelID: 'D',
+          MeasureIndex: 'Speed',
+          Levels: [{ Level: 1, LowValue: 60 }]
+        }]
+      },
+      [{ roadRef: '\u53f09' }]
+    );
+
+    expect(published.available).toBe(false);
+  });
+});
+
+describe('THB 168 open-data parsing', () => {
+  it('normalizes the official section, shape, live traffic, and congestion XML feeds', () => {
+    const sections = parseThbSectionsXml(`
+      <SectionList><UpdateTime>${NOW.toISOString()}</UpdateTime><Sections><Section>
+        <SectionID>section-1</SectionID><SectionName>route</SectionName><RoadID>300090</RoadID>
+        <RoadName>\u53f09\u7dda</RoadName><RoadClass>3</RoadClass><RoadDirection>E</RoadDirection>
+      </Section></Sections></SectionList>
+    `);
+    const shapes = parseThbSectionShapesXml(`
+      <SectionShapeList><SectionShapes><SectionShape><SectionID>section-1</SectionID>
+        <Geometry>LINESTRING(121.5 25,121.51 25)</Geometry>
+      </SectionShape></SectionShapes></SectionShapeList>
+    `);
+    const live = parseThbLiveTrafficXml(`
+      <LiveTrafficList><UpdateTime>2026-07-23 01:13:58.464136+08:00</UpdateTime><LiveTraffics><LiveTraffic>
+        <SectionID>section-1</SectionID><TravelTime>80</TravelTime><TravelSpeed>45</TravelSpeed>
+        <CongestionLevelID>D</CongestionLevelID><CongestionLevel>2</CongestionLevel>
+        <DataCollectTime>2026-07-23 01:13:58.464136+08:00</DataCollectTime>
+      </LiveTraffic></LiveTraffics></LiveTrafficList>
+    `);
+    const congestion = parseThbCongestionXml(`
+      <CongestionLevelList><CongestionLevels><CongestionLevel>
+        <CongestionLevelID>D</CongestionLevelID><CongestionLevelName>group</CongestionLevelName>
+        <MeasureIndex>Speed</MeasureIndex><Levels><Level><Level>1</Level>
+        <LevelName>clear</LevelName><LowValue>60</LowValue></Level></Levels>
+      </CongestionLevel></CongestionLevels></CongestionLevelList>
+    `);
+
+    expect(sections.Sections[0]).toMatchObject({
+      SectionID: 'section-1',
+      RoadName: '\u53f09\u7dda',
+      RoadClass: 3,
+      RoadDirection: 'E'
+    });
+    expect(shapes.SectionShapes[0].Geometry).toContain('LINESTRING');
+    expect(live.LiveTraffics[0]).toMatchObject({
+      TravelSpeed: 45,
+      CongestionLevel: 2,
+      DataCollectTime: '2026-07-22T17:13:58.464Z'
+    });
+    expect(congestion.CongestionLevels[0].Levels[0]).toMatchObject({ Level: 1, LowValue: 60 });
+  });
+});

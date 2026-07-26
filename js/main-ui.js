@@ -4,7 +4,7 @@
   'use strict';
 
   var THEME_KEY = 'tw_theme';
-  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u89e3\u6790\u8def\u7dda\uff0c\u627e\u6cbf\u9014\u651d\u5f71\u6a5f';
+  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u9a57\u8b49\u5b89\u5168\u8def\u7dda\u8207\u6cbf\u9014\u72c0\u6cc1';
   var REGION_LABELS = {
     north: '\u5317\u90e8',
     central: '\u4e2d\u90e8',
@@ -13,13 +13,16 @@
     island: '\u96e2\u5cf6'
   };
   var SEARCH_HINTS = {
-    all: ['國道', '快速道路', '景點', '台61線', '雪隧', '車站'],
-    north: ['台北', '新北', '基隆', '桃園', '宜蘭', '雪隧'],
-    central: ['台中', '彰化', '南投', '雲林', '清境', '日月潭'],
-    south: ['嘉義', '台南', '高雄', '屏東', '墾丁', '阿里山'],
-    east: ['花蓮', '台東', '太魯閣', '蘇花', '台11線', '台9線'],
+    all: ['北宜', '西濱', '蘇花', '南迴', '台3線', '台61線'],
+    north: ['北宜', '台7線', '台7乙', '淡金', '北海岸', '雪隧'],
+    central: ['台3線', '台14甲', '清境', '日月潭', '139縣道', '中橫'],
+    south: ['台1線', '182縣道', '阿里山', '墾丁', '南橫', '台26線'],
+    east: ['花蓮', '台東', '太魯閣', '蘇花', '台11線', '南迴'],
     island: ['澎湖', '金門', '馬祖', '機場', '港', '車站']
   };
+  var RIDE_ROUTE_CHIPS = [
+    '北宜公路', '台61線', '蘇花公路', '南迴公路', '台14甲', '北橫公路', '182縣道', '淡金公路'
+  ];
 
   function setFlexVisible(el, isVisible) {
     if (!el) return;
@@ -85,6 +88,7 @@
 
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
+    routeSectionLayers: [], routeWeatherMarkers: [],
     startEndMarkers: [], _canvas: null, _camData: [],
     init: function() {
       MapMod.map = L.map('map', {
@@ -126,10 +130,15 @@
       marker.on('click', function() { InfoMod.open(cam); });
       // tooltip 只在縮放夠大時顯示（避免大量 DOM）
       if (MapMod.map.getZoom() >= 12) {
-        marker.bindTooltip(cam.name, { direction:'top', offset:[0,-6] });
+        marker.bindTooltip(escapeHtml(cam.name), { direction:'top', offset:[0,-6] });
       }
       MapMod.markers.push(marker);
       MapMod._camData.push(cam);
+    },
+    focusCam: function(cam) {
+      if (!cam || !MapMod.map) return;
+      MapMod.map.setView([Number(cam.lat), Number(cam.lng)], 14);
+      InfoMod.open(cam);
     },
     drawRoute: function(coords, mode) {
       if (MapMod.routeLayer) {
@@ -163,6 +172,56 @@
       var bounds = main.getBounds();
       MapMod.map.fitBounds(bounds, { padding: [40, 40] });
     },
+    drawConditionSections: function(sections) {
+      MapMod.clearRoute();
+      if (!sections || !sections.length) return;
+      var colors = {
+        clear: '#22c55e',
+        slow: '#facc15',
+        congested: '#ef4444',
+        unknown: '#94a3b8'
+      };
+      var bounds = [];
+      sections.forEach(function(section) {
+        var latlngs = (section.geometry || []).map(function(point) {
+          return [Number(point[0]), Number(point[1])];
+        }).filter(function(point) { return isFinite(point[0]) && isFinite(point[1]); });
+        if (latlngs.length < 2) return;
+        bounds = bounds.concat(latlngs);
+        var level = section.traffic && section.traffic.level ? section.traffic.level : 'unknown';
+        var color = colors[level] || colors.unknown;
+        var glow = L.polyline(latlngs, {
+          color: color, weight: 11, opacity: 0.18, lineCap: 'round', lineJoin: 'round', interactive: false
+        }).addTo(MapMod.map);
+        var line = L.polyline(latlngs, {
+          color: color, weight: 6, opacity: 0.96, lineCap: 'round', lineJoin: 'round'
+        }).addTo(MapMod.map);
+        line._conditionOrder = section.order;
+        line.on('click', function() { Bus.emit('condition:select', section.order); });
+        MapMod.routeSectionLayers.push(glow, line);
+
+        var weather = section.weather || {};
+        if ((weather.condition || '').indexOf('雨') !== -1 || Number(weather.rainChance) >= 60) {
+          var middle = latlngs[Math.floor(latlngs.length / 2)];
+          var icon = L.divIcon({
+            className: 'route-weather-marker',
+            html: '<div class="route-weather-pin" aria-label="降雨提醒"><i class="fa-solid fa-cloud-rain"></i></div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          });
+          MapMod.routeWeatherMarkers.push(L.marker(middle, { icon: icon, zIndexOffset: 7000 }).addTo(MapMod.map));
+        }
+      });
+      MapMod.routeLayer = MapMod.routeSectionLayers;
+      if (bounds.length) MapMod.map.fitBounds(bounds, { padding: [42, 42] });
+    },
+    focusSection: function(order) {
+      var layer = MapMod.routeSectionLayers.find(function(candidate) {
+        return candidate._conditionOrder === Number(order);
+      });
+      if (!layer || !layer.getBounds) return;
+      MapMod.map.fitBounds(layer.getBounds(), { padding: [70, 70], maxZoom: 14 });
+    },
     clearRoute: function() {
       if (MapMod.routeLayer) {
         if (Array.isArray(MapMod.routeLayer)) {
@@ -172,6 +231,9 @@
         }
         MapMod.routeLayer = null;
       }
+      MapMod.routeSectionLayers = [];
+      MapMod.routeWeatherMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
+      MapMod.routeWeatherMarkers = [];
     },
     drawStartEnd: function(pts) {
       MapMod.startEndMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
@@ -254,8 +316,9 @@
         var thumbSrc = '';
         if (cam.type === 'youtube' && cam.videoId) {
           thumbSrc = 'https://img.youtube.com/vi/' + cam.videoId + '/mqdefault.jpg';
-        } else if (cam.url) {
-          thumbSrc = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/30000);
+        } else if (safeHttpUrl(cam.url)) {
+          var safeThumbUrl = safeHttpUrl(cam.url);
+          thumbSrc = safeThumbUrl + (safeThumbUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/30000);
         }
         if (thumbSrc) {
           thumbEl.innerHTML = '<div class="ph"><i class="fa-solid fa-spinner fa-spin"></i></div><img alt="" />';
@@ -279,6 +342,7 @@
       }
       panel.classList.remove('hidden');
       panel.classList.add('flex');
+      Bus.emit('camera:selected', cam);
     },
     close: function() {
       var panel = Dom.byId('info-panel');
@@ -291,7 +355,7 @@
 
   var RouteMod = {
     active: false, filteredCams: [], routeCoords: [],
-    mode: 'motorcycle',
+    mode: 'motorcycle', plate: 'white',
     setAnalyzeBusy: function(isBusy) {
       var btn = Dom.byId('js-route-btn');
       if (!btn) return;
@@ -308,8 +372,8 @@
       var summary = Dom.byId('route-summary');
       if (st) {
         st.textContent = count > 0
-          ? '\u627e\u5230 ' + count + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f'
-          : '\u9019\u689d\u8def\u7dda\u9644\u8fd1\u66ab\u6642\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684\u651d\u5f71\u6a5f';
+          ? '\u5b89\u5168\u9a57\u8b49\u5b8c\u6210 \u00b7 ' + count + ' \u652f\u6cbf\u9014\u73fe\u5834\u756b\u9762'
+          : '\u5b89\u5168\u9a57\u8b49\u5b8c\u6210 \u00b7 \u6cbf\u9014\u66ab\u7121\u73fe\u5834\u756b\u9762';
       }
       setFlexVisible(banner, true);
       setFlexVisible(info, true);
@@ -320,9 +384,14 @@
       }
       if (summary && AppState.lastRouteInfo) {
         summary.textContent = (RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd' : '\ud83d\ude97') + ' '
-          + AppState.lastRouteInfo.distance + 'km/' + AppState.lastRouteInfo.duration + '\u5206 \u00b7 ' + count + '\u652f';
+          + AppState.lastRouteInfo.distance + 'km/' + AppState.lastRouteInfo.duration + '\u5206 \u00b7 \u5df2\u9a57\u8b49';
         summary.classList.remove('hidden');
       }
+      Bus.emit('route:updated', {
+        cameraCount: count,
+        routeInfo: AppState.lastRouteInfo,
+        cams: RouteMod.filteredCams.slice()
+      });
     },
     clearRouteUi: function() {
       var startEl = Dom.byId('js-route-start');
@@ -346,6 +415,7 @@
           Dom.queryAll('.route-mode-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           RouteMod.mode = btn.dataset.mode;
+          if (btn.dataset.plate) RouteMod.plate = btn.dataset.plate;
       });
       Dom.onId('js-route-btn', 'click', function() { RouteMod.analyze(); });
       Dom.onId('js-rb-clear', 'click', function() { RouteMod.clear(); });
@@ -363,45 +433,50 @@
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
       RouteMod.setAnalyzeBusy(true);
       var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
-      var allAddrs = [simplifyAddress(startVal)]
-        .concat(uiWaypoints.map(function(wp) { return simplifyAddress(wp); }))
-        .concat([simplifyAddress(endVal)]);
+      var allAddrs = [startVal]
+        .concat(uiWaypoints.map(function(wp) { return String(wp || '').trim(); }))
+        .concat([endVal]);
       AppState.pendingWaypoints = [];
 
       Promise.all(allAddrs.map(function(addr) { return extractPointFromUrl(addr); }))
         .then(function(results) {
-          var startPt = results[0];
-          var endPt   = results[results.length - 1];
-          if (!startPt || !endPt) {
-            RouteMod.setAnalyzeBusy(false);
-            Toast.show(!startPt ? '\u8d77\u9ede\u7121\u6cd5\u89e3\u6790' : '\u7d42\u9ede\u7121\u6cd5\u89e3\u6790');
-            return;
+          var failedIndex = results.findIndex(function(result) { return !result; });
+          if (failedIndex !== -1) {
+            var label = failedIndex === 0
+              ? '\u8d77\u9ede'
+              : (failedIndex === results.length - 1 ? '\u7d42\u9ede' : ('\u7b2c ' + failedIndex + ' \u500b\u505c\u9760\u9ede'));
+            throw new Error(label + '\u7121\u6cd5\u89e3\u6790\uff0c\u8acb\u6539\u7528\u66f4\u5b8c\u6574\u5730\u540d\u6216\u5ea7\u6a19');
           }
-          Toast.show('\u8def\u7dda\u67e5\u8a62\u4e2d...');
-          var wpPts = results.slice(1, -1).filter(function(p) { return p; });
-          var finalPoints = [startPt].concat(wpPts).concat([endPt]);
+          Toast.show('\u6b63\u5728\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168...');
+          var finalPoints = results;
           AppState.routeAllPoints = finalPoints;
-          var segs = [];
-          for (var fi = 0; fi < finalPoints.length - 1; fi++) {
-            segs.push(getRoadRoute(finalPoints[fi], finalPoints[fi+1], RouteMod.mode));
-          }
-          return Promise.all(segs).then(function(segCoords) {
-            var merged = [];
-            segCoords.forEach(function(seg) { merged = merged.concat(seg); });
-            return merged;
-          });
+          AppState.routeInputValues = allAddrs.slice();
+          var vehicle = RouteMod.mode === 'car'
+            ? { type: 'car' }
+            : { type: 'motorcycle', plate: RouteMod.plate };
+          return AppServices.createRoute(finalPoints, vehicle, { strategy: 'balanced' });
         })
-        .then(function(coords) {
-          if (!coords) {
-            RouteMod.setAnalyzeBusy(false);
-            // 路線失敗仍畫標記
-            MapMod.drawStartEnd(AppState.routeAllPoints);
-            return;
+        .then(function(payload) {
+          var route = payload && payload.data;
+          if (!route || !route.geometry || !route.validation || route.validation.status !== 'safe') {
+            throw new Error('\u8def\u7dda\u672a\u901a\u904e\u5b89\u5168\u9a57\u8b49');
           }
+          var coords = route.geometry.coordinates.map(function(point) {
+            return [Number(point[1]), Number(point[0])];
+          });
+          AppState.activeRoute = route;
+          AppState.lastRouteInfo = {
+            distance: Number(route.distanceKm || 0).toFixed(1),
+            duration: Math.round(Number(route.durationMinutes || 0))
+          };
           RouteMod.setAnalyzeBusy(false);
           var info = AppState.lastRouteInfo;
-          var modeLabel = RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f \u6a5f\u8eca' : '\ud83d\ude97 \u6c7d\u8eca';
+          var plateLabels = { white: '\u767d\u724c', yellow: '\u9ec3\u724c', red: '\u7d05\u724c' };
+          var modeLabel = RouteMod.mode === 'motorcycle'
+            ? ('\ud83c\udfcd\ufe0f ' + plateLabels[RouteMod.plate])
+            : '\ud83d\ude97 \u6c7d\u8eca';
           var msg = info ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418') : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
+          if (route.dataMode === 'fixture') msg = '\u793a\u7bc4\u8def\u7dda\u5df2\u8f09\u5165\uff0c\u4e0d\u53ef\u7528\u65bc\u5be6\u969b\u9a0e\u4e58';
           Toast.show(msg, 3000);
           var exp = Dom.byId('route-expanded');
           var col = Dom.byId('route-collapsed');
@@ -410,10 +485,17 @@
           var clearMini = Dom.byId('js-route-clear-small');
           if (clearMini) clearMini.classList.remove('hidden');
           RouteMod._doFilter(coords);
+          if (window.RouteConditionsMod) RouteConditionsMod.load(route, true);
         })
-        .catch(function() {
+        .catch(function(err) {
           RouteMod.setAnalyzeBusy(false);
-          Toast.show('\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66');
+          var message = err && err.message ? err.message : '\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66';
+          var validation = err && err.payload && err.payload.data && err.payload.data.validation;
+          var violation = validation && validation.violations && validation.violations[0];
+          if (violation && violation.message) message = violation.message;
+          Toast.show(message, 5000);
+          var status = Dom.byId('js-route-status');
+          if (status) status.textContent = '\u26d4 ' + message;
           MapMod.drawStartEnd(AppState.routeAllPoints);
         });
     },
@@ -466,9 +548,7 @@
       MapMod.drawStartEnd(AppState.routeAllPoints);
       RouteMod.updateRouteUi(RouteMod.filteredCams.length);
       Toast.show(
-        RouteMod.filteredCams.length > 0
-          ? '\u627e\u5230 ' + RouteMod.filteredCams.length + ' \u652f\u6cbf\u9014\u651d\u5f71\u6a5f'
-          : '\u9019\u689d\u8def\u7dda\u9644\u8fd1\u66ab\u6642\u6c92\u6709\u53ef\u986f\u793a\u7684\u651d\u5f71\u6a5f'
+        '\u5b89\u5168\u8def\u7dda\u5df2\u5efa\u7acb\uff0c\u6b63\u5728\u8f09\u5165\u6cbf\u9014\u8def\u6cc1\u8207\u5929\u6c23'
       );
       (function(){
         var startInput = Dom.byId('js-route-start');
@@ -482,8 +562,8 @@
         }
       })();
       Bus.emit('filter:changed');
-      // 沿途影像輪播（自動顯示）
-      setTimeout(function() { RouteStripMod.show(RouteMod.filteredCams); }, 300);
+      // 攝影機已整合進沿途時間軸；舊輪播僅在使用者主動點擊「影像」時顯示。
+      RouteStripMod.hide();
     },
     clear: function() {
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
@@ -492,18 +572,30 @@
       RouteStripMod.hide();
       WaypointsMod && WaypointsMod.clearMarkers();
       AppState.pendingWaypoints = [];
+      AppState.activeRoute = null;
+      AppState.routeConditions = null;
+      AppState.lastRouteInfo = null;
+      AppState.routeInputValues = [];
       WaypointsMod && WaypointsMod.render([]);
+      if (window.RouteConditionsMod) RouteConditionsMod.clear();
       RouteMod.clearRouteUi();
       Bus.emit('filter:changed');
+      Bus.emit('route:cleared');
     }
   };
 
   var ListMod = {
     region: 'all', regionCounty: 'all', search: '',
     MAP_MARKER_ZOOM: 10, // 縮放 >= 10 才畫 marker
+    applySearch: function(value) {
+      var nextValue = value || '';
+      var input = Dom.byId('js-search');
+      if (input) input.value = nextValue;
+      ListMod.search = nextValue.trim().toLowerCase();
+      Bus.emit('filter:changed');
+    },
     renderSearchHints: function() {
       var wrap = Dom.byId('js-search-hints');
-      var input = Dom.byId('js-search');
       if (!wrap) return;
       var hints = (SEARCH_HINTS[ListMod.region] || SEARCH_HINTS.all).slice();
       if (ListMod.regionCounty !== 'all') hints.unshift(ListMod.regionCounty);
@@ -512,12 +604,105 @@
         return '<button class="hint-chip px-2.5 py-1 text-[11px] font-bold rounded-full transition-all" data-hint="' + hint + '">' + hint + '</button>';
       }).join('');
       Dom.onAll('.hint-chip', 'click', function(btn) {
-        if (input) {
-          input.value = btn.dataset.hint || '';
-          ListMod.search = input.value.trim().toLowerCase();
-        }
-        Bus.emit('filter:changed');
+        ListMod.applySearch(btn.dataset.hint || '');
       }, wrap);
+    },
+    renderRideRouteChips: function() {
+      var wrap = Dom.byId('js-ride-route-chips');
+      if (!wrap) return;
+      wrap.innerHTML = RIDE_ROUTE_CHIPS.map(function(route) {
+        return '<button class="ride-route-chip" data-route="' + route + '">' + route + '</button>';
+      }).join('');
+      Dom.onAll('.ride-route-chip', 'click', function(btn) {
+        ListMod.applySearch(btn.dataset.route || '');
+      }, wrap);
+    },
+    buildCameraSuggestions: function(query) {
+      var nq = normalizeSearchText(query);
+      if (!nq) return [];
+      var cams = (RouteMod.active ? RouteMod.filteredCams : Data.allCams()).slice();
+      var scored = [];
+      cams.forEach(function(cam) {
+        var haystack = cam.searchText || normalizeSearchText([cam.name, cam.county, cam.id].join(' '));
+        if (!haystack) return;
+        var score = -1;
+        if (haystack.indexOf(nq) !== -1) score = 92 - Math.max(0, haystack.length - nq.length);
+        else if (haystack.split(' ').some(function(part) { return part.indexOf(nq) !== -1; })) score = 72;
+        if (score < 0) return;
+        scored.push({
+          name: cam.name,
+          sub: [cam.county, getRoadCategoryLabel(cam.cat)].filter(Boolean).join(' · '),
+          lat: cam.lat,
+          lng: cam.lng,
+          camId: cam.id,
+          score: score
+        });
+      });
+      return scored.sort(function(a, b) { return b.score - a.score; }).slice(0, 4);
+    },
+    renderSuggestGroups: function(query) {
+      var wrap = Dom.byId('suggest-list');
+      if (!wrap) return;
+      if (!query) {
+        wrap.innerHTML = '';
+        wrap.classList.remove('visible');
+        return;
+      }
+      PlaceSuggest.search(query, function(results) {
+        var routeItems = [];
+        var placeItems = [];
+        (results || []).forEach(function(item) {
+          var normalized = {
+            name: item.name,
+            sub: item.sub || '',
+            lat: item.lat,
+            lng: item.lng
+          };
+          if (PlaceSuggest.isMotorcycleHotspot(item.name)) routeItems.push(normalized);
+          else placeItems.push(normalized);
+        });
+        var cameraItems = ListMod.buildCameraSuggestions(query);
+        var groups = [];
+        if (routeItems.length) groups.push({ key: 'route', title: '熱門路線', icon: 'fa-road', items: routeItems.slice(0, 4) });
+        if (placeItems.length) groups.push({ key: 'place', title: '地點', icon: 'fa-location-dot', items: placeItems.slice(0, 3) });
+        if (cameraItems.length) groups.push({ key: 'camera', title: '攝影機', icon: 'fa-camera', items: cameraItems });
+        if (!groups.length) {
+          wrap.innerHTML = '';
+          wrap.classList.remove('visible');
+          return;
+        }
+        wrap.innerHTML = groups.map(function(group) {
+          var itemsHtml = group.items.map(function(item) {
+            return '<div class="suggest-item" data-type="' + group.key + '" data-name="' + escapeHtml(item.name) + '" data-lat="' + (Number(item.lat) || '') + '" data-lng="' + (Number(item.lng) || '') + '" data-cam-id="' + escapeHtml(item.camId || '') + '">'
+              + '<i class="fa-solid ' + group.icon + ' suggest-icon"></i>'
+              + '<span class="suggest-name">' + escapeHtml(item.name) + '</span>'
+              + '<span class="suggest-sub">' + escapeHtml(item.sub || '') + '</span>'
+              + '</div>';
+          }).join('');
+          return '<div class="suggest-group"><div class="suggest-group-title"><i class="fa-solid ' + group.icon + '"></i><span>' + group.title + '</span></div>' + itemsHtml + '</div>';
+        }).join('');
+        wrap.classList.add('visible');
+        Dom.onAll('.suggest-item', 'click', function(item) {
+          ListMod.applySearch(item.dataset.name || '');
+          wrap.innerHTML = '';
+          wrap.classList.remove('visible');
+          var camId = item.dataset.camId;
+          var lat = parseFloat(item.dataset.lat);
+          var lng = parseFloat(item.dataset.lng);
+          if (camId) {
+            var cam = Data.allCams().find(function(entry) { return entry.id === camId; });
+            if (cam) {
+              NavMod.go('map');
+              MapMod.focusCam(cam);
+              return;
+            }
+          }
+          if (lat && lng && MapMod.map) {
+            NavMod.go('map');
+            MapMod.map.setView([lat, lng], 13);
+          }
+        }, wrap);
+      });
     },
     renderCountyTabs: function() {
       var wrap = Dom.byId('js-region-county-tabs');
@@ -571,43 +756,16 @@
       });
       ListMod.renderCountyTabs();
       ListMod.renderSearchHints();
+      ListMod.renderRideRouteChips();
       var s = Dom.byId('js-search');
       var suggestList = Dom.byId('suggest-list');
       if (s) {
         Dom.on(s, 'input', function() {
           ListMod.search = s.value.trim().toLowerCase();
           Bus.emit('filter:changed');
-          // 地名建議
           var q = s.value.trim();
           if (!q || q.length < 1) { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } return; }
-          PlaceSuggest.search(q, function(results) {
-            if (!suggestList) return;
-            if (!results.length) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); return; }
-            var html = results.map(function(r) {
-              return '<div class="suggest-item" data-name="'+r.name+'" data-lat="'+(r.lat||'')+'" data-lng="'+(r.lng||'')+'">'
-                + '<i class="fa-solid fa-location-dot suggest-icon"></i>'
-                + '<span class="suggest-name">'+r.name+'</span>'
-                + '<span class="suggest-sub">'+(r.sub||'')+'</span>'
-                + '</div>';
-            }).join('');
-            suggestList.innerHTML = html;
-            suggestList.classList.add('visible');
-            Dom.queryAll('.suggest-item', suggestList).forEach(function(item) {
-              Dom.on(item, 'click', function() {
-                s.value = item.dataset.name;
-                ListMod.search = item.dataset.name.toLowerCase();
-                suggestList.innerHTML=''; suggestList.classList.remove('visible');
-                Bus.emit('filter:changed');
-                // 若有座標，飛到地圖
-                var lat = parseFloat(item.dataset.lat);
-                var lng = parseFloat(item.dataset.lng);
-                if (lat && lng && MapMod.map) {
-                  NavMod.go('map');
-                  MapMod.map.setView([lat, lng], 13);
-                }
-              });
-            });
-          });
+          ListMod.renderSuggestGroups(q);
         });
         Dom.on(s, 'blur', function() {
           setTimeout(function() { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } }, 200);
@@ -616,24 +774,33 @@
     },
     getFiltered: function() {
       var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
+      var normalizedQuery = normalizeSearchText(ListMod.search);
+      var queryTerms = normalizedQuery ? normalizedQuery.split(' ').filter(Boolean) : [];
       return cams.filter(function(cam) {
         var rOk = ListMod.region === 'all' || getRegion(cam.county) === ListMod.region;
         var cOk = ListMod.region === 'all' || ListMod.regionCounty === 'all' || cam.county === ListMod.regionCounty;
-        var sOk = !ListMod.search ||
-          cam.name.toLowerCase().indexOf(ListMod.search) !== -1 ||
-          cam.county.toLowerCase().indexOf(ListMod.search) !== -1 ||
-          (cam.id && cam.id.toLowerCase().indexOf(ListMod.search) !== -1);
+        var haystack = cam.searchText || normalizeSearchText([cam.name, cam.county, cam.id].join(' '));
+        var sOk = !queryTerms.length || queryTerms.every(function(term) {
+          return haystack.indexOf(term) !== -1;
+        });
         return rOk && cOk && sOk;
       });
     },
     render: function() {
       var el = Dom.byId('js-list-inner');
+      var stateEl = Dom.byId('js-list-state');
       if (!el) return;
       var cams = ListMod.getFiltered();
       MapMod.clearMarkers();
       var stat = Dom.byId('js-stat-cams');
       if (stat) stat.textContent = Data.allCams().length;
       if (cams.length === 0) {
+        if (stateEl) {
+          stateEl.classList.remove('hidden');
+          stateEl.textContent = RouteMod.active
+            ? '目前是沿途結果模式，試著放寬條件或清除路線。'
+            : '可切換區域、縣市或搜尋關鍵字來縮小範圍。';
+        }
         if (Data.camsState === 'loading' || Data.camsState === 'idle') {
           el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
         } else if (Data.camsState === 'error') {
@@ -642,6 +809,12 @@
           el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
         }
         return;
+      }
+      if (stateEl) {
+        stateEl.classList.remove('hidden');
+        stateEl.textContent = RouteMod.active
+          ? '沿途模式：已依目前路線過濾並優先顯示可快速判斷的影像點。'
+          : '列表模式：可收藏常用停靠點，並從這裡直接跳回地圖。';
       }
       var map = {};
       Data.allCams().forEach(function(c) { map[c.id] = c; });
@@ -673,18 +846,31 @@
       listCams.forEach(function(cam) {
         var w  = Data.weather[cam.county];
         var wt = w ? (w.temp + '\u00B0C') : '';
-        var catLabel = cam.cat === 'highway' ? '\u570b\u9053' : cam.cat === 'expressway' ? '\u5feb\u9053' : cam.cat === 'scenic' ? '\u666f\u9ede' : '\u7701\u9053';
-        var _ts = cam.url ? (cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000)) : '';
-        html += '<div class="cam-card glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+cam.id+'">'
+        var catLabel = getRoadCategoryLabel(cam.cat);
+        var safeCamUrl = safeHttpUrl(cam.url);
+        var _ts = safeCamUrl ? (safeCamUrl + (safeCamUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000)) : '';
+        var isRouteCam = RouteMod.active && RouteMod.filteredCams.some(function(routeCam) { return routeCam.id === cam.id; });
+        var distLabel = '';
+        if (NearbyMod.userLat !== null && NearbyMod.userLng !== null) {
+          distLabel = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng).toFixed(1) + 'km';
+        }
+        html += '<div class="cam-card glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+escapeHtml(cam.id)+'">'
+          + '<div class="cam-card-top w-full">'
           + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
           + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
-          + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+_ts+'" />'
+          + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+escapeHtml(_ts)+'" />'
           + '</div>'
           + '<div class="flex-1 min-w-0">'
-          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+cam.name+' <span class="text-[10px] bg-white/10 text-slate-400 px-1.5 py-0.5 rounded-full shrink-0">'+catLabel+'</span></div>'
-          + '<div class="text-[10px] text-slate-400 mt-0.5">'+cam.county+(wt?' \u00B7 '+wt:'')+'</div>'
+          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+escapeHtml(cam.name)+'</div>'
+          + '<div class="text-[10px] text-slate-400 mt-0.5">'+escapeHtml(cam.county)+(wt?' \u00B7 '+escapeHtml(wt):'')+'</div>'
+          + '<div class="cam-card-meta">'
+          + '<span class="meta-chip">'+escapeHtml(catLabel)+'</span>'
+          + (isRouteCam ? '<span class="meta-chip">\u6cbf\u9014</span>' : '')
+          + (distLabel ? '<span class="meta-chip">\u8ddd\u96e2 ' + distLabel + '</span>' : '')
           + '</div>'
-          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div>';
+          + '</div>'
+          + '<button class="card-favorite-btn" data-favorite-id="' + escapeHtml(cam.id) + '"><i class="fa-regular fa-bookmark text-xs"></i></button>'
+          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div></div>';
       });
       if (hasMore) {
         html += '<div class="text-center text-slate-500 text-xs py-4">顯示前 200 支，請選擇縣市或搜尋查看更多</div>';
@@ -713,6 +899,12 @@
           MapMod.map.setView([cam.lat, cam.lng], 14);
         });
       });
+      Dom.queryAll('.card-favorite-btn', el).forEach(function(btn) {
+        Dom.on(btn, 'click', function(event) {
+          event.stopPropagation();
+          Bus.emit('favorite:toggle', map[btn.dataset.favoriteId]);
+        });
+      });
       // clearMarkers 裡的 setTimeout 會自動補畫，這裡不需要再呼叫
     }
   };
@@ -737,21 +929,28 @@
           iframe.allow = 'autoplay; encrypted-media';
           iframe.allowFullscreen = true;
           med.appendChild(iframe);
-        } else if (cam.url) {
+        } else if (safeHttpUrl(cam.url)) {
           var img = document.createElement('img');
-          var imgUrl = cam.url + (cam.url.indexOf('?') !== -1 ? '&' : '?') + 't=' + Date.now();
+          var safeUrl = safeHttpUrl(cam.url);
+          var imgUrl = safeUrl + (safeUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Date.now();
           img.src = imgUrl;
           img.className = 'w-full h-full object-contain';
           img.style.opacity = '0';
           img.style.transition = 'opacity 0.3s';
           img.onload = function() { img.style.opacity = '1'; };
           img.onerror = function() {
-            med.innerHTML = '<div class="text-slate-500 text-sm p-8 text-center">'
-              + '\u26A0\uFE0F \u5f71\u50cf\u7121\u6cd5\u8f09\u5165<br>'
-              + '<span class="text-xs text-slate-600 mt-2 block">\u651d\u5f71\u6a5f\u96e2\u7dda\u6216 Worker \u5c1a\u672a\u66f4\u65b0</span>'
-              + '<a href="' + cam.url.replace(/.*\?img=/, '') + '" target="_blank" '
-              + 'style="color:#f97316;font-size:10px;margin-top:8px;display:block;">\u76f4\u63a5\u958b\u542f\u539f\u59cb\u9023\u7d50</a>'
-              + '</div>';
+            med.innerHTML = '';
+            var errorWrap = document.createElement('div');
+            errorWrap.className = 'text-slate-500 text-sm p-8 text-center';
+            errorWrap.textContent = '\u26A0\uFE0F \u5f71\u50cf\u7121\u6cd5\u8f09\u5165\u3002\u651d\u5f71\u6a5f\u53ef\u80fd\u96e2\u7dda\u6216\u4f86\u6e90\u672a\u66f4\u65b0\u3002';
+            var sourceLink = document.createElement('a');
+            sourceLink.href = safeUrl;
+            sourceLink.target = '_blank';
+            sourceLink.rel = 'noopener noreferrer';
+            sourceLink.className = 'camera-source-link';
+            sourceLink.textContent = '\u76f4\u63a5\u958b\u555f\u539f\u59cb\u9023\u7d50';
+            errorWrap.appendChild(sourceLink);
+            med.appendChild(errorWrap);
           };
           med.appendChild(img);
         } else {
@@ -763,12 +962,21 @@
     }
   };
 
+  window.ThemeMod = ThemeMod;
+  window.NavMod = NavMod;
+  window.MapMod = MapMod;
+  window.InfoMod = InfoMod;
+  window.RouteMod = RouteMod;
+  window.ListMod = ListMod;
+  window.ModalMod = ModalMod;
+
   window.addEventListener('load', function() {
     ClockMod.init();
     MapMod.init();
     if (Storage.get(THEME_KEY, 'dark') === 'light') {
       document.body.classList.add('light');
       var _tb = Dom.byId('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
+      MapMod.setTile(Config.TILE_LIGHT);
     }
     ThemeMod.init();
     NavMod.init();

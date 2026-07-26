@@ -1,11 +1,21 @@
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v7";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `twdash-runtime-${CACHE_VERSION}`;
 
 const SHELL_URLS = [
   "./",
   "./index.html",
-  "./manifest.json"
+  "./manifest.json",
+  "./favicon.svg",
+  "./css/tailwind.generated.css",
+  "./css/style.css",
+  "./js/core.js",
+  "./js/services.js",
+  "./js/data.js",
+  "./js/main-ui.js",
+  "./js/enhancements.js",
+  "./js/route-conditions.js",
+  "./js/ride-tools.js"
 ];
 
 const CACHE_FIRST_HOSTS = [
@@ -17,9 +27,9 @@ const CACHE_FIRST_HOSTS = [
 ];
 
 const API_PATTERNS = [
+  "taiwan-dashboard-api-production.lucky851228.workers.dev",
   "url-expander.lucky851228.workers.dev",
-  "nominatim.openstreetmap.org",
-  "opendata.cwa.gov.tw"
+  "127.0.0.1"
 ];
 
 self.addEventListener("install", (event) => {
@@ -62,7 +72,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (API_PATTERNS.some((pattern) => url.hostname.includes(pattern))) {
-    event.respondWith(staleWhileRevalidate(request, RUNTIME_CACHE));
+    event.respondWith(apiNetworkOnly(request));
+    return;
+  }
+
+  if (/^\/(v2\/|route$|cam-list$|weather$)/.test(url.pathname)) {
+    event.respondWith(apiNetworkOnly(request));
   }
 });
 
@@ -92,18 +107,21 @@ async function networkFirst(request, cacheName) {
   }
 }
 
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-
-  const networkPromise = fetch(request)
-    .then((response) => {
-      if (response && response.ok) {
-        cache.put(request, response.clone());
+async function apiNetworkOnly(request) {
+  try {
+    return await fetch(request);
+  } catch (error) {
+    return new Response(JSON.stringify({
+      status: "error",
+      updatedAt: new Date().toISOString(),
+      data: null,
+      message: "目前處於離線狀態，即時路況與天氣無法更新。"
+    }), {
+      status: 503,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*"
       }
-      return response;
-    })
-    .catch(() => cached);
-
-  return cached || networkPromise;
+    });
+  }
 }

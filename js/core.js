@@ -5,12 +5,17 @@
 (function() {
   'use strict';
 
+  var workerOverride = '';
+  try {
+    workerOverride = new URLSearchParams(window.location.search).get('worker') || '';
+  } catch (err) {}
+
   window.Config = {
-    CWA_KEY: 'CWA-57962C34-72D2-446D-98D4-63B80BD8F9FB',
     MAP_CENTER: [23.9, 121.0],
     MAP_ZOOM: 7,
     ROUTE_FILTER_KM: 20.0,
     SIMPLIFY_STEP: 2,
+    WORKER_BASE: workerOverride.replace(/\/$/, '') || 'https://taiwan-dashboard-api-production.lucky851228.workers.dev',
     TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
@@ -27,8 +32,24 @@
     workerResult: null,
     lastRouteInfo: null,
     routeAllPoints: null,
+    routeInputValues: [],
+    activeRoute: null,
+    routeConditions: null,
+    routeReport: null,
     pendingWaypoints: [],
-    waypointMapMarkers: []
+    waypointMapMarkers: [],
+    updatedAt: {
+      cams: null,
+      weather: null,
+      route: null
+    },
+    dataStatus: {
+      cams: 'idle',
+      weather: 'idle',
+      geocode: 'idle',
+      route: 'idle',
+      conditions: 'idle'
+    }
   };
 
   // ===== 螢幕診斷工具 =====
@@ -59,7 +80,7 @@
       var html = Diag.logs.slice(-20).map(function(l) {
         var cls = l.level === 'err' ? 'diag-err' : (l.level === 'warn' ? 'diag-warn' : (l.level === 'info' ? 'diag-info' : ''));
         var icon = l.level === 'err' ? '❌' : (l.level === 'warn' ? '⚠️' : (l.level === 'ok' ? '✅' : '·'));
-        return '<div class="' + cls + '">' + icon + ' ' + l.msg + '</div>';
+        return '<div class="' + cls + '">' + icon + ' ' + escapeHtml(l.msg) + '</div>';
       }).join('');
       el.innerHTML = html;
     }
@@ -172,11 +193,34 @@
 
   window.fetchJson = function(url, options) {
     return fetch(url, options).then(function(response) {
-      if (!response.ok) {
-        throw new Error('HTTP ' + response.status);
-      }
-      return response.json();
+      return response.json().catch(function() { return null; }).then(function(payload) {
+        if (!response.ok) {
+          var error = new Error(payload && payload.message ? payload.message : ('HTTP ' + response.status));
+          error.status = response.status;
+          error.payload = payload;
+          throw error;
+        }
+        return payload;
+      });
     });
+  };
+
+  window.escapeHtml = function(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  window.safeHttpUrl = function(value) {
+    try {
+      var parsed = new URL(String(value || ''), window.location.href);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+    } catch (err) {
+      return '';
+    }
   };
 
   function toRad(d) { return d * Math.PI / 180; }
@@ -212,32 +256,130 @@
     return 'other';
   };
 
+  window.setDataStatus = function(key, status, updatedAt) {
+    if (!AppState.dataStatus) AppState.dataStatus = {};
+    AppState.dataStatus[key] = status;
+    if (updatedAt) {
+      if (!AppState.updatedAt) AppState.updatedAt = {};
+      AppState.updatedAt[key] = updatedAt;
+    }
+    if (window.Bus) Bus.emit('status:changed', {
+      key: key,
+      status: status,
+      updatedAt: updatedAt || null
+    });
+  };
+
+  window.getDataStatus = function(key) {
+    return AppState.dataStatus && AppState.dataStatus[key] ? AppState.dataStatus[key] : 'idle';
+  };
+
+  window.formatUpdatedAt = function(value) {
+    if (!value) return '--';
+    var date = typeof value === 'string' || typeof value === 'number' ? new Date(value) : value;
+    if (!(date instanceof Date) || isNaN(date.getTime())) return '--';
+    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+  };
+
+  window.getRoadCategoryLabel = function(cat) {
+    if (cat === 'highway') return '國道';
+    if (cat === 'expressway') return '快速道路';
+    if (cat === 'scenic') return '景點';
+    if (cat === 'city') return '市區';
+    return '省道';
+  };
+
+  window.normalizeSearchText = function(value) {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/臺/g, '台')
+      .replace(/台灣/g, '台')
+      .replace(/臺灣/g, '台')
+      .replace(/國道/g, '國')
+      .replace(/快速道路/g, '快')
+      .replace(/省道/g, '省')
+      .replace(/台9線/g, '台9')
+      .replace(/台11線/g, '台11')
+      .replace(/台61線/g, '台61')
+      .replace(/[縣市鄉鎮區路街道里村]/g, ' ')
+      .replace(/[_\-\/,，.。()（）]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  window.getSearchVariants = function(value) {
+    var base = String(value || '').trim();
+    if (!base) return [];
+    var set = {};
+    function add(v) {
+      if (!v) return;
+      set[v] = true;
+      set[normalizeSearchText(v)] = true;
+    }
+    add(base);
+    [
+      ['北宜', '北宜公路'],
+      ['蘇花', '蘇花公路'],
+      ['南迴', '南迴公路'],
+      ['北橫', '北橫公路'],
+      ['中橫', '中橫公路'],
+      ['南橫', '南橫公路'],
+      ['西濱', '西濱快速公路'],
+      ['花東縱谷', '花東縱谷'],
+      ['東海岸', '台11線']
+    ].forEach(function(alias) {
+      if (base.indexOf(alias[0]) !== -1) add(alias[1]);
+    });
+    add(base.replace(/臺/g, '台'));
+    add(base.replace(/台/g, '臺'));
+    add(base.replace(/台灣|臺灣/g, ''));
+    add(base.replace(/縣|市/g, ''));
+    add(base.replace(/國道/g, '國'));
+    add(base.replace(/快速道路/g, '快'));
+    add(base.replace(/省道/g, '省'));
+    return Object.keys(set).filter(Boolean);
+  };
+
   var _geocodeCache = {};
   window.geocodeName = function(name) {
     name = name.trim();
     if (_geocodeCache[name]) return Promise.resolve(_geocodeCache[name]);
-    var q = encodeURIComponent(name);
-    var url = 'https://nominatim.openstreetmap.org/search?q=' + q + '&format=json&limit=1&countrycodes=tw';
-    return fetchJson(url, { headers: { 'User-Agent': 'taiwan-road-dashboard/1.0' } })
-      .then(function(data) {
-        if (data && data.length > 0) {
-          var result = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-          _geocodeCache[name] = result;
-          Diag.ok('\u5730\u540d\u89e3\u6790: ' + name + ' \u2192 ' + result[0].toFixed(4) + ',' + result[1].toFixed(4));
-          return result;
-        }
-        Diag.err('\u5730\u540d\u89e3\u6790\u5931\u6557: ' + name);
-        Diag.show();
-        return null;
-      })
-      .catch(function() {
-        Diag.err('\u5730\u540d API \u932f\u8aa4: ' + name);
-        return null;
+    var variants = getSearchVariants(name).concat([name + ' 台灣', name + ' Taiwan']);
+    var tried = {};
+    var chain = Promise.resolve(null);
+
+    variants.forEach(function(variant) {
+      chain = chain.then(function(found) {
+        if (found || tried[variant]) return found;
+        tried[variant] = true;
+        return AppServices.searchPlaces(variant)
+          .then(function(payload) {
+            var data = payload.data || [];
+            if (data.length > 0) {
+              var result = [parseFloat(data[0].lat), parseFloat(data[0].lng)];
+              _geocodeCache[name] = result;
+              Diag.ok('\u5730\u540d\u89e3\u6790: ' + name + ' \u2192 ' + result[0].toFixed(4) + ',' + result[1].toFixed(4));
+              return result;
+            }
+            return null;
+          })
+          .catch(function() { return null; });
       });
+    });
+
+    return chain.then(function(result) {
+      if (result) return result;
+      Diag.err('\u5730\u540d\u89e3\u6790\u5931\u6557: ' + name);
+      Diag.show();
+      return null;
+    }).catch(function() {
+      Diag.err('\u5730\u540d API \u932f\u8aa4: ' + name);
+      return null;
+    });
   };
 
   window.parseRouteStartEnd = function(url) {
-    var result = { start: '', end: '' };
+    var result = { start: '', end: '', waypoints: [] };
     var dirMatch = url.match(/\/dir\/([^@?#]+)/);
     if (dirMatch) {
       var rawParts = dirMatch[1].split('/');
@@ -252,6 +394,7 @@
       if (parts.length >= 2) {
         result.start = parts[0];
         result.end   = parts[parts.length - 1];
+        result.waypoints = parts.slice(1, -1);
       } else if (parts.length === 1) {
         result.end = parts[0];
       }
@@ -268,7 +411,8 @@
         }
         if (pairs.length >= 2) {
           if (!result.start) result.start = pairs[0];
-          if (!result.end)   result.end   = pairs[1];
+          if (!result.end) result.end = pairs[pairs.length - 1];
+          if (!result.waypoints.length && pairs.length > 2) result.waypoints = pairs.slice(1, -1);
         } else if (pairs.length === 1 && !result.end) {
           result.end = pairs[0];
         }
@@ -310,7 +454,7 @@
     if (text.indexOf('google.com/maps/dir') !== -1) {
       var result = parseRouteStartEnd(text);
       if (result && (result.start || result.end)) {
-        onFill(result.start || '', result.end || '');
+        onFill(result.start || '', result.end || '', result.waypoints || []);
         return true;
       }
     }
@@ -324,7 +468,7 @@
         }
         var r = parseRouteStartEnd(fullUrl);
         if (r && (r.start || r.end)) {
-          onFill(r.start || '', r.end || '');
+          onFill(r.start || '', r.end || '', r.waypoints || []);
           return;
         }
         var appleRoute = parseAppleMapsRoute(fullUrl);
@@ -334,7 +478,11 @@
         }
         var coords = parseGoogleMapsCoords(fullUrl);
         if (coords.length >= 2) {
-          onFill(coords[0][0]+','+coords[0][1], coords[coords.length-1][0]+','+coords[coords.length-1][1]);
+          onFill(
+            coords[0][0]+','+coords[0][1],
+            coords[coords.length-1][0]+','+coords[coords.length-1][1],
+            coords.slice(1, -1).map(function(point) { return point[0] + ',' + point[1]; })
+          );
           return;
         }
         var mAt = fullUrl.match(/@(-?[0-9]+\.[0-9]+),(-?[0-9]+\.[0-9]+)/);
@@ -395,19 +543,11 @@
   };
 
   window.getRoadRoute = function(startLatLng, endLatLng, mode) {
-    var ROUTE_PROXY = 'https://url-expander.lucky851228.workers.dev/route';
     Diag.info('路線查詢: ' + startLatLng[0].toFixed(4) + ',' + startLatLng[1].toFixed(4) + ' → ' + endLatLng[0].toFixed(4) + ',' + endLatLng[1].toFixed(4));
 
-    return fetchJson(ROUTE_PROXY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        startLat: startLatLng[0], startLng: startLatLng[1],
-        endLat:   endLatLng[0],   endLng:   endLatLng[1],
-        mode:     mode
-      })
-    })
-    .then(function(data) {
+    return AppServices.parseRoute(startLatLng, endLatLng, mode)
+    .then(function(payload) {
+      var data = payload.data || {};
       Diag.add('Worker /route HTTP 200', 'ok');
       return data;
     })
@@ -465,12 +605,9 @@
   }
 
   window.expandGoogleUrl = function(url) {
-    if (url.indexOf('maps.app.goo.gl') === -1 && url.indexOf('goo.gl') === -1) {
-      return Promise.resolve(url);
-    }
-    var workerUrl = 'https://url-expander.lucky851228.workers.dev/?url=' + encodeURIComponent(url);
-    return fetchJson(workerUrl)
-      .then(function(data) {
+    return AppServices.expandShortUrl(url)
+      .then(function(payload) {
+        var data = payload.data || {};
         if (data.start !== undefined || data.end) {
           AppState.workerResult = {
             start:     data.start     || '',
