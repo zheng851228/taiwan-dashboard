@@ -273,6 +273,7 @@
 
     renderAlerts(sections);
     renderTimeline(sections);
+    setNavigationLinks();
     renderAppleLegs(false);
     MapMod.drawConditionSections(sections);
     MapMod.drawStartEnd(AppState.routeAllPoints);
@@ -282,6 +283,8 @@
   function load(route, forceRefresh) {
     currentRoute = route || currentRoute;
     if (!currentRoute || !currentRoute.routeId) return;
+    setNavigationLinks();
+    renderAppleLegs(false);
     if (window.RouteStripMod) RouteStripMod.hide();
     showLoading();
     AppServices.loadRouteConditions(currentRoute.routeId, !!forceRefresh)
@@ -311,9 +314,7 @@
     });
   }
 
-  function openGoogleMaps() {
-    var points = routePoints();
-    if (points.length < 2) return;
+  function googleUrl(points) {
     var params = new URLSearchParams({
       api: '1',
       origin: points[0],
@@ -323,12 +324,34 @@
     });
     if (points.length > 2) params.set('waypoints', points.slice(1, -1).join('|'));
     if (RouteMod.mode === 'motorcycle' && RouteMod.plate === 'white') params.set('avoid', 'highways,tolls');
-    window.open('https://www.google.com/maps/dir/?' + params.toString(), '_blank', 'noopener');
+    return 'https://www.google.com/maps/dir/?' + params.toString();
   }
 
   function appleUrl(from, to) {
     var params = new URLSearchParams({ saddr: from, daddr: to, dirflg: 'd' });
     return 'https://maps.apple.com/?' + params.toString();
+  }
+
+  function updateNavigationLink(link, href, enabled) {
+    if (!link) return;
+    link.href = enabled ? href : '#';
+    link.setAttribute('aria-disabled', String(!enabled));
+    link.classList.toggle('is-disabled', !enabled);
+  }
+
+  function setNavigationLinks() {
+    var points = routePoints();
+    var enabled = points.length >= 2;
+    updateNavigationLink(
+      Dom.byId('nav-google'),
+      enabled ? googleUrl(points) : '#',
+      enabled
+    );
+    updateNavigationLink(
+      Dom.byId('nav-apple'),
+      enabled ? appleUrl(points[0], points[1]) : '#',
+      enabled
+    );
   }
 
   function renderAppleLegs(reveal) {
@@ -355,13 +378,20 @@
     wrap.appendChild(buttons);
   }
 
-  function openAppleMaps() {
+  function guardNavigationLink(event) {
+    if (event.currentTarget.getAttribute('aria-disabled') === 'true') {
+      event.preventDefault();
+    }
+  }
+
+  function openAppleMaps(event) {
     var points = routePoints();
-    if (points.length < 2) return;
-    if (points.length === 2) {
-      window.open(appleUrl(points[0], points[1]), '_blank', 'noopener');
+    if (points.length < 2) {
+      event.preventDefault();
       return;
     }
+    if (points.length === 2) return;
+    event.preventDefault();
     renderAppleLegs(true);
     Toast.show('Apple Maps \u8acb\u4f9d\u9806\u5e8f\u958b\u555f\u5404\u6bb5\u8def\u7dda', 4000);
   }
@@ -381,6 +411,7 @@
   function clear() {
     currentRoute = null;
     lastRefreshAt = 0;
+    setNavigationLinks();
     var panel = Dom.byId('route-conditions-panel');
     if (panel) panel.classList.add('hidden');
     AppState.routeConditions = null;
@@ -390,7 +421,7 @@
     Dom.onId('condition-refresh', 'click', refresh);
     Dom.onId('condition-retry', 'click', refresh);
     Dom.onId('condition-toggle', 'click', toggleCollapsed);
-    Dom.onId('nav-google', 'click', openGoogleMaps);
+    Dom.onId('nav-google', 'click', guardNavigationLink);
     Dom.onId('nav-apple', 'click', openAppleMaps);
     Bus.on('condition:select', focusSection);
     autoTimer = window.setInterval(function() {

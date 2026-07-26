@@ -903,12 +903,18 @@ body.light .route-text-input {
   margin: 8px 0 11px;
 }
 .condition-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 38px;
   border-radius: 14px;
   color: #fff;
   font-size: 10px;
   font-weight: 900;
+  text-decoration: none;
 }
+.condition-nav-btn.is-disabled { pointer-events: none; opacity: 0.5; }
 .condition-nav-btn.google { background: linear-gradient(135deg, #16a34a, #15803d); }
 .condition-nav-btn.apple { background: linear-gradient(135deg, #334155, #0f172a); border: 1px solid rgba(255,255,255,0.1); }
 .apple-leg-links {

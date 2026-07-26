@@ -62,17 +62,25 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
   expect(route.locations).toHaveLength(3);
   expect(route.distanceKm).toBeGreaterThan(40);
 
-  await page.evaluate(() => {
-    window.__openedUrls = [];
-    window.open = (url) => { window.__openedUrls.push(String(url)); };
-  });
-  await page.locator('#nav-google').click();
-  const googleUrl = await page.evaluate(() => window.__openedUrls[0]);
+  const googleLink = page.locator('#nav-google');
+  await expect(googleLink).toHaveAttribute('target', '_blank');
+  await expect(googleLink).toHaveAttribute('rel', /noopener/);
+  await expect(googleLink).toHaveAttribute('aria-disabled', 'false');
+  const googleUrl = await googleLink.getAttribute('href');
   const googleParams = new URL(googleUrl).searchParams;
+  expect(googleParams.get('api')).toBe('1');
+  expect(googleParams.get('dir_action')).toBe('navigate');
   expect(googleParams.get('travelmode')).toBe('two-wheeler');
   expect(googleParams.get('waypoints')).toBe('24.950000,121.620000');
 
-  await page.locator('#nav-apple').click();
+  const appleLink = page.locator('#nav-apple');
+  await expect(appleLink).toHaveAttribute('target', '_blank');
+  await expect(appleLink).toHaveAttribute('rel', /noopener/);
+  await expect(appleLink).toHaveAttribute(
+    'href',
+    /saddr=25\.047800%2C121\.517000&daddr=24\.950000%2C121\.620000/
+  );
+  await appleLink.click();
   await expect(page.locator('.apple-leg-button')).toHaveCount(2);
   await expect(page.locator('.apple-leg-button').first()).toHaveAttribute(
     'href',

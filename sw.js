@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `twdash-runtime-${CACHE_VERSION}`;
 
