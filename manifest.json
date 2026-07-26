@@ -2,11 +2,35 @@
   "name": "環島路況指揮中心",
   "short_name": "路況指揮",
   "description": "依機車牌照驗證路線，整合沿途官方交通、氣象與 CCTV 現場畫面的出發前助手。",
+  "id": "./",
   "lang": "zh-TW",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "background_color": "#060d1f",
-  "theme_color": "#f97316"
+  "theme_color": "#f97316",
+  "categories": ["navigation", "travel", "utilities"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
