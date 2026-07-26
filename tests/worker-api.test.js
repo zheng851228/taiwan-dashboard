@@ -128,8 +128,10 @@ describe('Worker v2 fixture API', () => {
   it('keeps live conditions partial when an optional upstream source is unavailable', async () => {
     const shape = encodePolyline6([[25.0478, 121.517], [25.02, 121.55], [24.99, 121.58]]);
     const observedAt = new Date().toISOString();
+    const upstreamUrls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       const value = String(url);
+      upstreamUrls.push(value);
       if (value.endsWith('/route')) {
         return new Response(JSON.stringify({
           trip: {
@@ -199,6 +201,12 @@ describe('Worker v2 fixture API', () => {
             headers: { 'Content-Type': 'application/json' }
           });
         }
+        if (value.includes('/Traffic/RoadEvent/Event/Highway')) {
+          return new Response(JSON.stringify({ Events: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
         if (value.includes('/section/sectioninfo/SectionList.xml')) {
           return new Response(`
             <SectionList><Sections><Section><SectionID>section-1</SectionID>
@@ -264,6 +272,10 @@ describe('Worker v2 fixture API', () => {
         method: 'published-section',
         source: 'THB'
       });
+      expect(upstreamUrls.find((url) => url.includes('/Traffic/RoadEvent/LiveEvent/Highway')))
+        .toContain('$top=1000');
+      expect(upstreamUrls.find((url) => url.includes('/Traffic/RoadEvent/Event/Highway')))
+        .toContain('$top=1000');
     });
 });
 
@@ -366,6 +378,40 @@ describe('conditions cache freshness', () => {
         sections: [{
           traffic: { level: 'unknown', observedAt: null },
           weather: { condition: '未知', observedAt: null }
+        }]
+      }),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(false);
+  });
+
+  it('refreshes when a scheduled event becomes active', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope({
+        sections: [{
+          traffic: { level: 'unknown', observedAt: null },
+          weather: { condition: '未知', observedAt: null },
+          incidents: [{
+            id: 'scheduled-work',
+            status: 'scheduled',
+            effectiveAt: '2026-07-27T04:00:00.000Z'
+          }]
+        }]
+      }),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(false);
+  });
+
+  it('does not serve a cached event after its expiry time', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope({
+        sections: [{
+          traffic: { level: 'unknown', observedAt: null },
+          weather: { condition: '未知', observedAt: null },
+          incidents: [{
+            id: 'expired-work',
+            status: 'active',
+            expiresAt: '2026-07-27T04:00:00.000Z'
+          }]
         }]
       }),
       new Date('2026-07-27T04:00:00.000Z')

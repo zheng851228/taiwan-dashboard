@@ -206,6 +206,47 @@ describe('KV provider snapshot contract', () => {
     expect(result.publishedTraffic[0].geometry).toEqual(published.geometry);
   });
 
+  it('preserves road event type, impact, timing, and restriction metadata', async () => {
+    const incident = {
+      id: 'event-closure',
+      title: '道路施工',
+      description: '施工期間全線封閉',
+      severity: 2,
+      severityCode: 2,
+      kind: 'construction',
+      impact: 'full_closure',
+      typeCode: 2,
+      subtypeCode: 207,
+      roadRef: '台9',
+      lat: 25.0001,
+      lng: 121.0001,
+      effectiveAt: '2026-07-27T03:00:00.000Z',
+      updatedAt: '2026-07-27T03:50:00.000Z',
+      expiresAt: '2026-07-27T06:00:00.000Z',
+      regulationCodes: [1],
+      blockWay: 2,
+      blockedLanes: '全線',
+      impactDescription: '雙向完全阻斷',
+      source: 'TDX'
+    };
+    const document = buildProviderSnapshotDocument({
+      detectors: [],
+      publishedTraffic: [],
+      incidents: [incident],
+      weather: [],
+      cameras: []
+    }, { generatedAt: '2026-07-27T03:55:00.000Z' });
+    const kv = createKv({}, packProviderSnapshot(document));
+
+    const result = await loadSnapshotProviderData(
+      ROUTE_SECTIONS,
+      { ROUTE_CACHE: kv },
+      { now: NOW, maxAgeMs: MAX_AGE_MS }
+    );
+
+    expect(result.incidents).toEqual([incident]);
+  });
+
   it('restores published geometry fragments in their original route order', async () => {
     const geometry = [
       [25.0001, 121.0901],

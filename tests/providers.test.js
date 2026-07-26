@@ -471,10 +471,16 @@ describe('TDX road-event normalization', () => {
         EventID: 'event-1',
         EventTitle: '道路施工',
         Description: '外側車道施工',
+        EventType: 2,
+        EventSubType: 207,
+        EffectiveTime: '2026-07-23T00:00:00+08:00',
         Positions: 'POINT (120.7055929 24.2005723)',
         Location: { FreeExpressHighway: { Road: '台74' } },
         Impact: {
           Severity: 1,
+          Regulations: [2],
+          BlockWay: 1,
+          BlockedLanes: '外側車道',
           Duration: { DurationEndTime: '2026-07-23T02:00:00+08:00' }
         },
         LastUpdateTime: '2026-07-23T00:15:01+08:00'
@@ -488,9 +494,52 @@ describe('TDX road-event normalization', () => {
       lat: 24.2005723,
       lng: 120.7055929,
       severity: 1,
+      severityCode: 1,
+      typeCode: 2,
+      subtypeCode: 207,
+      kind: 'construction',
+      impact: 'lane_closure',
+      effectiveAt: '2026-07-23T00:00:00+08:00',
+      regulationCodes: [2],
+      blockWay: 1,
+      blockedLanes: '外側車道',
       updatedAt: '2026-07-23T00:15:01+08:00',
       expiresAt: '2026-07-23T02:00:00+08:00',
       source: 'TDX'
+    });
+  });
+
+  it('accepts the scheduled Events wrapper while preserving the legacy severity field', () => {
+    const incidents = normalizeTdxIncidents({
+      Events: [
+        {
+          EventID: 'scheduled-1',
+          EventTitle: '預告施工',
+          EventType: 2,
+          Severity: 'warning',
+          EffectiveTime: '2026-07-28T20:00:00+08:00',
+          Location: { FreeExpressHighway: { Road: '台9' } }
+        },
+        {
+          EventID: 'scheduled-2',
+          EventTitle: '預告活動',
+          EventType: 7,
+          Location: { FreeExpressHighway: { Road: '台9' } }
+        }
+      ]
+    });
+
+    expect(incidents[0]).toMatchObject({
+      id: 'scheduled-1',
+      severity: 'warning',
+      severityCode: null,
+      kind: 'construction'
+    });
+    expect(incidents[1]).toMatchObject({
+      id: 'scheduled-2',
+      severity: 'warning',
+      severityCode: null,
+      kind: 'activity'
     });
   });
 });

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assignRoadEvents,
+  buildOverall,
   classifyTraffic,
   compactGeometry,
   createRouteSections,
@@ -171,6 +173,147 @@ describe('route segmentation', () => {
     expect(compacted).toHaveLength(96);
     expect(compacted[0]).toEqual(geometry[0]);
     expect(compacted.at(-1)).toEqual(geometry.at(-1));
+  });
+});
+
+describe('road event assignment', () => {
+  const sections = [
+    {
+      order: 1,
+      roadRef: '台9',
+      sample: [24.95, 121.5],
+      geometry: [[25, 121.5], [24.9, 121.5]]
+    },
+    {
+      order: 2,
+      roadRef: '台9',
+      sample: [24.8, 121.5],
+      geometry: [[24.9, 121.5], [24.7, 121.5]]
+    }
+  ];
+
+  it('matches an event near the start of a long section using the complete geometry', () => {
+    const assignments = assignRoadEvents(sections, [{
+      id: 'work-1',
+      title: '施工',
+      typeCode: 2,
+      severityCode: 1,
+      regulationCodes: [2],
+      roadRef: '台9線',
+      lat: 24.999,
+      lng: 121.5,
+      effectiveAt: '2026-07-27T03:00:00.000Z',
+      expiresAt: '2026-07-27T05:00:00.000Z',
+      source: 'TDX'
+    }], new Date('2026-07-27T04:00:00.000Z'));
+
+    expect(assignments.get(1)).toHaveLength(1);
+    expect(assignments.get(1)[0]).toMatchObject({
+      kind: 'construction',
+      impact: 'lane_closure',
+      status: 'active'
+    });
+    expect(assignments.get(2)).toEqual([]);
+  });
+
+  it('shows near-term scheduled work but excludes distant and expired events', () => {
+    const assignments = assignRoadEvents(sections, [
+      {
+        id: 'scheduled-near',
+        title: '預定施工',
+        typeCode: 2,
+        roadRef: '台9',
+        lat: 24.95,
+        lng: 121.5,
+        effectiveAt: '2026-07-29T04:00:00.000Z'
+      },
+      {
+        id: 'scheduled-far',
+        title: '遠期施工',
+        typeCode: 2,
+        roadRef: '台9',
+        lat: 24.95,
+        lng: 121.5,
+        effectiveAt: '2026-08-10T04:00:00.000Z'
+      },
+      {
+        id: 'expired',
+        title: '已結束施工',
+        typeCode: 2,
+        roadRef: '台9',
+        lat: 24.95,
+        lng: 121.5,
+        expiresAt: '2026-07-27T03:59:59.000Z'
+      }
+    ], new Date('2026-07-27T04:00:00.000Z'));
+
+    expect(assignments.get(1).map((event) => event.id)).toEqual(['scheduled-near']);
+    expect(assignments.get(1)[0].status).toBe('scheduled');
+  });
+
+  it('attaches a coordinate-free same-road event once and marks the location approximate', () => {
+    const assignments = assignRoadEvents(sections, [{
+      id: 'no-point',
+      title: '台9線施工',
+      typeCode: 2,
+      roadRef: '台9'
+    }], NOW);
+
+    expect(assignments.get(1)[0]).toMatchObject({
+      id: 'no-point',
+      locationApproximate: true
+    });
+    expect(assignments.get(2)).toEqual([]);
+  });
+
+  it('reports unique events separately from affected sections', () => {
+    const shared = {
+      id: 'same-event',
+      kind: 'construction',
+      impact: 'full_closure',
+      status: 'active',
+      lat: 24.95,
+      lng: 121.5
+    };
+    const scheduled = {
+      id: 'scheduled-closure',
+      kind: 'construction',
+      impact: 'full_closure',
+      status: 'scheduled',
+      lat: 24.9,
+      lng: 121.5
+    };
+    const section = (incidents) => ({
+      traffic: { level: 'unknown' },
+      weather: { condition: '未知' },
+      incidents
+    });
+    const overall = buildOverall([section([shared]), section([shared, scheduled])]);
+
+    expect(overall.incidentCount).toBe(2);
+    expect(overall.affectedIncidentSections).toBe(2);
+    expect(overall.incidentCounts).toEqual({ construction: 2 });
+    expect(overall.fullClosureCount).toBe(2);
+    expect(overall.activeFullClosureCount).toBe(1);
+    expect(overall.scheduledFullClosureCount).toBe(1);
+  });
+
+  it('counts a coordinate-free warning without claiming an affected section', () => {
+    const overall = buildOverall([{
+      traffic: { level: 'unknown' },
+      weather: { condition: '未知' },
+      incidents: [{
+        id: 'road-level-only',
+        kind: 'construction',
+        impact: 'unknown',
+        status: 'unknown',
+        locationApproximate: true
+      }]
+    }]);
+
+    expect(overall.incidentCount).toBe(1);
+    expect(overall.affectedIncidentSections).toBe(0);
+    expect(overall.roadLevelIncidentCount).toBe(1);
   });
 });
 

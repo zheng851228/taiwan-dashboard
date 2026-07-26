@@ -1,4 +1,5 @@
 import { encodePolyline6, haversineKm, mergeLegShapes } from './polyline.js';
+import { classifyRoadEvent } from './road-events.js';
 import { validateRouteEdges } from './rules.js';
 import {
   buildProviderSnapshotDocument,
@@ -30,7 +31,8 @@ const TDX_TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/proto
 const DEFAULT_TDX_CONFIG_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/VD/Highway?$format=JSON';
 const DEFAULT_TDX_LIVE_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Live/VD/Highway?$format=JSON';
 const DEFAULT_TDX_SECTION_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Section/Highway?$format=JSON';
-const DEFAULT_TDX_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Highway?$format=JSON';
+const DEFAULT_TDX_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Highway?$top=1000&$format=JSON';
+const DEFAULT_TDX_SCHEDULED_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/Event/Highway?$top=1000&$format=JSON';
 const DEFAULT_THB_SECTION_URL = 'https://thbapp.thb.gov.tw/opendata/section/sectioninfo/SectionList.xml';
 const DEFAULT_THB_SECTION_SHAPE_URL = 'https://thbapp.thb.gov.tw/opendata/section/sectionshapeinfo/SectionShapeList.xml';
 const DEFAULT_THB_LIVE_TRAFFIC_URL = 'https://thbapp.thb.gov.tw/opendata/section/livetrafficdata/LiveTrafficList.xml';
@@ -543,10 +545,12 @@ async function loadTdxData(env) {
   const headers = { Authorization: `Bearer ${token}` };
   const liveUrl = env.TDX_VD_LIVE_ENDPOINT || DEFAULT_TDX_LIVE_URL;
   const incidentUrl = env.TDX_INCIDENT_ENDPOINT || DEFAULT_TDX_INCIDENT_URL;
-  const [staticResponse, liveResponse, incidentResponse] = await Promise.allSettled([
+  const scheduledIncidentUrl = env.TDX_SCHEDULED_INCIDENT_ENDPOINT || DEFAULT_TDX_SCHEDULED_INCIDENT_URL;
+  const [staticResponse, liveResponse, incidentResponse, scheduledIncidentResponse] = await Promise.allSettled([
     loadTdxStaticData(env, headers),
     requestJsonCached(liveUrl, { headers }, 15000, TDX_LIVE_TTL_MS),
-    requestJsonCached(incidentUrl, { headers }, 15000, TDX_LIVE_TTL_MS)
+    requestJsonCached(incidentUrl, { headers }, 15000, TDX_LIVE_TTL_MS),
+    requestJsonCached(scheduledIncidentUrl, { headers }, 15000, TDX_LIVE_TTL_MS)
   ]);
   const issues = staticResponse.status === 'fulfilled'
     ? [...staticResponse.value.issues]
@@ -557,13 +561,32 @@ async function loadTdxData(env) {
   if (incidentResponse.status !== 'fulfilled') {
     issues.push(`road events unavailable: ${resultError(incidentResponse)}`);
   }
+  if (scheduledIncidentResponse.status !== 'fulfilled') {
+    issues.push(`scheduled road events unavailable: ${resultError(scheduledIncidentResponse)}`);
+  }
+  const incidents = dedupeRoadEvents([
+    ...(incidentResponse.status === 'fulfilled' ? normalizeTdxIncidents(incidentResponse.value) : []),
+    ...(scheduledIncidentResponse.status === 'fulfilled'
+      ? normalizeTdxIncidents(scheduledIncidentResponse.value)
+      : [])
+  ]);
   return {
     config: staticResponse.status === 'fulfilled' ? staticResponse.value.config : null,
     sections: staticResponse.status === 'fulfilled' ? staticResponse.value.sections : null,
     live: liveResponse.status === 'fulfilled' ? liveResponse.value : null,
-    incidents: incidentResponse.status === 'fulfilled' ? normalizeTdxIncidents(incidentResponse.value) : [],
+    incidents,
     issues
   };
+}
+
+function dedupeRoadEvents(events) {
+  const unique = new Map();
+  for (const event of events || []) {
+    const identity = event.id
+      || `${event.title}:${event.roadRef}:${event.effectiveAt || event.updatedAt || ''}`;
+    if (!unique.has(identity)) unique.set(identity, event);
+  }
+  return [...unique.values()];
 }
 
 async function loadTdxStaticData(env, headers) {
@@ -987,23 +1010,45 @@ function directionDegrees(value) {
 
 export function normalizeTdxIncidents(payload) {
   const payloadUpdatedAt = payload?.UpdateTime || payload?.SrcUpdateTime || null;
-  return arrayFromPayload(payload, ['LiveEvents', 'Incidents', 'RoadIncidents']).map((item) => {
+  return arrayFromPayload(payload, ['LiveEvents', 'Events', 'Incidents', 'RoadIncidents']).map((item) => {
     const point = parseWktPoint(item.Positions || item.Geometry);
     const roadLocation = item.Location?.FreeExpressHighway || {};
     const impact = item.Impact || {};
-    return {
+    const typeCode = optionalInteger(item.EventType);
+    const subtypeCode = optionalInteger(item.EventSubType);
+    const severity = impact.Severity ?? item.Severity ?? 'warning';
+    const severityCode = optionalInteger(severity);
+    const regulationCodes = (Array.isArray(impact.Regulations) ? impact.Regulations : [])
+      .map(optionalInteger)
+      .filter(Number.isFinite);
+    const normalized = {
       id: item.IncidentID || item.EventID || item.id,
       title: item.EventTitle || item.IncidentType || item.Title || '道路事件',
       description: item.Description || item.Comment || '',
-      severity: impact.Severity ?? item.Severity ?? 'warning',
+      severity,
+      severityCode,
+      typeCode,
+      subtypeCode,
       roadRef: roadLocation.Road || item.RoadName || item.RoadID || '',
       lat: numeric(item.PositionLat, item.Position?.PositionLat, item.lat, point?.lat),
       lng: numeric(item.PositionLon, item.Position?.PositionLon, item.lng, point?.lng),
+      effectiveAt: item.EffectiveTime || impact.Duration?.DurationStartTime || item.StartTime || null,
       updatedAt: item.LastUpdateTime || item.UpdateTime || item.PublishTime || payloadUpdatedAt,
       expiresAt: item.ExpireTime || impact.Duration?.DurationEndTime || item.EndTime || null,
+      regulationCodes,
+      blockWay: optionalInteger(impact.BlockWay),
+      blockedLanes: impact.BlockedLanes || '',
+      impactDescription: impact.Description || '',
       source: 'TDX'
     };
+    return { ...normalized, ...classifyRoadEvent(normalized) };
   });
+}
+
+function optionalInteger(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const result = Number(value);
+  return Number.isFinite(result) ? Math.trunc(result) : null;
 }
 
 function parseWktPoint(value) {

@@ -454,7 +454,9 @@ function compactProviderCell(cell) {
     ]),
     i: (cell.incidents || []).map((item) => [
       item.id, item.title, item.description, item.severity, item.roadRef,
-      item.lat, item.lng, item.updatedAt, item.expiresAt
+      item.lat, item.lng, item.updatedAt, item.expiresAt, item.kind, item.impact,
+      item.effectiveAt, item.severityCode, item.typeCode, item.subtypeCode,
+      item.regulationCodes, item.blockWay, item.blockedLanes, item.impactDescription
     ]),
     w: (cell.weather || []).map((item) => [
       item.lat, item.lng, item.condition, item.temperatureC, item.rainChance,
@@ -506,6 +508,16 @@ function expandProviderCell(cell) {
       lng: item[6],
       updatedAt: item[7],
       expiresAt: item[8],
+      kind: item[9],
+      impact: item[10],
+      effectiveAt: item[11],
+      severityCode: item[12],
+      typeCode: item[13],
+      subtypeCode: item[14],
+      regulationCodes: item[15],
+      blockWay: item[16],
+      blockedLanes: item[17],
+      impactDescription: item[18],
       source: 'TDX'
     })),
     weather: cell.w.map((item) => ({

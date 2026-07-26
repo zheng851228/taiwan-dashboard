@@ -18,6 +18,7 @@ node --check js/pwa.js
 node --check sw.js
 node --check worker/src/polyline.js
 node --check worker/src/rules.js
+node --check worker/src/road-events.js
 node --check worker/src/conditions.js
 node --check worker/src/provider-snapshot.js
 node --check worker/src/providers.js

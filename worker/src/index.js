@@ -5,6 +5,7 @@ import {
   fuseConditions,
   isFresh
 } from './conditions.js';
+import { roadEventState } from './road-events.js';
 import {
   buildFixtureCameras,
   buildFixtureCountyWeather,
@@ -259,7 +260,12 @@ export function isCachedConditionsFresh(cachedEnvelope, now = new Date()) {
       || isFresh(section.traffic?.observedAt, 10, now);
     const weatherFresh = section.weather?.condition === '未知'
       || isFresh(section.weather?.observedAt, 90, now);
-    return trafficFresh && weatherFresh;
+    const incidentsFresh = (section.incidents || []).every((incident) => {
+      const currentState = roadEventState(incident, now);
+      return currentState !== 'expired'
+        && !(incident.status === 'scheduled' && currentState === 'active');
+    });
+    return trafficFresh && weatherFresh && incidentsFresh;
   });
 }
 
@@ -306,7 +312,13 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
       && previous.incidents?.length
       && isFresh(cacheUpdatedAt, 10, now)
     ) {
-      next.incidents = previous.incidents.map((incident) => ({ ...incident, lastKnown: true }));
+      next.incidents = previous.incidents
+        .filter((incident) => roadEventState(incident, now) !== 'expired')
+        .map((incident) => ({
+          ...incident,
+          status: roadEventState(incident, now),
+          lastKnown: true
+        }));
     }
     if (
       failedSources.has('CCTV')

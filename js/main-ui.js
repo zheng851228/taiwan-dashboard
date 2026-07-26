@@ -23,6 +23,25 @@
   var RIDE_ROUTE_CHIPS = [
     '北宜公路', '台61線', '蘇花公路', '南迴公路', '台14甲', '北橫公路', '182縣道', '淡金公路'
   ];
+  var ROAD_EVENT_MAP_COLORS = {
+    full_closure: '#ef4444',
+    lane_closure: '#f43f5e',
+    controlled: '#8b5cf6',
+    shoulder: '#eab308',
+    no_impact: '#22c55e',
+    unknown: '#f97316'
+  };
+  var ROAD_EVENT_KIND_MAP_COLORS = {
+    accident: '#fb7185',
+    construction: '#f59e0b',
+    congestion: '#ef4444',
+    control: '#8b5cf6',
+    weather: '#0ea5e9',
+    disaster: '#dc2626',
+    activity: '#06b6d4',
+    hazard: '#f97316',
+    other: '#64748b'
+  };
 
   function setFlexVisible(el, isVisible) {
     if (!el) return;
@@ -88,7 +107,7 @@
 
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
-    routeSectionLayers: [], routeWeatherMarkers: [],
+    routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [],
     startEndMarkers: [], _canvas: null, _camData: [], _markerSignature: '',
     init: function() {
       MapMod.map = L.map('map', {
@@ -201,9 +220,61 @@
         line.on('click', function() { Bus.emit('condition:select', section.order); });
         MapMod.routeSectionLayers.push(glow, line);
 
+        var locatedIncidents = (section.incidents || []).filter(function(incident) {
+          return !incident.locationApproximate
+            && incident.lat !== null && incident.lat !== undefined && incident.lat !== ''
+            && incident.lng !== null && incident.lng !== undefined && incident.lng !== ''
+            && Number.isFinite(Number(incident.lat)) && Number.isFinite(Number(incident.lng));
+        });
+        var primaryEvent = window.getPrimaryRoadEvent
+          ? window.getPrimaryRoadEvent(locatedIncidents)
+          : null;
+        if (primaryEvent) {
+          var eventView = primaryEvent.presentation;
+          var eventColor = eventView.impact === 'unknown'
+            ? (ROAD_EVENT_KIND_MAP_COLORS[eventView.kind] || ROAD_EVENT_MAP_COLORS.unknown)
+            : (ROAD_EVENT_MAP_COLORS[eventView.impact] || ROAD_EVENT_MAP_COLORS.unknown);
+          var eventLine = L.polyline(latlngs, {
+            color: eventColor,
+            weight: eventView.impact === 'full_closure' ? 5 : 4,
+            opacity: eventView.status === 'scheduled' ? 0.68 : 0.98,
+            dashArray: eventView.status === 'scheduled' ? '3 8' : '10 7',
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(MapMod.map);
+          eventLine._conditionOrder = section.order;
+          eventLine.on('click', function() { Bus.emit('condition:select', section.order); });
+          MapMod.routeSectionLayers.push(eventLine);
+
+          var incident = primaryEvent.incident || {};
+          var incidentPoint = [Number(incident.lat), Number(incident.lng)];
+          var eventCount = locatedIncidents.length;
+          var eventLabel = (section.roadRef || section.roadName || '沿途路段') + ' ' + eventView.label;
+          var eventIcon = L.divIcon({
+            className: 'route-incident-marker',
+            html: '<div class="route-incident-pin road-event-' + eventView.kind
+              + ' road-impact-' + eventView.impact
+              + (eventView.status === 'scheduled' ? ' is-scheduled' : '')
+              + '" aria-label="' + escapeHtml(eventLabel) + '"><i class="fa-solid '
+              + eventView.icon + '"></i>' + (eventCount > 1 ? '<span>' + eventCount + '</span>' : '') + '</div>',
+            iconSize: [eventCount > 1 ? 42 : 30, 30],
+            iconAnchor: [eventCount > 1 ? 21 : 15, 15]
+          });
+          var eventMarker = L.marker(incidentPoint, {
+            icon: eventIcon,
+            zIndexOffset: 7600,
+            title: eventLabel,
+            alt: eventLabel,
+            keyboard: true
+          }).addTo(MapMod.map);
+          eventMarker.on('click', function() { Bus.emit('condition:select', section.order); });
+          eventMarker.bindTooltip(escapeHtml(eventLabel), { direction: 'top', offset: [0, -16] });
+          MapMod.routeIncidentMarkers.push(eventMarker);
+        }
+
         var weather = section.weather || {};
         if ((weather.condition || '').indexOf('雨') !== -1 || Number(weather.rainChance) >= 60) {
-          var middle = latlngs[Math.floor(latlngs.length / 2)];
+          var middle = latlngs[Math.floor(latlngs.length * 0.62)];
           var icon = L.divIcon({
             className: 'route-weather-marker',
             html: '<div class="route-weather-pin" aria-label="降雨提醒"><i class="fa-solid fa-cloud-rain"></i></div>',
@@ -235,6 +306,8 @@
       MapMod.routeSectionLayers = [];
       MapMod.routeWeatherMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
       MapMod.routeWeatherMarkers = [];
+      MapMod.routeIncidentMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
+      MapMod.routeIncidentMarkers = [];
     },
     drawStartEnd: function(pts) {
       MapMod.startEndMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });

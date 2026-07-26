@@ -22,7 +22,59 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expect(page.locator('#condition-coverage')).not.toHaveText('--');
   await expect(page.locator('#condition-loading')).toBeHidden();
   await expect(page.locator('#route-camera-strip')).not.toBeVisible();
+  const constructionEvent = page.locator(
+    '.condition-road-event[data-event-kind="construction"][data-event-impact="controlled"]'
+  );
+  await expect(constructionEvent).toBeVisible();
+  await expect(constructionEvent).toContainText('施工');
+  await expect(constructionEvent).toContainText('交通管制');
+  await expect(page.locator('.condition-section.has-road-event[data-event-kind="construction"]')).toBeVisible();
+  await expect(page.locator('.route-incident-pin.road-event-construction')).toBeVisible();
+  await expect(page.locator('#condition-incidents')).toContainText('1段·1件');
+  await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
+  expect(await page.evaluate(() => ({
+    partial: window.getRoadEventPresentation({
+      kind: 'accident',
+      severity: 1
+    }).impact,
+    semanticEmpty: window.getRoadEventPresentation({
+      kind: 'construction',
+      blockedLanes: '無占用車道'
+    }).impact
+  }))).toEqual({
+    partial: 'lane_closure',
+    semanticEmpty: 'unknown'
+  });
   expect(browserErrors).toEqual([]);
+});
+
+test('keeps coordinate-free road events visible without inventing a precise map segment', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic event-location verification runs once.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      const section = payload.data.sections.find((item) => item.incidents?.length);
+      const incident = section.incidents[0];
+      incident.lat = null;
+      incident.lng = null;
+      incident.locationApproximate = true;
+      return payload;
+    };
+  });
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+
+  const event = page.locator('.condition-road-event[data-event-location="approximate"]');
+  await expect(event).toBeVisible();
+  await expect(event).toContainText('位置未提供');
+  await expect(page.locator('.condition-alert[data-event-location="approximate"]')).toContainText('位置未提供');
+  await expect(page.locator('#condition-incidents')).toContainText('未定位·1件');
+  await expect(page.locator('.condition-section.has-road-event')).toHaveCount(0);
+  await expect(page.locator('.route-incident-pin')).toHaveCount(0);
 });
 
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
@@ -61,6 +113,9 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
   await page.locator('#condition-toggle').click();
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#condition-collapsed-summary')).toContainText('狀況 1段');
+  await expect(page.locator('.condition-road-event')).toBeHidden();
 
   const status = page.locator('#ride-status-card');
   await expect(status).toBeVisible();
@@ -71,6 +126,34 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
 
   expect(statusBox?.height).toBeLessThanOrEqual(150);
   expect(new Set(metricBoxes.map((box) => Math.round(box.y))).size).toBe(1);
+
+  const conditionsBox = await page.locator('#route-conditions-panel').boundingBox();
+  expect(conditionsBox?.height).toBeLessThanOrEqual(80);
+  await page.locator('#condition-toggle').click();
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.condition-road-event[data-event-kind="construction"]')).toBeVisible();
+});
+
+test('surfaces a conditions refresh failure even when the mobile panel was collapsed', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'iphone', 'Collapsed failure visibility verification runs on iPhone.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await page.locator('#condition-toggle').click();
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await page.evaluate(() => {
+    AppServices.loadRouteConditions = () => Promise.reject(new Error('測試更新失敗'));
+  });
+  await page.locator('#condition-refresh').click();
+
+  await expect(page.locator('#route-conditions-panel')).not.toHaveClass(/is-collapsed/);
+  await expect(page.locator('#condition-error')).toBeVisible();
+  await expect(page.locator('#condition-error')).toContainText('測試更新失敗');
+  await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {

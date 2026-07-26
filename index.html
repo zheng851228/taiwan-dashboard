@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=14" />
+  <link rel="stylesheet" href="css/style.css?v=15" />
 </head>
 <body class="text-slate-100">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -207,24 +207,26 @@
     </section>
   </div>
 
-  <section id="route-conditions-panel" class="route-conditions-panel glass hidden" aria-live="polite">
+  <section id="route-conditions-panel" class="route-conditions-panel glass hidden">
     <div class="condition-panel-head">
       <div>
         <div class="condition-kicker">Route Intelligence</div>
         <div class="condition-title-row">
           <h2>沿途狀況時間軸</h2>
           <span id="condition-source-badge" class="condition-source-badge">等待資料</span>
+          <span id="condition-collapsed-summary" class="condition-collapsed-summary">省道未回報</span>
         </div>
       </div>
       <div class="condition-head-actions">
         <button id="condition-refresh" class="condition-icon-btn" aria-label="途中停靠更新" title="途中停靠更新">
           <i class="fa-solid fa-rotate-right"></i>
         </button>
-        <button id="condition-toggle" class="condition-icon-btn" aria-label="收合沿途狀況">
+        <button id="condition-toggle" class="condition-icon-btn" aria-label="收合沿途狀況" aria-expanded="true">
           <i class="fa-solid fa-chevron-down"></i>
         </button>
       </div>
     </div>
+    <div id="condition-event-status" class="condition-sr-status" role="status" aria-live="polite"></div>
     <div id="condition-demo-warning" class="condition-demo-warning hidden">
       <i class="fa-solid fa-flask"></i>
       示範資料僅供介面測試，不代表即時路況、天氣或合法導航。
@@ -239,7 +241,7 @@
         <div class="condition-metric"><span>預估</span><strong id="condition-duration">--</strong></div>
         <div class="condition-metric rain"><span>降雨</span><strong id="condition-rain">--</strong></div>
         <div class="condition-metric danger"><span>壅塞</span><strong id="condition-congestion">--</strong></div>
-        <div class="condition-metric warning"><span>事件</span><strong id="condition-incidents">--</strong></div>
+        <div class="condition-metric warning"><span>狀況路段</span><strong id="condition-incidents">--</strong></div>
         <div class="condition-metric coverage"><span>覆蓋</span><strong id="condition-coverage">--</strong></div>
       </div>
       <div class="condition-update-row">
@@ -253,7 +255,7 @@
       </div>
       <div id="apple-leg-links" class="apple-leg-links hidden"></div>
       <div id="condition-timeline" class="condition-timeline"></div>
-      <div class="condition-footnote">交通、氣象與影像皆附來源及時間；灰色代表資料不足，不代表順暢。監視器僅供現場畫面佐證，未使用 AI 自動判讀。</div>
+      <div class="condition-footnote">實線顏色代表交通速度，虛線與圖示代表已定位的施工、事故或管制；「位置未提供」不會畫成精確路段，預告事件也不等於正在發生。目前事件來源以 TDX 省道即時與預告資料為主，市區道路可能未涵蓋。灰色代表資料不足，不代表順暢。監視器僅供現場畫面佐證，未使用 AI 自動判讀。</div>
     </div>
     <div id="condition-error" class="condition-error hidden">
       <i class="fa-solid fa-triangle-exclamation"></i>
@@ -325,6 +327,10 @@
     <div class="map-legend-item">
       <div class="map-legend-weather"><i class="fa-solid fa-cloud-rain"></i></div>
       <span>天氣警示</span>
+    </div>
+    <div class="map-legend-item">
+      <div class="map-legend-incident"><i class="fa-solid fa-person-digging"></i></div>
+      <span id="map-legend-event-count">施工／事件</span>
     </div>
   </aside>
 
