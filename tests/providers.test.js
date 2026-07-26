@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildReferenceSpeedByLink,
+  geocodePlace,
   mergeTdxDetectors,
   mergePublishedSections,
   normalizeCwaForecasts,
@@ -54,6 +55,45 @@ describe('shared provider snapshots', () => {
     await expect(requestJsonCached(url, {}, 1000, 60000)).rejects.toThrow('HTTP 503');
     await expect(requestJsonCached(url, {}, 1000, 60000)).resolves.toEqual({ recovered: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Taiwan place geocoding', () => {
+  it('keeps a city-government search inside the requested municipality', async () => {
+    const fetchMock = vi.fn(async (url) => {
+      expect(new URL(url).searchParams.get('q')).toBe('市政府 臺中市 台灣');
+      return new Response(JSON.stringify([
+        {
+          name: '成功高中',
+          display_name: '成功高中, 中正區, 臺北市, 臺灣',
+          lat: '25.0427054',
+          lon: '121.5236934',
+          type: 'school',
+          importance: 0.9
+        },
+        {
+          name: '市政府',
+          display_name: '市政府, 西屯區, 臺中市, 臺灣',
+          lat: '24.1620975',
+          lon: '120.6492346',
+          type: 'station',
+          importance: 0.3
+        }
+      ]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const places = await geocodePlace('台中市政府');
+
+    expect(places).toHaveLength(1);
+    expect(places[0]).toMatchObject({
+      name: '市政府',
+      lat: 24.1620975,
+      lng: 120.6492346
+    });
   });
 });
 

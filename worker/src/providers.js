@@ -990,8 +990,44 @@ export async function loadCameras(env) {
   ));
 }
 
+function normalizePlaceText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/臺/g, '台')
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+function buildNominatimPlaceQuery(query) {
+  const canonicalQuery = String(query || '')
+    .trim()
+    .replace(/台/g, '臺')
+    .replace(/\s*(?:臺灣|taiwan)\s*$/i, '')
+    .trim();
+  const civicMatch = canonicalQuery.match(/^(.+?([縣市]))(政府|議會)$/);
+  if (!civicMatch) return canonicalQuery;
+  return `${civicMatch[2]}${civicMatch[3]} ${civicMatch[1]}`;
+}
+
+function geocodeRelevance(item, query) {
+  const normalizedQuery = normalizePlaceText(query);
+  const normalizedName = normalizePlaceText(item.name);
+  const normalizedDisplayName = normalizePlaceText(item.display_name);
+  const adminMatch = normalizedQuery.match(/^(.+?[縣市])/);
+  const intent = adminMatch ? normalizedQuery.slice(adminMatch[1].length) : normalizedQuery;
+  let score = Number(item.importance || 0);
+
+  if (normalizedName === normalizedQuery) score += 200;
+  else if (normalizedDisplayName.includes(normalizedQuery)) score += 80;
+  if (adminMatch) {
+    score += normalizedDisplayName.includes(adminMatch[1]) ? 100 : -100;
+  }
+  if (intent && normalizedName.includes(intent)) score += 20;
+  return score;
+}
+
 export async function geocodePlace(query) {
-  const normalizedQuery = String(query).replace(/臺/g, '台').trim();
+  const originalQuery = String(query || '').trim();
+  const normalizedQuery = buildNominatimPlaceQuery(originalQuery);
   const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('q', /台灣|taiwan/i.test(normalizedQuery) ? normalizedQuery : `${normalizedQuery} 台灣`);
   url.searchParams.set('format', 'jsonv2');
@@ -1005,21 +1041,25 @@ export async function geocodePlace(query) {
     headers: { 'User-Agent': 'taiwan-dashboard-worker/2.0 (route-assistant)' }
   }, 10000);
   const seen = new Set();
-  return (payload || []).map((item) => ({
+  const adminMatch = normalizePlaceText(originalQuery).match(/^(.+?[縣市])/);
+  const places = (payload || []).map((item) => ({
     name: String(item.name || item.display_name || '').split(',')[0].trim(),
     displayName: item.display_name || '',
     sub: String(item.display_name || '').split(',').slice(1, 3).join('、').trim(),
     lat: Number(item.lat),
     lng: Number(item.lon),
     type: item.type || item.category || 'place',
-    importance: Number(item.importance || 0)
+    importance: Number(item.importance || 0),
+    relevance: geocodeRelevance(item, originalQuery)
   })).filter((item) => {
     if (!Number.isFinite(item.lat) || !Number.isFinite(item.lng)) return false;
+    if (adminMatch && !normalizePlaceText(item.displayName).includes(adminMatch[1])) return false;
     const key = `${item.name}|${item.lat.toFixed(5)}|${item.lng.toFixed(5)}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).sort((a, b) => b.importance - a.importance);
+  }).sort((a, b) => b.relevance - a.relevance);
+  return places.map(({ relevance, ...item }) => item);
 }
 
 const MAP_HOSTS = new Set([
