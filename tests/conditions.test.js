@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifyTraffic,
+  compactGeometry,
   createRouteSections,
   fuseConditions,
   headingDifference,
@@ -162,6 +163,14 @@ describe('route segmentation', () => {
     expect(sections).toHaveLength(12);
     expect(sections.map((section) => section.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(sections[11].toKm).toBe(160);
+  });
+
+  it('bounds condition overlay geometry while preserving both endpoints', () => {
+    const geometry = Array.from({ length: 1000 }, (_, index) => [25 - index * 0.001, 121.5]);
+    const compacted = compactGeometry(geometry, 96);
+    expect(compacted).toHaveLength(96);
+    expect(compacted[0]).toEqual(geometry[0]);
+    expect(compacted.at(-1)).toEqual(geometry.at(-1));
   });
 });
 

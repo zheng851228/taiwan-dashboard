@@ -33,15 +33,16 @@ Static HTML/CSS/JS
         v
 Cloudflare Worker /v2
   |-- Valhalla route + trace_attributes
-  |-- THB 168 published sections + shapes + travel speed
-  |-- TDX VD live traffic + incidents
-  |-- CWA observations + township 3-hour forecast
-  |-- CCTV source
+  |-- Prebuilt provider snapshots (TDX / THB / CWA / CCTV)
+  |     `-- route cells + roadRef index, immutable time slots
   |-- Nominatim geocoding proxy
   `-- KV route cache (6 hours)
 ```
 
 前端不保存 CWA 或 TDX 金鑰，也不直接呼叫第三方資料服務。短網址展開只允許 Google Maps 與 Apple Maps 網域。
+Staging 的 conditions 熱路徑只讀由本機／CI 預處理的 KV 快照，不在 Worker 內解析全台 THB XML。快照的
+`generatedAt` 只代表產生時間，交通與氣象仍各自使用官方 `observedAt` 驗證時效；缺少、過期或格式錯誤時維持
+`partial` 與灰色 `unknown`，不會回頭直打上游或標成順暢。
 
 ## 開始使用
 
@@ -114,6 +115,26 @@ TDX_CLIENT_SECRET="ROTATED_VALUE"
 - `THB_SECTION_SHAPE_ENDPOINT`
 - `THB_LIVE_TRAFFIC_ENDPOINT`
 - `THB_CONGESTION_ENDPOINT`
+
+### Staging provider snapshot
+
+`env.staging` 使用 `PROVIDER_SNAPSHOT_MODE=kv`；production 尚未啟用。先從被 Git 忽略的
+`worker/.dev.vars` 讀取憑證，在本機抓取並正規化公開資料，再把不含憑證的 immutable slot 寫入 staging KV：
+
+```bash
+npm run worker:snapshot:build
+npm run worker:snapshot:upload:staging
+```
+
+產物固定寫到 `/tmp/taiwan-dashboard-provider-snapshot.json`，包含：
+
+- 五分鐘交通快照：TDX VD、TDX 事件、THB 發布路段與 CWA 樣本。
+- 六小時攝影機格網，以及可直接回傳的 `/v2/cams` JSON。
+- 十五分鐘縣市氣象 `/v2/weather` JSON。
+
+每個 slot 都有到期時間；Worker 先讀目前 slot，KV 尚未同步時再讀前一 slot。交通快照超過十五分鐘即不可用，
+攝影機硬上限十二小時，且個別交通觀測仍必須在十分鐘內。此命令只更新 staging namespace，不會部署或修改
+production。正式自動排程與 production snapshot 必須另行批准。
 
 先 dry-run，再明確指定 production environment 部署；禁止省略 `--env production`，避免誤碰 root Worker：
 

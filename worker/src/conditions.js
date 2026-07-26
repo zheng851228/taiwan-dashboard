@@ -8,6 +8,7 @@ import { extractRoadRef, validateRouteEdges } from './rules.js';
 
 const TRAFFIC_PRIORITY = { unknown: 0, clear: 1, slow: 2, congested: 3 };
 const CAMERA_GRID_DEGREES = 0.05;
+const CONDITION_GEOMETRY_POINT_LIMIT = 96;
 
 export function classifyTraffic(speedKph, referenceSpeedKph) {
   if (!Number.isFinite(speedKph) || !Number.isFinite(referenceSpeedKph) || referenceSpeedKph <= 0) {
@@ -22,7 +23,8 @@ export function classifyTraffic(speedKph, referenceSpeedKph) {
 export function isFresh(observedAt, maxAgeMinutes, now = new Date()) {
   const observed = new Date(observedAt);
   if (Number.isNaN(observed.getTime())) return false;
-  return now.getTime() - observed.getTime() <= maxAgeMinutes * 60 * 1000;
+  const ageMs = now.getTime() - observed.getTime();
+  return ageMs >= 0 && ageMs <= maxAgeMinutes * 60 * 1000;
 }
 
 export function headingDifference(a, b) {
@@ -63,7 +65,7 @@ export function matchPublishedTraffic(section, publishedSections, now = new Date
       && Number.isFinite(published.referenceSpeedKph)
       && published.referenceSpeedKph > 0
       && Array.isArray(published.geometry)
-      && published.geometry.length > 1
+      && published.geometry.length > 0
     ))
     .map((published) => ({
       published,
@@ -150,7 +152,7 @@ export function fuseConditions(route, providerData, now = new Date()) {
       toKm: section.toKm,
       roadRef: section.roadRef,
       roadName: section.roadName,
-      geometry: section.geometry,
+      geometry: compactGeometry(section.geometry, CONDITION_GEOMETRY_POINT_LIMIT),
       traffic,
       weather,
       incidents,
@@ -162,6 +164,16 @@ export function fuseConditions(route, providerData, now = new Date()) {
     overall: buildOverall(fused),
     sections: fused
   };
+}
+
+export function compactGeometry(geometry, maximumPoints = CONDITION_GEOMETRY_POINT_LIMIT) {
+  if (!Array.isArray(geometry)) return [];
+  const limit = Math.max(2, Math.floor(Number(maximumPoints) || CONDITION_GEOMETRY_POINT_LIMIT));
+  if (geometry.length <= limit) return geometry;
+  const lastIndex = geometry.length - 1;
+  return Array.from({ length: limit }, (_, index) => (
+    geometry[Math.round((index / (limit - 1)) * lastIndex)]
+  ));
 }
 
 function trafficFromDetector(detector) {
@@ -336,6 +348,9 @@ function matchCameras(section, cameraGrid, vehicle) {
 
 function cameraRoadIsProhibited(camera, vehicle) {
   if (!vehicle || vehicle.type === 'car') return false;
+  if (Array.isArray(camera.prohibitedFor)) {
+    return camera.prohibitedFor.includes(vehicle.plate || 'white');
+  }
   const roadName = camera.roadRef || camera.name || '';
   return validateRouteEdges([{
     names: [roadName],

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import worker, { mergeLastKnownConditions } from '../worker/src/index.js';
+import worker, {
+  isCachedConditionsFresh,
+  mergeLastKnownConditions
+} from '../worker/src/index.js';
 import { encodePolyline6 } from '../worker/src/polyline.js';
 
 const env = { USE_FIXTURES: 'true' };
@@ -318,5 +321,54 @@ describe('last-known condition fallback', () => {
     expect(merged.sections[0].weather.condition).toBe('\u672a\u77e5');
     expect(merged.sections[0].traffic.lastKnown).toBeUndefined();
     expect(merged.sections[0].weather.lastKnown).toBeUndefined();
+  });
+});
+
+describe('conditions cache freshness', () => {
+  function cachedEnvelope(overrides = {}) {
+    return {
+      updatedAt: '2026-07-27T04:00:00.000Z',
+      data: {
+        snapshotGeneratedAt: '2026-07-27T03:55:00.000Z',
+        sections: [{
+          traffic: {
+            level: 'clear',
+            observedAt: '2026-07-27T03:50:00.000Z'
+          },
+          weather: {
+            condition: '多雲',
+            observedAt: '2026-07-27T03:00:00.000Z'
+          }
+        }],
+        ...overrides
+      }
+    };
+  }
+
+  it('accepts known values exactly at their freshness boundaries', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope(),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(true);
+  });
+
+  it('rejects a recently cached envelope after its traffic observation expires', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope(),
+      new Date('2026-07-27T04:00:00.001Z')
+    )).toBe(false);
+  });
+
+  it('rejects a stale provider snapshot even when all sections are unknown', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope({
+        snapshotGeneratedAt: '2026-07-27T03:44:59.999Z',
+        sections: [{
+          traffic: { level: 'unknown', observedAt: null },
+          weather: { condition: '未知', observedAt: null }
+        }]
+      }),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(false);
   });
 });

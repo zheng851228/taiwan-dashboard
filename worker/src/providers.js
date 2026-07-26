@@ -1,4 +1,30 @@
 import { encodePolyline6, haversineKm, mergeLegShapes } from './polyline.js';
+import { validateRouteEdges } from './rules.js';
+import {
+  buildProviderSnapshotDocument,
+  isProviderSnapshotFresh,
+  loadProviderSnapshotHttpEnvelope,
+  loadSnapshotProviderData,
+  packProviderSnapshot,
+  packProviderSnapshotHttpEnvelope,
+  providerCameraSnapshotSlotKey,
+  providerSnapshotHttpSlotKey,
+  providerSnapshotSlotKey,
+  selectRouteSnapshotBucketKeys
+} from './provider-snapshot.js';
+
+export {
+  buildProviderSnapshotDocument,
+  isProviderSnapshotFresh,
+  loadProviderSnapshotHttpEnvelope,
+  loadSnapshotProviderData,
+  packProviderSnapshot,
+  packProviderSnapshotHttpEnvelope,
+  providerCameraSnapshotSlotKey,
+  providerSnapshotHttpSlotKey,
+  providerSnapshotSlotKey,
+  selectRouteSnapshotBucketKeys
+} from './provider-snapshot.js';
 
 const TDX_TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
 const DEFAULT_TDX_CONFIG_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/VD/Highway?$format=JSON';
@@ -330,7 +356,10 @@ export function buildFixtureCountyWeather(now = new Date()) {
   };
 }
 
-export async function loadLiveProviderData(sections, env) {
+export async function loadLiveProviderData(sections, env, options = {}) {
+  if (String(env.PROVIDER_SNAPSHOT_MODE || '').toLowerCase() === 'kv') {
+    return loadSnapshotProviderData(sections, env, options);
+  }
   const issues = [];
   const [tdxResult, thbResult, weatherResult, cameraResult] = await Promise.allSettled([
     loadTdxData(env),
@@ -367,6 +396,136 @@ export async function loadLiveProviderData(sections, env) {
     cameras,
     trafficSource: 'TDX/THB',
     issues
+  };
+}
+
+export async function buildLiveProviderSnapshot(env, now = new Date()) {
+  const issues = [];
+  const [tdxResult, thbResult, weatherResult, cameraResult] = await Promise.allSettled([
+    loadTdxData(env),
+    loadThbPublishedData([], env),
+    loadCwaSnapshotSamples(env, now),
+    loadCameras(env)
+  ]);
+  const tdx = settledValue(
+    tdxResult,
+    { config: null, sections: null, live: null, incidents: [], issues: [] },
+    'TDX',
+    issues
+  );
+  const thb = settledValue(
+    thbResult,
+    { publishedTraffic: [], liveTraffic: null, congestion: null },
+    'THB',
+    issues
+  );
+  (tdx.issues || []).forEach((issue) => issues.push(`TDX: ${issue}`));
+  const weather = settledValue(weatherResult, [], 'CWA', issues);
+  const cameras = settledValue(cameraResult, [], 'CCTV', issues);
+  const referenceSpeedByLink = tdx.sections && thb.liveTraffic && thb.congestion
+    ? buildReferenceSpeedByLink(tdx.sections, thb.liveTraffic, thb.congestion)
+    : new Map();
+  const providerData = {
+    detectors: tdx.config && tdx.live
+      ? mergeTdxDetectors(tdx.config, tdx.live, referenceSpeedByLink)
+      : [],
+    publishedTraffic: thb.publishedTraffic || [],
+    incidents: tdx.incidents || [],
+    weather,
+    cameras,
+    issues
+  };
+  const providers = {
+    TDX: providerBuildStatus(tdxResult, tdx.issues),
+    THB: providerBuildStatus(thbResult),
+    CWA: providerBuildStatus(weatherResult),
+    CCTV: providerBuildStatus(cameraResult)
+  };
+  const document = buildProviderSnapshotDocument({
+    ...providerData,
+    cameras: []
+  }, {
+    generatedAt: now.toISOString(),
+    providers,
+    issues,
+    cameraSnapshotRequired: true
+  });
+  const routeCameras = buildRouteCameraSnapshot(providerData.cameras);
+  const cameraDocument = buildProviderSnapshotDocument({
+    detectors: [],
+    publishedTraffic: [],
+    incidents: [],
+    weather: [],
+    cameras: routeCameras
+  }, {
+    generatedAt: now.toISOString(),
+    gridDegrees: 0.05,
+    routeHalo: 1,
+    providers: { CCTV: providers.CCTV },
+    issues: cameraResult.status === 'fulfilled' ? [] : ['CCTV: provider snapshot unavailable']
+  });
+  return {
+    key: providerSnapshotSlotKey(now),
+    value: packProviderSnapshot(document),
+    cameraKey: providerCameraSnapshotSlotKey(now),
+    cameraValue: packProviderSnapshot(cameraDocument),
+    document,
+    cameraDocument,
+    providerData,
+    counts: {
+      detectors: providerData.detectors.length,
+      publishedTraffic: providerData.publishedTraffic.length,
+      incidents: providerData.incidents.length,
+      weather: providerData.weather.length,
+      cameras: providerData.cameras.length,
+      routeCameras: routeCameras.length,
+      cells: Object.keys(document.cells).length
+    }
+  };
+}
+
+function buildRouteCameraSnapshot(cameras) {
+  const gridDegrees = 0.015;
+  const selected = new Map();
+  for (const camera of cameras || []) {
+    const restricted = withCameraRestrictions(camera);
+    const key = `${Math.floor(camera.lat / gridDegrees)}:${Math.floor(camera.lng / gridDegrees)}`;
+    const current = selected.get(key);
+    if (!current || cameraSnapshotRank(restricted) < cameraSnapshotRank(current)) {
+      selected.set(key, restricted);
+    }
+  }
+  return [...selected.values()];
+}
+
+function cameraSnapshotRank(camera) {
+  const restrictionScore = Array.isArray(camera.prohibitedFor)
+    ? camera.prohibitedFor.length * 10
+    : 0;
+  return restrictionScore + (camera.status === 'offline' ? 5 : 0);
+}
+
+function withCameraRestrictions(camera) {
+  const edge = {
+    names: [camera.roadRef || camera.name || ''],
+    roadClass: '',
+    use: 'road',
+    beginShapeIndex: 0,
+    endShapeIndex: 0
+  };
+  const prohibitedFor = ['white', 'yellow', 'red'].filter((plate) => (
+    validateRouteEdges([edge], { type: 'motorcycle', plate }).status !== 'safe'
+  ));
+  return { ...camera, prohibitedFor };
+}
+
+function providerBuildStatus(result, nestedIssues = []) {
+  if (result.status !== 'fulfilled') {
+    return { status: 'failed', fetchedAt: null };
+  }
+  return {
+    status: nestedIssues?.length ? 'partial' : 'ok',
+    fetchedAt: new Date().toISOString()
   };
 }
 
@@ -884,6 +1043,44 @@ export async function loadCwaSamples(sections, env) {
       source: 'CWA'
     };
   }).filter(Boolean);
+}
+
+async function loadCwaSnapshotSamples(env, now = new Date()) {
+  if (!env.CWA_API_KEY) throw new Error('API key not configured');
+  const [stationPayload, forecastPayload] = await Promise.all([
+    fetchCwa(env.CWA_OBSERVATION_ENDPOINT || DEFAULT_CWA_OBSERVATION_URL, env.CWA_API_KEY),
+    fetchCwa(env.CWA_FORECAST_ENDPOINT || DEFAULT_CWA_FORECAST_URL, env.CWA_API_KEY)
+  ]);
+  const stations = normalizeCwaStations(stationPayload);
+  const forecasts = normalizeCwaForecasts(forecastPayload, now);
+  if (!stations.length) {
+    return forecasts.map((forecast) => ({
+      lat: forecast.lat,
+      lng: forecast.lng,
+      condition: forecast.condition || '未知',
+      temperatureC: forecast.temperatureC,
+      rainChance: forecast.rainChance,
+      observedAt: forecast.observedAt,
+      forecastAt: forecast.forecastAt || null,
+      source: 'CWA'
+    }));
+  }
+  return stations.map((station) => {
+    const forecastMatch = nearestPoint([station.lat, station.lng], forecasts);
+    const forecast = forecastMatch && forecastMatch.distanceKm <= 50
+      ? forecastMatch.value
+      : null;
+    return {
+      lat: station.lat,
+      lng: station.lng,
+      condition: forecast?.condition || station.condition || '未知',
+      temperatureC: station.temperatureC ?? forecast?.temperatureC ?? null,
+      rainChance: forecast?.rainChance ?? null,
+      observedAt: station.observedAt || forecast?.observedAt || null,
+      forecastAt: forecast?.forecastAt || null,
+      source: 'CWA'
+    };
+  });
 }
 
 export async function loadCountyWeather(env) {
