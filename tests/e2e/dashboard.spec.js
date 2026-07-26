@@ -50,6 +50,29 @@ test('keeps the mobile route planner focused on the active task', async ({ page 
   expect(navBox?.height).toBeLessThanOrEqual(70);
 });
 
+test('keeps the mobile ride status compact after collapsing conditions', async ({ page }) => {
+  const viewport = page.viewportSize();
+  test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
+
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await page.locator('#condition-toggle').click();
+
+  const status = page.locator('#ride-status-card');
+  await expect(status).toBeVisible();
+  const statusBox = await status.boundingBox();
+  const metricBoxes = await page.locator('.ride-metric-card').evaluateAll((cards) =>
+    cards.map((card) => card.getBoundingClientRect().toJSON())
+  );
+
+  expect(statusBox?.height).toBeLessThanOrEqual(150);
+  expect(new Set(metricBoxes.map((box) => Math.round(box.y))).size).toBe(1);
+});
+
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#js-theme').click();
