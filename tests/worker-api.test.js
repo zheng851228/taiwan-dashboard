@@ -56,6 +56,18 @@ describe('Worker v2 fixture API', () => {
     expect(body.data).toBeNull();
   });
 
+  it('rejects oversized geocode queries before calling an upstream service', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const query = encodeURIComponent('地'.repeat(121));
+    const response = await worker.fetch(new Request(`https://worker.test/v2/geocode?q=${query}`), env);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toContain('過長');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('serves deterministic fixture cameras and county weather without upstream access', async () => {
     const camsResponse = await worker.fetch(new Request('https://worker.test/v2/cams'), env);
     const cams = await camsResponse.json();

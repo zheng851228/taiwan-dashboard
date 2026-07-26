@@ -56,6 +56,23 @@ describe('shared provider snapshots', () => {
     await expect(requestJsonCached(url, {}, 1000, 60000)).resolves.toEqual({ recovered: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('evicts the oldest cached response when the bounded cache is full', async () => {
+    const fetchMock = vi.fn(async (url) => new Response(JSON.stringify({ url: String(url) }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const oldestUrl = 'https://snapshot.test/lru-oldest';
+
+    await requestJsonCached(oldestUrl, {}, 1000, 60000);
+    for (let index = 0; index < 260; index += 1) {
+      await requestJsonCached(`https://snapshot.test/lru-${index}`, {}, 1000, 60000);
+    }
+    await requestJsonCached(oldestUrl, {}, 1000, 60000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(262);
+  });
 });
 
 describe('Taiwan place geocoding', () => {
@@ -140,6 +157,168 @@ describe('Valhalla route attribution', () => {
     expect(edges.map((edge) => [edge.beginShapeIndex, edge.endShapeIndex])).toEqual([[0, 1], [1, 2]]);
     const payloads = fetchMock.mock.calls.map(([, options]) => JSON.parse(options.body));
     expect(payloads.every((payload) => payload.shape_match === 'walk_or_snap')).toBe(true);
+  });
+
+  it('traces at most two chunks concurrently and preserves route order', async () => {
+    let active = 0;
+    let maxActive = 0;
+    let requestIndex = 0;
+    const fetchMock = vi.fn(async () => {
+      const currentIndex = requestIndex;
+      requestIndex += 1;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, currentIndex === 0 ? 30 : 5));
+      active -= 1;
+      return new Response(JSON.stringify({
+        edges: [{
+          names: [`road-${currentIndex}`],
+          way_id: currentIndex + 1,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 100,
+          begin_shape_index: 0,
+          end_shape_index: 1
+        }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const edges = await traceRouteAttributes({
+      geometry: [[25, 121], [24, 121], [23, 121], [22, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(maxActive).toBe(2);
+    expect(edges.map((edge) => edge.names[0])).toEqual(['road-0', 'road-1', 'road-2']);
+    expect(edges.map((edge) => [edge.beginShapeIndex, edge.endShapeIndex]))
+      .toEqual([[0, 1], [1, 2], [2, 3]]);
+  });
+
+  it('rejects a route when any trace chunk has no attributed road edges', async () => {
+    let requestIndex = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const currentIndex = requestIndex;
+      requestIndex += 1;
+      return new Response(JSON.stringify({
+        edges: currentIndex === 1 ? [] : [{
+          names: [`road-${currentIndex}`],
+          way_id: currentIndex + 1,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 100,
+          begin_shape_index: 0,
+          end_shape_index: 1
+        }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    await expect(traceRouteAttributes({
+      geometry: [[25, 121], [24, 121], [23, 121], [22, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
+      .rejects.toThrow('no road edges for chunk');
+  });
+
+  it('rejects a non-empty trace chunk that does not cover its full shape', async () => {
+    let requestIndex = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const currentIndex = requestIndex;
+      requestIndex += 1;
+      return new Response(JSON.stringify({
+        edges: [{
+          names: [`road-${currentIndex}`],
+          way_id: currentIndex + 1,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 100,
+          begin_shape_index: 0,
+          end_shape_index: currentIndex === 1 ? 0 : 1
+        }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    await expect(traceRouteAttributes({
+      geometry: [[25, 121], [24, 121], [23, 121], [22, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
+      .rejects.toThrow('partial road coverage');
+  });
+
+  it('rejects an internal gap between attributed shape ranges', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      edges: [
+        {
+          names: ['before-gap'],
+          way_id: 1,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 0,
+          begin_shape_index: 0,
+          end_shape_index: 0
+        },
+        {
+          names: ['after-gap'],
+          way_id: 2,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 0,
+          begin_shape_index: 1,
+          end_shape_index: 2
+        }
+      ]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    await expect(traceRouteAttributes({
+      geometry: [[25, 121], [24.999, 121], [24.998, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
+      .rejects.toThrow('attribution gap');
+  });
+
+  it('does not start queued trace chunks after the first request fails', async () => {
+    let requestCount = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const currentIndex = requestCount;
+      requestCount += 1;
+      if (currentIndex === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return new Response('{}', { status: 503 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return new Response(JSON.stringify({
+        edges: [{
+          names: ['road'],
+          way_id: currentIndex + 1,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 100,
+          begin_shape_index: 0,
+          end_shape_index: 1
+        }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    await expect(traceRouteAttributes({
+      geometry: [[25, 121], [24, 121], [23, 121], [22, 121], [21, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
+      .rejects.toThrow('HTTP 503');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(requestCount).toBe(2);
   });
 });
 

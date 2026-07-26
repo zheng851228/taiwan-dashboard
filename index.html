@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=13" />
+  <link rel="stylesheet" href="css/style.css?v=14" />
 </head>
 <body class="text-slate-100">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -135,9 +135,9 @@
             class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
             placeholder="起點地名..." />
           <button id="clear-start" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
+          <div id="suggest-start" class="suggest-box route-suggest-box bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
         </div>
       </div>
-      <div id="suggest-start" class="hidden bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
       <!-- 停靠點 -->
       <div id="waypoints-container" class="space-y-2"></div>
       <!-- 終點 -->
@@ -150,9 +150,9 @@
             class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
             placeholder="終點地名..." />
           <button id="clear-end" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
+          <div id="suggest-end" class="suggest-box route-suggest-box bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
         </div>
       </div>
-      <div id="suggest-end" class="hidden bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
       <!-- 牌照 + 解析 -->
       <div class="route-vehicle-shell">
         <div class="route-option-head">

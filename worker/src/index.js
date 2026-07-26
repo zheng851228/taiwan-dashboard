@@ -76,6 +76,7 @@ async function routeRequest(request, env) {
   if (path === '/v2/geocode' && request.method === 'GET') {
     const query = String(url.searchParams.get('q') || '').trim();
     if (!query) throw new HttpError(400, '請提供搜尋關鍵字');
+    if (query.length > 120) throw new HttpError(400, '搜尋關鍵字過長');
     const places = await geocodePlace(query);
     return jsonResponse(envelope(places.length ? 'ok' : 'partial', places, places.length ? '' : '找不到相符地點'));
   }

@@ -40,6 +40,7 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/vendor/leaflet/leaflet.js');
     expect(serviceWorker).toContain('./assets/vendor/fontawesome/css/all.min.css');
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
+    expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
     expect(serviceWorker).toContain('twdash-shell-v12');
   });

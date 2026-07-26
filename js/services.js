@@ -3,6 +3,18 @@
 (function() {
   'use strict';
 
+  var GEOCODE_CACHE_MS = 10 * 60 * 1000;
+  var geocodeCache = {};
+  var geocodeRequests = {};
+
+  function geocodeCacheKey(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/臺/g, '台')
+      .replace(/\s+/g, ' ');
+  }
+
   function normalizeEnvelope(raw, fallbackKey) {
     if (raw && typeof raw === 'object' && raw.status && raw.data !== undefined) {
       return raw;
@@ -60,8 +72,36 @@
 
     searchPlaces: function(name, options) {
       var trackStatus = !(options && options.silent);
+      var key = geocodeCacheKey(name);
+      var cached = geocodeCache[key];
       if (trackStatus) setDataStatus('geocode', 'loading');
-      return requestJson(Config.WORKER_BASE + '/v2/geocode?q=' + encodeURIComponent(name), null, 'places')
+      if (cached && cached.expiresAt > Date.now()) {
+        if (trackStatus) {
+          var cachedPlaces = Array.isArray(cached.payload.data) ? cached.payload.data : [];
+          setDataStatus('geocode', cachedPlaces.length ? 'ready' : 'empty', cached.payload.updatedAt);
+        }
+        return Promise.resolve(cached.payload);
+      }
+
+      if (!geocodeRequests[key]) {
+        geocodeRequests[key] = requestJson(
+          Config.WORKER_BASE + '/v2/geocode?q=' + encodeURIComponent(String(name || '').trim()),
+          null,
+          'places'
+        ).then(function(payload) {
+          geocodeCache[key] = {
+            payload: payload,
+            expiresAt: Date.now() + GEOCODE_CACHE_MS
+          };
+          delete geocodeRequests[key];
+          return payload;
+        }).catch(function(err) {
+          delete geocodeRequests[key];
+          throw err;
+        });
+      }
+
+      return geocodeRequests[key]
         .then(function(payload) {
           var places = Array.isArray(payload.data) ? payload.data : [];
           if (trackStatus) setDataStatus('geocode', places.length ? 'ready' : 'empty', payload.updatedAt);

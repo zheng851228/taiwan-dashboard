@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v13";
+const CACHE_VERSION = "v14";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -23,7 +23,7 @@ const SHELL_URLS = [
   "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
   "./css/tailwind.generated.css",
-  "./css/style.css?v=13",
+  "./css/style.css?v=14",
   "./js/core.js",
   "./js/services.js",
   "./js/data.js",
@@ -44,7 +44,13 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.keys().then((existingKeys) =>
       caches.open(SHELL_CACHE)
-        .then((cache) => cache.addAll(SHELL_URLS))
+        .then((cache) => Promise.all(SHELL_URLS.map(async (url) => {
+          // 每個 shell 版本都略過瀏覽器 HTTP cache，避免新 cache 混入舊 JS。
+          const request = new Request(new URL(url, self.registration.scope), { cache: "reload" });
+          const response = await fetch(request);
+          if (!response.ok) throw new Error(`Unable to cache ${url}: HTTP ${response.status}`);
+          await cache.put(request, response);
+        })))
         // v12 only displayed a toast and could not activate a waiting worker.
         // Auto-activate this one migration; later versions use the in-app update button.
         .then(() => existingKeys.includes(LEGACY_AUTO_UPDATE_CACHE) ? self.skipWaiting() : undefined)

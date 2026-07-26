@@ -89,7 +89,7 @@
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
     routeSectionLayers: [], routeWeatherMarkers: [],
-    startEndMarkers: [], _canvas: null, _camData: [],
+    startEndMarkers: [], _canvas: null, _camData: [], _markerSignature: '',
     init: function() {
       MapMod.map = L.map('map', {
         center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM,
@@ -104,6 +104,7 @@
       MapMod.markers.forEach(function(m) { MapMod.map.removeLayer(m); });
       MapMod.markers = [];
       MapMod._camData = [];
+      MapMod._markerSignature = '';
       setTimeout(function() { MapMod.redrawStartEnd(); }, 0);
     },
     addMarker: function(cam) {
@@ -355,8 +356,9 @@
 
   var RouteMod = {
     active: false, filteredCams: [], routeCoords: [],
-    mode: 'motorcycle', plate: 'white',
+    mode: 'motorcycle', plate: 'white', analyzing: false, analysisVersion: 0,
     setAnalyzeBusy: function(isBusy) {
+      RouteMod.analyzing = !!isBusy;
       var btn = Dom.byId('js-route-btn');
       if (!btn) return;
       btn.disabled = !!isBusy;
@@ -400,8 +402,16 @@
       var banner = Dom.byId('js-route-banner');
       var info = Dom.byId('js-list-route-info');
       var summary = Dom.byId('route-summary');
-      if (startEl) startEl.value = '';
-      if (endEl) endEl.value = '';
+      if (startEl) {
+        startEl.value = '';
+        delete startEl.dataset.routePoint;
+        delete startEl.dataset.routePointLabel;
+      }
+      if (endEl) {
+        endEl.value = '';
+        delete endEl.dataset.routePoint;
+        delete endEl.dataset.routePointLabel;
+      }
       if (st) st.textContent = '';
       setFlexVisible(banner, false);
       setFlexVisible(info, false);
@@ -426,20 +436,32 @@
       });
     },
     analyze: function() {
+      if (RouteMod.analyzing) return;
       var startEl  = Dom.byId('js-route-start');
       var endEl    = Dom.byId('js-route-end');
       var startVal = startEl ? startEl.value.trim() : '';
       var endVal   = endEl   ? endEl.value.trim()   : '';
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
+      var thisAnalysisVersion = ++RouteMod.analysisVersion;
       RouteMod.setAnalyzeBusy(true);
+      var status = Dom.byId('js-route-status');
+      if (status) status.textContent = '\u6b63\u5728\u53d6\u5f97\u5730\u9ede\u5ea7\u6a19...';
       var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
-      var allAddrs = [startVal]
+      var displayAddrs = [startVal]
         .concat(uiWaypoints.map(function(wp) { return String(wp || '').trim(); }))
         .concat([endVal]);
+      var allAddrs = displayAddrs.slice();
+      if (startEl && startEl.dataset.routePoint && startEl.dataset.routePointLabel === startVal) {
+        allAddrs[0] = startEl.dataset.routePoint;
+      }
+      if (endEl && endEl.dataset.routePoint && endEl.dataset.routePointLabel === endVal) {
+        allAddrs[allAddrs.length - 1] = endEl.dataset.routePoint;
+      }
       AppState.pendingWaypoints = [];
 
       Promise.all(allAddrs.map(function(addr) { return extractPointFromUrl(addr); }))
         .then(function(results) {
+          if (thisAnalysisVersion !== RouteMod.analysisVersion) return null;
           var failedIndex = results.findIndex(function(result) { return !result; });
           if (failedIndex !== -1) {
             var label = failedIndex === 0
@@ -448,15 +470,17 @@
             throw new Error(label + '\u7121\u6cd5\u89e3\u6790\uff0c\u8acb\u6539\u7528\u66f4\u5b8c\u6574\u5730\u540d\u6216\u5ea7\u6a19');
           }
           Toast.show('\u6b63\u5728\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168...');
+          if (status) status.textContent = '\u6b63\u5728\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168...';
           var finalPoints = results;
           AppState.routeAllPoints = finalPoints;
-          AppState.routeInputValues = allAddrs.slice();
+          AppState.routeInputValues = displayAddrs.slice();
           var vehicle = RouteMod.mode === 'car'
             ? { type: 'car' }
             : { type: 'motorcycle', plate: RouteMod.plate };
           return AppServices.createRoute(finalPoints, vehicle, { strategy: 'balanced' });
         })
         .then(function(payload) {
+          if (thisAnalysisVersion !== RouteMod.analysisVersion) return;
           var route = payload && payload.data;
           if (!route || !route.geometry || !route.validation || route.validation.status !== 'safe') {
             throw new Error('\u8def\u7dda\u672a\u901a\u904e\u5b89\u5168\u9a57\u8b49');
@@ -484,10 +508,12 @@
           if (col) col.classList.remove('hidden');
           var clearMini = Dom.byId('js-route-clear-small');
           if (clearMini) clearMini.classList.remove('hidden');
+          if (status) status.textContent = '\u5b89\u5168\u8def\u7dda\u5b8c\u6210\uff0c\u6b63\u5728\u6574\u7406\u6cbf\u9014\u8def\u6cc1...';
+          if (window.RouteConditionsMod) RouteConditionsMod.load(route, false);
           RouteMod._doFilter(coords);
-          if (window.RouteConditionsMod) RouteConditionsMod.load(route, true);
         })
         .catch(function(err) {
+          if (thisAnalysisVersion !== RouteMod.analysisVersion) return;
           RouteMod.setAnalyzeBusy(false);
           var message = err && err.message ? err.message : '\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66';
           var validation = err && err.payload && err.payload.data && err.payload.data.validation;
@@ -500,48 +526,64 @@
         });
     },
     _doFilter: function(coords) {
-      var simplified = simplifyCoords(coords, Config.SIMPLIFY_STEP);
+      var adaptiveStep = Math.max(Config.SIMPLIFY_STEP, Math.ceil(coords.length / 600));
+      var simplified = simplifyCoords(coords, adaptiveStep);
       RouteMod.routeCoords = coords;
       RouteMod.active = true;
-      // YouTube 頻道不過濾，全部保留；CCTV 才做路線過濾
+      if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
       var cctv = Data.allCams();
-      // 縮小半徑到 5km，避免抓太多
       var FILTER_KM = 5;
-      var filteredCctv = cctv.filter(function(cam) {
-        for (var i = 0; i < simplified.length-1; i++) {
-          if (distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]) <= FILTER_KM) return true;
+
+      // 先用路線 bounding box 粗篩，避免每次都讓全台攝影機逐段計算距離。
+      var minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+      coords.forEach(function(point) {
+        minLat = Math.min(minLat, point[0]);
+        maxLat = Math.max(maxLat, point[0]);
+        minLng = Math.min(minLng, point[1]);
+        maxLng = Math.max(maxLng, point[1]);
+      });
+      var latPad = FILTER_KM / 110.6;
+      var lngPad = FILTER_KM / (111.3 * Math.max(0.35, Math.cos((minLat + maxLat) / 2 * Math.PI / 180)));
+      var candidates = cctv.filter(function(cam) {
+        return cam.lat >= minLat - latPad && cam.lat <= maxLat + latPad
+          && cam.lng >= minLng - lngPad && cam.lng <= maxLng + lngPad;
+      });
+
+      // 同一輪算出是否在 5km 內與沿線位置，避免超過 50 支後再掃一次。
+      var filteredEntries = [];
+      candidates.forEach(function(cam) {
+        var minD = Infinity;
+        var bestT = 0;
+        for (var i = 0; i < simplified.length - 1; i++) {
+          var d = distToSegKm(
+            cam.lat, cam.lng,
+            simplified[i][0], simplified[i][1],
+            simplified[i + 1][0], simplified[i + 1][1]
+          );
+          if (d >= minD) continue;
+          minD = d;
+          var dx = simplified[i + 1][0] - simplified[i][0];
+          var dy = simplified[i + 1][1] - simplified[i][1];
+          var len = dx * dx + dy * dy;
+          var t = len ? ((cam.lat - simplified[i][0]) * dx + (cam.lng - simplified[i][1]) * dy) / len : 0;
+          bestT = i + Math.max(0, Math.min(1, t));
         }
-        return false;
+        if (minD <= FILTER_KM) filteredEntries.push({ cam: cam, routePos: bestT });
       });
 
       // 沿路均勻取樣，最多 50 支 CCTV（避免 lag）
       var MAX_CCTV = 50;
-      if (filteredCctv.length > MAX_CCTV) {
-        // 計算每支攝影機最近的路線點位置，排序後均勻取樣
-        filteredCctv = filteredCctv.map(function(cam) {
-          var minD = 1e9, bestT = 0;
-          for (var i = 0; i < simplified.length-1; i++) {
-            var dx = simplified[i+1][0]-simplified[i][0];
-            var dy = simplified[i+1][1]-simplified[i][1];
-            var len = dx*dx+dy*dy;
-            var t = len ? ((cam.lat-simplified[i][0])*dx+(cam.lng-simplified[i][1])*dy)/len : 0;
-            t = Math.max(0,Math.min(1,t));
-            var d = distToSegKm(cam.lat,cam.lng,simplified[i][0],simplified[i][1],simplified[i+1][0],simplified[i+1][1]);
-            if (d < minD) { minD = d; bestT = i + t; }
-          }
-          cam._routePos = bestT;
-          return cam;
-        }).sort(function(a,b){ return a._routePos - b._routePos; });
-
-        // 均勻取 MAX_CCTV 支
-        var step = filteredCctv.length / MAX_CCTV;
+      filteredEntries.sort(function(a, b) { return a.routePos - b.routePos; });
+      if (filteredEntries.length > MAX_CCTV) {
+        var step = (filteredEntries.length - 1) / (MAX_CCTV - 1);
         var sampled = [];
         for (var si = 0; si < MAX_CCTV; si++) {
-          sampled.push(filteredCctv[Math.round(si * step)]);
+          sampled.push(filteredEntries[Math.round(si * step)]);
         }
-        filteredCctv = sampled;
+        filteredEntries = sampled;
       }
 
+      var filteredCctv = filteredEntries.map(function(entry) { return entry.cam; });
       RouteMod.filteredCams = filteredCctv;
       MapMod.drawRoute(simplified, RouteMod.mode);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
@@ -566,7 +608,11 @@
       RouteStripMod.hide();
     },
     clear: function() {
+      RouteMod.analysisVersion += 1;
+      RouteMod.setAnalyzeBusy(false);
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
+      if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
+      AppState.routeAllPoints = [];
       MapMod.clearRoute();
       MapMod.drawStartEnd(null); // 清除起終點標記
       RouteStripMod.hide();
@@ -586,12 +632,14 @@
 
   var ListMod = {
     region: 'all', regionCounty: 'all', search: '',
+    PAGE_SIZE: 200, visibleLimit: 200,
     MAP_MARKER_ZOOM: 10, // 縮放 >= 10 才畫 marker
     applySearch: function(value) {
       var nextValue = value || '';
       var input = Dom.byId('js-search');
       if (input) input.value = nextValue;
       ListMod.search = nextValue.trim().toLowerCase();
+      ListMod.visibleLimit = ListMod.PAGE_SIZE;
       Bus.emit('filter:changed');
     },
     renderSearchHints: function() {
@@ -619,7 +667,7 @@
     },
     buildCameraSuggestions: function(query) {
       var nq = normalizeSearchText(query);
-      if (!nq) return [];
+      if (!nq || nq.length < 2) return [];
       var cams = (RouteMod.active ? RouteMod.filteredCams : Data.allCams()).slice();
       var scored = [];
       cams.forEach(function(cam) {
@@ -725,6 +773,7 @@
       wrap.classList.remove('hidden');
       Dom.onAll('.county-rtab', 'click', function(btn) {
         ListMod.regionCounty = btn.dataset.county || 'all';
+        ListMod.visibleLimit = ListMod.PAGE_SIZE;
         ListMod.syncCountyTabs();
         ListMod.renderSearchHints();
         Bus.emit('filter:changed');
@@ -751,6 +800,7 @@
           btn.classList.add('active');
           ListMod.region = btn.dataset.r;
           ListMod.regionCounty = 'all';
+          ListMod.visibleLimit = ListMod.PAGE_SIZE;
           ListMod.renderCountyTabs();
           Bus.emit('filter:changed');
       });
@@ -762,6 +812,7 @@
       if (s) {
         Dom.on(s, 'input', function() {
           ListMod.search = s.value.trim().toLowerCase();
+          ListMod.visibleLimit = ListMod.PAGE_SIZE;
           Bus.emit('filter:changed');
           var q = s.value.trim();
           if (!q || q.length < 1) { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } return; }
@@ -771,6 +822,36 @@
           setTimeout(function() { if (suggestList) { suggestList.innerHTML=''; suggestList.classList.remove('visible'); } }, 200);
         });
       }
+      var listInner = Dom.byId('js-list-inner');
+      Dom.on(listInner, 'click', function(event) {
+        var target = event.target && event.target.closest ? event.target : null;
+        if (!target) return;
+        var loadMoreButton = target.closest('.list-load-more');
+        if (loadMoreButton && listInner.contains(loadMoreButton)) {
+          ListMod.visibleLimit += ListMod.PAGE_SIZE;
+          ListMod.render();
+          return;
+        }
+        var favoriteButton = target.closest('.card-favorite-btn');
+        if (favoriteButton && listInner.contains(favoriteButton)) {
+          event.stopPropagation();
+          Bus.emit('favorite:toggle', (ListMod._camById || {})[favoriteButton.dataset.favoriteId]);
+          return;
+        }
+        var card = target.closest('.cam-card');
+        if (!card || !listInner.contains(card)) return;
+        var cam = (ListMod._camById || {})[card.dataset.id];
+        if (!cam) return;
+        Dom.queryAll('.cam-card', listInner).forEach(function(item) {
+          item.style.borderColor = '';
+          item.style.background = '';
+        });
+        card.style.borderColor = '#f97316';
+        card.style.background = 'rgba(249,115,22,0.08)';
+        InfoMod.open(cam);
+        NavMod.go('map');
+        MapMod.map.setView([cam.lat, cam.lng], 14);
+      });
     },
     getFiltered: function() {
       var cams = RouteMod.active ? RouteMod.filteredCams : Data.allCams();
@@ -786,12 +867,44 @@
         return rOk && cOk && sOk;
       });
     },
+    refreshMarkers: function(cams) {
+      cams = cams || ListMod.getFiltered();
+      var zoom = MapMod.map ? MapMod.map.getZoom() : 0;
+      var markerCams = [];
+      if (RouteMod.active || zoom >= ListMod.MAP_MARKER_ZOOM) {
+        markerCams = cams;
+        if (!RouteMod.active && MapMod.map && MapMod.map.getBounds) {
+          var bounds = MapMod.map.getBounds();
+          markerCams = markerCams.filter(function(cam) {
+            return bounds.contains([cam.lat, cam.lng]);
+          }).slice(0, 600);
+        }
+      }
+      var markerSignature = (zoom >= 12 ? 'tooltip|' : 'plain|')
+        + markerCams.map(function(cam) { return cam.id; }).join(',');
+      if (markerSignature !== MapMod._markerSignature) {
+        MapMod.clearMarkers();
+        markerCams.forEach(function(cam) { MapMod.addMarker(cam); });
+        MapMod._markerSignature = markerSignature;
+      }
+
+      if (MapMod.map && !MapMod._zoomBound) {
+        MapMod._zoomBound = true;
+        var viewTimer;
+        function refreshVisibleMarkers() {
+          clearTimeout(viewTimer);
+          viewTimer = setTimeout(function() { ListMod.refreshMarkers(); }, 180);
+        }
+        MapMod.map.on('zoomend', refreshVisibleMarkers);
+        MapMod.map.on('moveend', refreshVisibleMarkers);
+      }
+    },
     render: function() {
       var el = Dom.byId('js-list-inner');
       var stateEl = Dom.byId('js-list-state');
       if (!el) return;
       var cams = ListMod.getFiltered();
-      MapMod.clearMarkers();
+      ListMod.refreshMarkers(cams);
       var stat = Dom.byId('js-stat-cams');
       if (stat) stat.textContent = Data.allCams().length;
       if (cams.length === 0) {
@@ -818,29 +931,12 @@
       }
       var map = {};
       Data.allCams().forEach(function(c) { map[c.id] = c; });
+      ListMod._camById = map;
 
-      // 地圖 marker：路線模式全畫；一般模式縮放夠近才畫
-      var zoom = MapMod.map ? MapMod.map.getZoom() : 0;
-      if (RouteMod.active || zoom >= ListMod.MAP_MARKER_ZOOM) {
-        cams.forEach(function(cam) { MapMod.addMarker(cam); });
-      }
-
-      // 地圖縮放時自動補畫/移除 marker（debounce 300ms）
-      if (MapMod.map && !MapMod._zoomBound) {
-        MapMod._zoomBound = true;
-        var _zt;
-        MapMod.map.on('zoomend', function() {
-          clearTimeout(_zt);
-          _zt = setTimeout(function() { Bus.emit('filter:changed'); }, 300);
-        });
-      }
-
-      // 列表：全部顯示（虛擬化：只渲染可見部分）
-      // 簡化版：限制列表最多 200 筆（搜尋或篩選後才顯示全部）
-      var listCams = (ListMod.search || ListMod.region !== 'all' || RouteMod.active)
-        ? cams
-        : cams.slice(0, 200);
+      // 列表分批載入，避免單字搜尋一次建立數千張卡片。
+      var listCams = cams.slice(0, ListMod.visibleLimit);
       var hasMore = listCams.length < cams.length;
+      var routeCamIds = new Set(RouteMod.filteredCams.map(function(cam) { return cam.id; }));
 
       var html = '';
       listCams.forEach(function(cam) {
@@ -849,12 +945,12 @@
         var catLabel = getRoadCategoryLabel(cam.cat);
         var safeCamUrl = safeHttpUrl(cam.url);
         var _ts = safeCamUrl ? (safeCamUrl + (safeCamUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now()/60000)) : '';
-        var isRouteCam = RouteMod.active && RouteMod.filteredCams.some(function(routeCam) { return routeCam.id === cam.id; });
+        var isRouteCam = RouteMod.active && routeCamIds.has(cam.id);
         var distLabel = '';
         if (NearbyMod.userLat !== null && NearbyMod.userLng !== null) {
           distLabel = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng).toFixed(1) + 'km';
         }
-        html += '<div class="cam-card glass rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+escapeHtml(cam.id)+'">'
+        html += '<div class="cam-card rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+escapeHtml(cam.id)+'">'
           + '<div class="cam-card-top w-full">'
           + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
           + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
@@ -873,38 +969,24 @@
           + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div></div>';
       });
       if (hasMore) {
-        html += '<div class="text-center text-slate-500 text-xs py-4">顯示前 200 支，請選擇縣市或搜尋查看更多</div>';
+        html += '<button type="button" class="list-load-more w-full text-center text-xs py-4">'
+          + '目前顯示 ' + listCams.length + ' / ' + cams.length + ' 支 · 載入更多'
+          + '</button>';
       }
       el.innerHTML = html;
+      if (ListMod._imageObserver) ListMod._imageObserver.disconnect();
       if('IntersectionObserver' in window){
-        var _ob=new IntersectionObserver(function(entries){
+        ListMod._imageObserver = new IntersectionObserver(function(entries){
           entries.forEach(function(e){
             if(!e.isIntersecting)return;
             var img=e.target.querySelector('.cam-th');
             if(img&&img.dataset.src&&!img.src){img.src=img.dataset.src;img.onload=function(){img.style.opacity='1';};}
-            _ob.unobserve(e.target);
+            ListMod._imageObserver.unobserve(e.target);
           });
         },{rootMargin:'80px'});
-        Dom.queryAll('.cam-tw', el).forEach(function(w){_ob.observe(w);});
+        Dom.queryAll('.cam-tw', el).forEach(function(w){ListMod._imageObserver.observe(w);});
       }
-      Dom.queryAll('.cam-card', el).forEach(function(card) {
-        Dom.on(card, 'click', function() {
-          var cam = map[card.dataset.id];
-          if (!cam) return;
-          Dom.queryAll('.cam-card', el).forEach(function(c){c.style.borderColor='';c.style.background='';});
-          card.style.borderColor='#f97316';
-          card.style.background='rgba(249,115,22,0.08)';
-          InfoMod.open(cam);
-          NavMod.go('map');
-          MapMod.map.setView([cam.lat, cam.lng], 14);
-        });
-      });
-      Dom.queryAll('.card-favorite-btn', el).forEach(function(btn) {
-        Dom.on(btn, 'click', function(event) {
-          event.stopPropagation();
-          Bus.emit('favorite:toggle', map[btn.dataset.favoriteId]);
-        });
-      });
+      if (window.FavoritesMod) FavoritesMod.syncButtons();
       // clearMarkers 裡的 setTimeout 會自動補畫，這裡不需要再呼叫
     }
   };

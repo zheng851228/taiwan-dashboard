@@ -87,7 +87,183 @@ test('keeps the light theme and map tiles consistent after reload', async ({ pag
   );
 });
 
+test('shows useful route suggestions from the first character without remote autocomplete', async ({ page }) => {
+  let geocodeRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/v2/geocode') geocodeRequests += 1;
+  });
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+
+  const start = page.locator('#js-route-start');
+  await start.fill('台');
+  const box = page.locator('#suggest-start');
+  await expect(box).toBeVisible();
+  await expect(start).toHaveAttribute('aria-expanded', 'true');
+  await expect(box.locator('.suggest-item')).toHaveCount(6);
+  await expect(box.locator('.suggest-item').first()).toContainText('台北');
+  expect((await box.boundingBox())?.height).toBeGreaterThan(0);
+
+  await start.press('ArrowDown');
+  await start.press('Enter');
+  await expect(start).toHaveValue('台北');
+  await expect(start).toHaveAttribute('aria-expanded', 'false');
+
+  await start.fill('信義');
+  await expect(box.locator('.suggest-item').first()).toContainText('信義區');
+  await box.locator('.suggest-item').first().click();
+  await expect(start).toHaveValue('信義區');
+  expect(await start.evaluate((input) => input.dataset.routePoint || '')).toBe('');
+
+  await start.fill('淡水');
+  await box.locator('.suggest-item').first().click();
+  await expect(start).toHaveValue('淡水');
+  expect(await start.evaluate((input) => input.dataset.routePoint)).toBe('25.1676,121.445');
+
+  await start.fill('台北101');
+  await expect(box).toBeHidden();
+  expect(await start.evaluate((input) => input.dataset.routePoint || '')).toBe('');
+  expect(geocodeRequests).toBe(0);
+});
+
+test('preserves an unsupported pasted route and always clears its loading state', async ({ page }) => {
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+
+  const importInput = page.locator('#js-gmaps-url');
+  await importInput.fill('這不是路線連結');
+  await page.locator('#js-gmaps-parse').click();
+  await expect(importInput).toHaveValue('這不是路線連結');
+  await expect(page.locator('#js-gmaps-status')).toBeHidden();
+
+  const collapsedInput = page.locator('#route-paste-input');
+  await collapsedInput.evaluate((input) => {
+    const clipboard = new DataTransfer();
+    clipboard.setData('text', '仍然不是路線連結');
+    input.dispatchEvent(new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: clipboard
+    }));
+  });
+  await expect(collapsedInput).toHaveValue('仍然不是路線連結');
+  await expect(page.locator('#js-route-status')).toHaveText('');
+});
+
+test('keeps selected place labels while routing with their local coordinates', async ({ page }) => {
+  let geocodeRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/v2/geocode') geocodeRequests += 1;
+  });
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+
+  const start = page.locator('#js-route-start');
+  await start.fill('台中市政');
+  await page.locator('#suggest-start .suggest-item').filter({ hasText: '台中市政府' }).click();
+  await expect(start).toHaveValue('台中市政府');
+
+  const end = page.locator('#js-route-end');
+  await end.fill('奇');
+  await page.locator('#suggest-end .suggest-item').filter({ hasText: '奇美博物館' }).click();
+  await expect(end).toHaveValue('奇美博物館');
+
+  const routeRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes'
+  );
+  await page.locator('#js-route-btn').click();
+  const routeRequest = await routeRequestPromise;
+  const body = routeRequest.postDataJSON();
+  expect(body.locations).toMatchObject([
+    { lat: 24.1618, lng: 120.6466 },
+    { lat: 22.9346, lng: 120.226 }
+  ]);
+  await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  expect(geocodeRequests).toBe(0);
+});
+
+test('keeps a cleared route empty when an older conditions request finishes', async ({ page }) => {
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    window.__releaseConditions = null;
+    AppServices.loadRouteConditions = function() {
+      return new Promise((resolve) => {
+        window.__releaseConditions = function() {
+          resolve({
+            status: 'ok',
+            data: { overall: {}, sections: [] },
+            updatedAt: new Date().toISOString()
+          });
+        };
+      });
+    };
+  });
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releaseConditions)).toBe('function');
+
+  await page.evaluate(() => RouteMod.clear());
+  await page.evaluate(() => window.__releaseConditions());
+  await page.waitForTimeout(100);
+
+  const clearedState = await page.evaluate(() => ({
+    routeAllPoints: AppState.routeAllPoints,
+    routeConditions: AppState.routeConditions,
+    startEndMarkers: MapMod.startEndMarkers.length
+  }));
+  expect(clearedState).toEqual({
+    routeAllPoints: [],
+    routeConditions: null,
+    startEndMarkers: 0
+  });
+  await expect(page.locator('#route-conditions-panel')).toBeHidden();
+});
+
+test('does not restore a route whose analysis finishes after it was cleared', async ({ page }) => {
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    window.__releaseRouteAnalysis = null;
+    AppServices.createRoute = function() {
+      return new Promise((resolve) => {
+        window.__releaseRouteAnalysis = function() {
+          resolve({ status: 'ok', data: {} });
+        };
+      });
+    };
+  });
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect.poll(() => page.evaluate(() => typeof window.__releaseRouteAnalysis)).toBe('function');
+
+  await page.evaluate(() => RouteMod.clear());
+  await page.evaluate(() => window.__releaseRouteAnalysis());
+  await page.waitForTimeout(100);
+
+  const clearedState = await page.evaluate(() => ({
+    activeRoute: AppState.activeRoute,
+    routeAllPoints: AppState.routeAllPoints,
+    routeActive: RouteMod.active,
+    analyzing: RouteMod.analyzing,
+    routeLayer: Boolean(MapMod.routeLayer)
+  }));
+  expect(clearedState).toEqual({
+    activeRoute: null,
+    routeAllPoints: [],
+    routeActive: false,
+    analyzing: false,
+    routeLayer: false
+  });
+});
+
 test('preserves ordered Google Maps waypoints when importing a route', async ({ page }) => {
+  let routeRequests = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
+  });
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#route-toggle').click();
   await page.locator('#js-gmaps-url').fill(
@@ -98,8 +274,8 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
   await expect(page.locator('#js-route-end')).toHaveValue('24.7570,121.7530');
   await expect(page.locator('.wp-input')).toHaveCount(1);
   await expect(page.locator('.wp-input')).toHaveValue('24.9500,121.6200');
-  await page.locator('#js-route-btn').click();
   await expect(page.locator('.condition-section').first()).toBeVisible();
+  expect(routeRequests).toBe(1);
   const route = await page.evaluate(() => AppState.activeRoute);
   expect(route.locations).toHaveLength(3);
   expect(route.distanceKm).toBeGreaterThan(40);
@@ -144,6 +320,31 @@ test('keeps a saved camera after reload', async ({ page }) => {
   await page.reload();
   await page.locator('#nav-tools').click();
   await expect(page.locator(`#favorites-tools-list [data-open-favorite="${cameraId}"]`)).toBeVisible();
+});
+
+test('keeps all large camera result sets reachable through progressive loading', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic large-list verification runs once.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await expect.poll(() => page.evaluate(() => Data.allCams().length)).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const source = Data.allCams()[0];
+    const cameras = Array.from({ length: 205 }, (_, index) => ({
+      ...source,
+      id: `synthetic-${index}`,
+      name: `測試攝影機 ${index}`,
+      searchText: `測試攝影機 ${index}`
+    }));
+    Data.allCams = () => cameras;
+    ListMod.visibleLimit = ListMod.PAGE_SIZE;
+    ListMod.render();
+  });
+  await page.locator('#nav-list').click();
+
+  await expect(page.locator('.cam-card')).toHaveCount(200);
+  await expect(page.locator('.list-load-more')).toContainText('200 / 205');
+  await page.locator('.list-load-more').click();
+  await expect(page.locator('.cam-card')).toHaveCount(205);
+  await expect(page.locator('.list-load-more')).toHaveCount(0);
 });
 
 test('shows iPhone Safari install guidance once and keeps a fixed install entry', async ({ page }, testInfo) => {

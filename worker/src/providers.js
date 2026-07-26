@@ -27,7 +27,9 @@ const THB_LIVE_TTL_MS = 60 * 1000;
 const TDX_LIVE_TTL_MS = 60 * 1000;
 const CWA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 const CAMERA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
 const TRACE_CHUNK_DISTANCE_KM = 150;
+const JSON_RESPONSE_CACHE_MAX = 256;
 
 export async function getValhallaRoute(locations, costing, env, avoidLocations = []) {
   const baseUrl = String(env.VALHALLA_BASE_URL || 'https://valhalla1.openstreetmap.de').replace(/\/$/, '');
@@ -85,7 +87,7 @@ export async function traceRouteAttributes(route, costing, env) {
   const chunks = splitTraceGeometry(route.geometry);
   const shapeMatch = chunks.length > 1 ? 'walk_or_snap' : 'edge_walk';
   const edges = [];
-  for (const chunk of chunks) {
+  const tracedChunks = await mapWithConcurrency(chunks, 2, async (chunk) => {
     const result = await requestJson(`${baseUrl}/trace_attributes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -110,10 +112,72 @@ export async function traceRouteAttributes(route, costing, env) {
       })
     }, 20000);
     const chunkEdges = Array.isArray(result.edges) ? result.edges : [];
+    if (!chunkEdges.length) {
+      throw new Error(`Valhalla trace_attributes returned no road edges for chunk ${chunk.startShapeIndex}`);
+    }
+    assertTraceCoverage(chunkEdges, chunk.geometry.length, chunk.startShapeIndex);
+    return {
+      startShapeIndex: chunk.startShapeIndex,
+      edges: chunkEdges
+    };
+  });
+  tracedChunks.forEach((chunk) => {
+    const chunkEdges = chunk.edges;
     chunkEdges.forEach((edge) => appendTraceEdge(edges, normalizeTraceEdge(edge, chunk.startShapeIndex)));
-  }
+  });
   if (!edges.length) throw new Error('Valhalla trace_attributes returned no road edges');
   return edges;
+}
+
+function assertTraceCoverage(edges, geometryLength, startShapeIndex) {
+  const ranges = edges.map((edge) => ({
+    begin: Number(edge.begin_shape_index ?? edge.beginShapeIndex ?? 0),
+    end: Number(edge.end_shape_index ?? edge.endShapeIndex ?? edge.begin_shape_index ?? 0)
+  })).sort((a, b) => a.begin - b.begin);
+  let coveredThrough = 0;
+  for (const range of ranges) {
+    const validRange = Number.isInteger(range.begin)
+      && Number.isInteger(range.end)
+      && range.begin >= 0
+      && range.begin <= range.end
+      && range.end < geometryLength;
+    if (!validRange) {
+      throw new Error(`Valhalla trace_attributes returned invalid shape indices for chunk ${startShapeIndex}`);
+    }
+    // An attributed road edge must begin at or before the last covered point.
+    // begin === coveredThrough + 1 would leave the segment between both points unattributed.
+    if (range.begin > coveredThrough) {
+      throw new Error(`Valhalla trace_attributes left an attribution gap for chunk ${startShapeIndex}`);
+    }
+    coveredThrough = Math.max(coveredThrough, range.end);
+  }
+  if (coveredThrough < geometryLength - 1) {
+    throw new Error(`Valhalla trace_attributes returned partial road coverage for chunk ${startShapeIndex}`);
+  }
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  let stopped = false;
+  async function run() {
+    while (!stopped && nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = await mapper(items[index], index);
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  }
+  const runners = Array.from(
+    { length: Math.min(Math.max(1, limit), items.length) },
+    () => run()
+  );
+  await Promise.all(runners);
+  return results;
 }
 
 export function splitTraceGeometry(geometry, maxDistanceKm = TRACE_CHUNK_DISTANCE_KM) {
@@ -1037,9 +1101,9 @@ export async function geocodePlace(query) {
   url.searchParams.set('bounded', '1');
   url.searchParams.set('accept-language', 'zh-TW');
   url.searchParams.set('addressdetails', '1');
-  const payload = await requestJson(url.toString(), {
+  const payload = await requestJsonCached(url.toString(), {
     headers: { 'User-Agent': 'taiwan-dashboard-worker/2.0 (route-assistant)' }
-  }, 10000);
+  }, 10000, GEOCODE_TTL_MS);
   const seen = new Set();
   const adminMatch = normalizePlaceText(originalQuery).match(/^(.+?[縣市])/);
   const places = (payload || []).map((item) => ({
@@ -1133,7 +1197,15 @@ export async function requestJsonCached(url, options = {}, timeoutMs = 12000, tt
   if (jsonResponsePromises.has(key)) return jsonResponsePromises.get(key);
 
   const promise = requestJson(url, options, timeoutMs).then((value) => {
-    jsonResponseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+    const now = Date.now();
+    for (const [cacheKey, entry] of jsonResponseCache) {
+      if (entry.expiresAt <= now) jsonResponseCache.delete(cacheKey);
+    }
+    if (jsonResponseCache.has(key)) jsonResponseCache.delete(key);
+    jsonResponseCache.set(key, { value, expiresAt: now + ttlMs });
+    while (jsonResponseCache.size > JSON_RESPONSE_CACHE_MAX) {
+      jsonResponseCache.delete(jsonResponseCache.keys().next().value);
+    }
     return value;
   });
   jsonResponsePromises.set(key, promise);

@@ -13,6 +13,7 @@
   var currentRoute = null;
   var lastRefreshAt = 0;
   var autoTimer = null;
+  var requestVersion = 0;
 
   function setVisible(id, visible) {
     var element = Dom.byId(id);
@@ -283,13 +284,19 @@
   function load(route, forceRefresh) {
     currentRoute = route || currentRoute;
     if (!currentRoute || !currentRoute.routeId) return;
+    var routeForRequest = currentRoute;
+    var thisRequestVersion = ++requestVersion;
     setNavigationLinks();
     renderAppleLegs(false);
     if (window.RouteStripMod) RouteStripMod.hide();
     showLoading();
     AppServices.loadRouteConditions(currentRoute.routeId, !!forceRefresh)
-      .then(render)
+      .then(function(payload) {
+        if (thisRequestVersion !== requestVersion || currentRoute !== routeForRequest) return;
+        render(payload);
+      })
       .catch(function(error) {
+        if (thisRequestVersion !== requestVersion || currentRoute !== routeForRequest) return;
         showError(error && error.message ? error.message : '\u6cbf\u9014\u72c0\u6cc1\u66ab\u6642\u7121\u6cd5\u8f09\u5165\u3002');
       });
   }
@@ -409,6 +416,7 @@
   }
 
   function clear() {
+    requestVersion += 1;
     currentRoute = null;
     lastRefreshAt = 0;
     setNavigationLinks();
