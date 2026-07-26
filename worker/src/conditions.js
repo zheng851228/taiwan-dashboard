@@ -7,6 +7,7 @@ import {
 import { extractRoadRef, validateRouteEdges } from './rules.js';
 
 const TRAFFIC_PRIORITY = { unknown: 0, clear: 1, slow: 2, congested: 3 };
+const CAMERA_GRID_DEGREES = 0.05;
 
 export function classifyTraffic(speedKph, referenceSpeedKph) {
   if (!Number.isFinite(speedKph) || !Number.isFinite(referenceSpeedKph) || referenceSpeedKph <= 0) {
@@ -129,6 +130,7 @@ function findEdgeForIndex(edges, shapeIndex) {
 
 export function fuseConditions(route, providerData, now = new Date()) {
   const sections = createRouteSections(route);
+  const cameraGrid = buildCameraGrid(providerData.cameras);
   const fused = sections.map((section) => {
     const trafficMatch = matchTrafficDetector(section, providerData.detectors, now);
     const publishedMatch = trafficMatch
@@ -141,7 +143,7 @@ export function fuseConditions(route, providerData, now = new Date()) {
         : unknownTraffic(providerData.trafficSource || 'TDX'));
     const weather = matchWeather(section, providerData.weather, now);
     const incidents = matchIncidents(section, providerData.incidents, now);
-    const cameras = matchCameras(section, providerData.cameras, route.vehicle);
+    const cameras = matchCameras(section, cameraGrid, route.vehicle);
     return {
       order: section.order,
       fromKm: section.fromKm,
@@ -244,22 +246,81 @@ function matchIncidents(section, incidents, now) {
   }));
 }
 
-function matchCameras(section, cameras, vehicle) {
-  const sectionRoadRef = normalizeRoadRef(section.roadRef);
-  const nearby = [];
+function buildCameraGrid(cameras) {
+  const buckets = new Map();
+  const seen = new Set();
   for (const camera of cameras || []) {
     if (!Number.isFinite(camera.lat) || !Number.isFinite(camera.lng) || camera.prohibited) continue;
+    const identity = cameraIdentity(camera);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    const key = cameraGridKey(camera.lat, camera.lng);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(camera);
+    else buckets.set(key, [camera]);
+  }
+  return buckets;
+}
+
+function cameraIdentity(camera) {
+  const id = String(camera.id || '').trim();
+  if (id) return `id:${id}`;
+  const imageUrl = camera.imageUrl || camera.cam_url || camera.url || '';
+  return `location:${camera.lat},${camera.lng}:${imageUrl}`;
+}
+
+function cameraGridKey(lat, lng) {
+  return `${Math.floor(lat / CAMERA_GRID_DEGREES)},${Math.floor(lng / CAMERA_GRID_DEGREES)}`;
+}
+
+function nearbyCameraBuckets(section, cameraGrid, radiusKm) {
+  if (!Array.isArray(section.sample) || section.sample.length < 2) return [];
+  const [lat, lng] = section.sample;
+  const latCell = Math.floor(lat / CAMERA_GRID_DEGREES);
+  const lngCell = Math.floor(lng / CAMERA_GRID_DEGREES);
+  const latCells = Math.ceil((radiusKm / 110.6) / CAMERA_GRID_DEGREES);
+  const lngDegrees = radiusKm / (111.3 * Math.max(0.35, Math.cos(lat * Math.PI / 180)));
+  const lngCells = Math.ceil(lngDegrees / CAMERA_GRID_DEGREES);
+  const nearby = [];
+  for (let latOffset = -latCells; latOffset <= latCells; latOffset += 1) {
+    for (let lngOffset = -lngCells; lngOffset <= lngCells; lngOffset += 1) {
+      const bucket = cameraGrid.get(`${latCell + latOffset},${lngCell + lngOffset}`);
+      if (bucket) nearby.push(...bucket);
+    }
+  }
+  return nearby;
+}
+
+function compareCameraCandidates(a, b) {
+  return Number(b.sameRoad) - Number(a.sameRoad) || a.distanceKm - b.distanceKm;
+}
+
+function sameCameraRoad(section, camera) {
+  const sectionValue = section.roadRef || section.roadName || '';
+  const cameraValue = camera.roadRef || camera.name || '';
+  const sectionRef = extractRoadRef({ roadRef: sectionValue, names: [sectionValue] });
+  const cameraRef = extractRoadRef({ roadRef: cameraValue, names: [cameraValue] });
+  if (sectionRef || cameraRef) return Boolean(sectionRef && cameraRef && sectionRef === cameraRef);
+  const sectionName = normalizeRoadRef(sectionValue);
+  const cameraName = normalizeRoadRef(cameraValue);
+  return Boolean(sectionName && cameraName && sectionName === cameraName);
+}
+
+function matchCameras(section, cameraGrid, vehicle) {
+  const selected = [];
+  for (const camera of nearbyCameraBuckets(section, cameraGrid, 5)) {
     const distanceKm = haversineKm(section.sample, [camera.lat, camera.lng]);
     if (distanceKm > 5 || cameraRoadIsProhibited(camera, vehicle)) continue;
-    nearby.push({
+    const candidate = {
       camera,
-      sameRoad: normalizeRoadRef(camera.roadRef || camera.name).includes(sectionRoadRef),
+      sameRoad: sameCameraRoad(section, camera),
       distanceKm
-    });
+    };
+    selected.push(candidate);
+    selected.sort(compareCameraCandidates);
+    if (selected.length > 2) selected.length = 2;
   }
-  return nearby
-    .sort((a, b) => Number(b.sameRoad) - Number(a.sameRoad) || a.distanceKm - b.distanceKm)
-    .slice(0, 2)
+  return selected
     .map(({ camera, distanceKm }) => ({
       id: camera.id,
       name: camera.name,

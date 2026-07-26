@@ -267,4 +267,75 @@ describe('camera fusion', () => {
 
     expect(result.sections[0].cameras).toEqual([]);
   });
+
+  it('queries adjacent spatial buckets without scanning distant camera metadata', () => {
+    const farCameras = Array.from({ length: 5000 }, (_, index) => {
+      const camera = {
+        id: `far-${index}`,
+        name: `遠端-${index}`,
+        lat: 22 + (index % 100) * 0.001,
+        lng: 120 + (index % 80) * 0.001
+      };
+      Object.defineProperty(camera, 'roadRef', {
+        get() {
+          throw new Error('distant camera road metadata should not be inspected');
+        }
+      });
+      return camera;
+    });
+    const result = fuseConditions(route, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: farCameras.concat([
+        {
+          id: 'across-cell',
+          name: '台9線相鄰格',
+          roadRef: '台9線',
+          lat: 25,
+          lng: 121.549
+        }
+      ])
+    }, NOW);
+
+    expect(result.sections[0].cameras.map((camera) => camera.id)).toEqual(['across-cell']);
+  });
+
+  it('does not treat a longer provincial road number as the same road', () => {
+    const routeOnTai1 = {
+      ...route,
+      edges: [{ names: ['台1線'], beginShapeIndex: 0, endShapeIndex: 1 }]
+    };
+    const result = fuseConditions(routeOnTai1, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: [
+        { id: 'tai10-near', name: '台10線近端', roadRef: '台10線', lat: 24.994, lng: 121.506 },
+        { id: 'tai1-far', name: '台1線遠端', roadRef: '台1線', lat: 24.975, lng: 121.525 }
+      ]
+    }, NOW);
+
+    expect(result.sections[0].cameras.map((camera) => camera.id)).toEqual(['tai1-far', 'tai10-near']);
+  });
+
+  it('deduplicates repeated camera ids before selecting the nearest two', () => {
+    const result = fuseConditions(route, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: [
+        { id: 'duplicate', name: '台9線鏡頭', roadRef: '台9線', lat: 24.994, lng: 121.506 },
+        { id: 'duplicate', name: '台9線鏡頭副本', roadRef: '台9線', lat: 24.993, lng: 121.507 },
+        { id: 'second', name: '台9線第二鏡頭', roadRef: '台9線', lat: 24.992, lng: 121.508 }
+      ]
+    }, NOW);
+
+    const cameraIds = result.sections[0].cameras.map((camera) => camera.id);
+    expect(cameraIds).toEqual(['second', 'duplicate']);
+    expect(new Set(cameraIds).size).toBe(2);
+  });
 });
