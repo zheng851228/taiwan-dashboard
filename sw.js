@@ -1,29 +1,37 @@
-const CACHE_VERSION = "v12";
+const CACHE_VERSION = "v13";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
-const RUNTIME_CACHE = `twdash-runtime-${CACHE_VERSION}`;
+const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
 const SHELL_URLS = [
   "./",
   "./index.html",
   "./manifest.json",
   "./favicon.svg",
+  "./assets/icons/app-icon.svg",
+  "./assets/icons/maskable-icon.svg",
+  "./assets/icons/apple-touch-icon.png",
+  "./assets/icons/icon-192.png",
+  "./assets/icons/icon-512.png",
+  "./assets/icons/maskable-512.png",
+  "./assets/vendor/leaflet/leaflet.css",
+  "./assets/vendor/leaflet/leaflet.js",
+  "./assets/vendor/leaflet/images/marker-icon.png",
+  "./assets/vendor/leaflet/images/marker-icon-2x.png",
+  "./assets/vendor/leaflet/images/marker-shadow.png",
+  "./assets/vendor/fontawesome/css/all.min.css",
+  "./assets/vendor/fontawesome/webfonts/fa-solid-900.woff2",
+  "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
+  "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
   "./css/tailwind.generated.css",
-  "./css/style.css?v=12",
+  "./css/style.css?v=13",
   "./js/core.js",
   "./js/services.js",
   "./js/data.js",
   "./js/main-ui.js",
   "./js/enhancements.js",
   "./js/route-conditions.js",
-  "./js/ride-tools.js"
-];
-
-const CACHE_FIRST_HOSTS = [
-  "unpkg.com",
-  "cdnjs.cloudflare.com",
-  "cdn.tailwindcss.com",
-  "fonts.googleapis.com",
-  "fonts.gstatic.com"
+  "./js/ride-tools.js",
+  "./js/pwa.js"
 ];
 
 const API_PATTERNS = [
@@ -34,7 +42,13 @@ const API_PATTERNS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_URLS)).then(() => self.skipWaiting())
+    caches.keys().then((existingKeys) =>
+      caches.open(SHELL_CACHE)
+        .then((cache) => cache.addAll(SHELL_URLS))
+        // v12 only displayed a toast and could not activate a waiting worker.
+        // Auto-activate this one migration; later versions use the in-app update button.
+        .then(() => existingKeys.includes(LEGACY_AUTO_UPDATE_CACHE) ? self.skipWaiting() : undefined)
+    )
   );
 });
 
@@ -43,11 +57,17 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== SHELL_CACHE && key !== RUNTIME_CACHE)
+          .filter((key) => key.startsWith("twdash-") && key !== SHELL_CACHE)
           .map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -61,16 +81,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.origin === self.location.origin) {
-    event.respondWith(cacheFirst(request, SHELL_CACHE));
-    return;
-  }
-
-  if (CACHE_FIRST_HOSTS.includes(url.hostname)) {
-    event.respondWith(cacheFirst(request, RUNTIME_CACHE));
-    return;
-  }
-
   if (API_PATTERNS.some((pattern) => url.hostname.includes(pattern))) {
     event.respondWith(apiNetworkOnly(request));
     return;
@@ -78,6 +88,11 @@ self.addEventListener("fetch", (event) => {
 
   if (/^\/(v2\/|route$|cam-list$|weather$)/.test(url.pathname)) {
     event.respondWith(apiNetworkOnly(request));
+    return;
+  }
+
+  if (url.origin === self.location.origin) {
+    event.respondWith(cacheFirst(request, SHELL_CACHE));
   }
 });
 
@@ -120,7 +135,8 @@ async function apiNetworkOnly(request) {
       status: 503,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        "Access-Control-Allow-Origin": "*"
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store"
       }
     });
   }

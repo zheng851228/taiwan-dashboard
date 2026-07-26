@@ -923,22 +923,3 @@ var PlaceSuggest = {
   };
   Dom.onId('modal-overlay', 'click', function() { window.ModalEffect.close(); });
   Dom.onId('modal-close-btn', 'click', function() { window.ModalEffect.close(); });
-
-  // 註冊 Service Worker
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js')
-        .then(function(reg) {
-          // 有新版本時提示用戶
-          reg.addEventListener('updatefound', function() {
-            var newWorker = reg.installing;
-            newWorker.addEventListener('statechange', function() {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                Toast.show('有新版本，重新整理即可更新', 4000);
-              }
-            });
-          });
-        })
-        .catch(function() {});
-    });
-  }
