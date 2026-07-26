@@ -711,9 +711,12 @@ body.light .route-text-input {
   margin-top: 8px;
 }
 .route-collapse-btn {
-  width: 100%;
-  margin-top: 8px;
-  padding: 5px;
+  width: auto;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
   color: #64748b;
   font-size: 10px;
   font-weight: 800;
@@ -812,6 +815,9 @@ body.light .route-text-input {
   display: grid;
   grid-template-columns: 1.5fr 1fr 1fr;
   gap: 8px;
+}
+.condition-loading.hidden {
+  display: none;
 }
 .condition-skeleton {
   height: 58px;
@@ -1106,6 +1112,173 @@ body.light .condition-data-chip {
 }
 
 @media (max-width: 640px) {
+  .map-top-panel {
+    top: calc(var(--safe-top) + 2.8rem);
+    left: 0.65rem;
+    right: 0.65rem;
+  }
+  #route-expanded.route-shell-expanded {
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 7rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 10px;
+    border-radius: 22px;
+  }
+  #route-expanded.route-shell-expanded > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 8px;
+  }
+  .route-expanded-head {
+    min-height: 28px;
+    padding-inline: 2px;
+  }
+  .route-title-kicker,
+  .route-option-head span:last-child {
+    display: none;
+  }
+  .route-title-text {
+    font-size: 13px;
+  }
+  .route-head-actions {
+    gap: 5px;
+  }
+  #history-count {
+    display: none;
+  }
+  .route-mini-btn,
+  .route-collapse-btn {
+    min-height: 28px;
+    padding: 5px 8px;
+  }
+  .route-input-card {
+    min-height: 38px;
+    padding: 6px 9px;
+    border-radius: 14px;
+  }
+  .route-point-row {
+    gap: 7px;
+  }
+  .route-point-badge {
+    width: 22px;
+    height: 22px;
+  }
+  .route-text-input {
+    min-height: 36px;
+    padding: 6px 28px 6px 10px;
+    border-radius: 13px;
+  }
+  .route-vehicle-shell {
+    padding: 8px;
+    border-radius: 16px;
+  }
+  .route-option-head {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+  .route-plate-grid {
+    gap: 5px;
+  }
+  .route-mode-btn {
+    min-height: 34px;
+    padding: 6px 8px;
+    border-radius: 12px;
+  }
+  .route-advanced {
+    margin-top: 6px;
+    line-height: 1.2;
+  }
+  .route-car-btn {
+    margin-top: 6px;
+  }
+  .route-action-btn {
+    min-height: 44px;
+    padding-block: 8px;
+    border-radius: 14px;
+    box-shadow: 0 10px 20px rgba(249,115,22,0.22);
+  }
+  #route-expanded:not(.hidden) ~ #ride-status-card {
+    display: none;
+  }
+  #pg-map:has(#route-conditions-panel:not(.hidden):not(.is-collapsed)) #ride-status-card {
+    display: none;
+  }
+  #js-route-status {
+    margin-top: 4px;
+    padding-inline: 8px;
+    border-radius: 10px;
+    line-height: 1.35;
+  }
+  #js-route-status:empty {
+    display: none;
+  }
+  .ride-status-shell {
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 22px;
+  }
+  .ride-status-grid {
+    gap: 7px;
+    margin-top: 8px;
+  }
+  .ride-metric-card {
+    min-height: 52px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    gap: 2px;
+  }
+  .ride-inline-note {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 13px;
+  }
+  .map-control-stack {
+    left: 0.75rem;
+    bottom: calc(var(--safe-bottom) + 4.55rem);
+    gap: 8px;
+  }
+  .map-control-stack > button {
+    width: 40px;
+    height: 40px;
+  }
+  .bottom-navigation {
+    padding-top: 6px;
+    padding-bottom: calc(var(--safe-bottom) + 4px);
+    border-radius: 24px 24px 0 0;
+  }
+  .bottom-navigation .nav-it {
+    gap: 0;
+  }
+  .bottom-navigation .nav-it > div {
+    width: 42px;
+    height: 26px;
+  }
+  .bottom-navigation .nav-it i {
+    font-size: 16px;
+  }
+  .bottom-navigation .nav-it span {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+  .map-legend {
+    min-width: 0;
+    right: 0.65rem;
+    bottom: calc(var(--safe-bottom) + 4.55rem);
+    padding: 6px 8px;
+    border-radius: 999px;
+  }
+  .map-legend-title,
+  .map-legend-item {
+    display: none;
+  }
+  .map-legend-item:has(.traffic-unknown) {
+    display: flex;
+    gap: 5px;
+    margin: 0;
+    font-size: 9px;
+  }
+  .map-legend-dot.traffic-unknown {
+    width: 8px;
+    height: 8px;
+  }
   #pg-list {
     scroll-padding-top: calc(var(--safe-top) + 4rem);
     scroll-padding-bottom: calc(var(--safe-bottom) + 6rem);
@@ -1140,9 +1313,6 @@ body.light .condition-data-chip {
     grid-template-columns: repeat(5, minmax(54px, 1fr));
     overflow-x: auto;
     padding-bottom: 3px;
-  }
-  .map-legend {
-    bottom: calc(var(--safe-bottom) + 5.2rem);
   }
 }
 
