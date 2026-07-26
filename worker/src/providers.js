@@ -87,7 +87,7 @@ export async function traceRouteAttributes(route, costing, env) {
   const chunks = splitTraceGeometry(route.geometry);
   const shapeMatch = chunks.length > 1 ? 'walk_or_snap' : 'edge_walk';
   const edges = [];
-  const tracedChunks = await mapWithConcurrency(chunks, 2, async (chunk) => {
+  const tracedChunks = await mapWithConcurrency(chunks, 2, async (chunk, chunkIndex) => {
     const result = await requestJson(`${baseUrl}/trace_attributes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -115,21 +115,32 @@ export async function traceRouteAttributes(route, costing, env) {
     if (!chunkEdges.length) {
       throw new Error(`Valhalla trace_attributes returned no road edges for chunk ${chunk.startShapeIndex}`);
     }
-    assertTraceCoverage(chunkEdges, chunk.geometry.length, chunk.startShapeIndex);
+    assertTraceCoverage(
+      chunkEdges,
+      chunk.geometry.length,
+      chunk.startShapeIndex,
+      chunkIndex < chunks.length - 1 ? 1 : 0
+    );
     return {
       startShapeIndex: chunk.startShapeIndex,
+      geometry: chunk.geometry,
       edges: chunkEdges
     };
   });
   tracedChunks.forEach((chunk) => {
     const chunkEdges = chunk.edges;
-    chunkEdges.forEach((edge) => appendTraceEdge(edges, normalizeTraceEdge(edge, chunk.startShapeIndex)));
+    const maxLocalShapeIndex = chunk.geometry.length - 1;
+    chunkEdges.forEach((edge) => appendTraceEdge(
+      edges,
+      normalizeTraceEdge(edge, chunk.startShapeIndex, maxLocalShapeIndex)
+    ));
   });
   if (!edges.length) throw new Error('Valhalla trace_attributes returned no road edges');
+  assertTraceCoverage(edges, route.geometry.length, 'combined route');
   return edges;
 }
 
-function assertTraceCoverage(edges, geometryLength, startShapeIndex) {
+function assertTraceCoverage(edges, geometryLength, startShapeIndex, maxTrailingUncoveredSegments = 0) {
   const ranges = edges.map((edge) => ({
     begin: Number(edge.begin_shape_index ?? edge.beginShapeIndex ?? 0),
     end: Number(edge.end_shape_index ?? edge.endShapeIndex ?? edge.begin_shape_index ?? 0)
@@ -139,8 +150,10 @@ function assertTraceCoverage(edges, geometryLength, startShapeIndex) {
     const validRange = Number.isInteger(range.begin)
       && Number.isInteger(range.end)
       && range.begin >= 0
+      && range.begin < geometryLength
       && range.begin <= range.end
-      && range.end < geometryLength;
+      // Valhalla walk_or_snap may report the final end index as terminal-exclusive.
+      && range.end <= geometryLength;
     if (!validRange) {
       throw new Error(`Valhalla trace_attributes returned invalid shape indices for chunk ${startShapeIndex}`);
     }
@@ -151,7 +164,7 @@ function assertTraceCoverage(edges, geometryLength, startShapeIndex) {
     }
     coveredThrough = Math.max(coveredThrough, range.end);
   }
-  if (coveredThrough < geometryLength - 1) {
+  if (coveredThrough < geometryLength - 1 - maxTrailingUncoveredSegments) {
     throw new Error(`Valhalla trace_attributes returned partial road coverage for chunk ${startShapeIndex}`);
   }
 }
@@ -192,8 +205,14 @@ export function splitTraceGeometry(geometry, maxDistanceKm = TRACE_CHUNK_DISTANC
         geometry: geometry.slice(startShapeIndex, index),
         startShapeIndex
       });
-      startShapeIndex = index - 1;
-      distanceKm = segmentKm;
+      // Dense shapes overlap one complete segment so walk_or_snap can omit a
+      // terminal snap point without leaving that road segment unattributed.
+      const nextStartShapeIndex = Math.max(startShapeIndex + 1, index - 2);
+      startShapeIndex = nextStartShapeIndex;
+      distanceKm = 0;
+      for (let overlapIndex = startShapeIndex + 1; overlapIndex <= index; overlapIndex += 1) {
+        distanceKm += haversineKm(geometry[overlapIndex - 1], geometry[overlapIndex]);
+      }
     } else {
       distanceKm += segmentKm;
     }
@@ -202,7 +221,9 @@ export function splitTraceGeometry(geometry, maxDistanceKm = TRACE_CHUNK_DISTANC
   return chunks;
 }
 
-function normalizeTraceEdge(edge, startShapeIndex) {
+function normalizeTraceEdge(edge, startShapeIndex, maxLocalShapeIndex = Infinity) {
+  const localBegin = Number(edge.begin_shape_index ?? edge.beginShapeIndex ?? 0);
+  const localEnd = Number(edge.end_shape_index ?? edge.endShapeIndex ?? edge.begin_shape_index ?? 0);
   return {
     names: normalizeNames(edge.names),
     wayId: edge.way_id ?? edge.wayId ?? null,
@@ -212,8 +233,8 @@ function normalizeTraceEdge(edge, startShapeIndex) {
     traversability: edge.traversability || '',
     motorcycleAccess: edge.motorcycle_access ?? edge.motorcycleAccess,
     lengthKm: Number(edge.length || 0),
-    beginShapeIndex: startShapeIndex + Number(edge.begin_shape_index ?? edge.beginShapeIndex ?? 0),
-    endShapeIndex: startShapeIndex + Number(edge.end_shape_index ?? edge.endShapeIndex ?? edge.begin_shape_index ?? 0)
+    beginShapeIndex: startShapeIndex + Math.min(localBegin, maxLocalShapeIndex),
+    endShapeIndex: startShapeIndex + Math.min(localEnd, maxLocalShapeIndex)
   };
 }
 

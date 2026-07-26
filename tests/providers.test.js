@@ -128,6 +128,19 @@ describe('Valhalla route attribution', () => {
     expect(chunks[1].geometry[0]).toEqual(chunks[0].geometry.at(-1));
   });
 
+  it('overlaps one complete segment between dense trace chunks', () => {
+    const chunks = splitTraceGeometry([
+      [25, 121],
+      [24.5, 121],
+      [24, 121],
+      [23.5, 121]
+    ], 150);
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks.map((chunk) => chunk.startShapeIndex)).toEqual([0, 1]);
+    expect(chunks[0].geometry.slice(-2)).toEqual(chunks[1].geometry.slice(0, 2));
+  });
+
   it('merges chunk-relative shape indexes into the full route', async () => {
     let requestIndex = 0;
     const fetchMock = vi.fn(async () => {
@@ -249,7 +262,7 @@ describe('Valhalla route attribution', () => {
       geometry: [[25, 121], [24, 121], [23, 121], [22, 121]],
       encodedShape: 'unused'
     }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
-      .rejects.toThrow('partial road coverage');
+      .rejects.toThrow(/partial road coverage|attribution gap/);
   });
 
   it('rejects an internal gap between attributed shape ranges', async () => {
@@ -285,6 +298,59 @@ describe('Valhalla route attribution', () => {
       encodedShape: 'unused'
     }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
       .rejects.toThrow('attribution gap');
+  });
+
+  it('accepts Valhalla terminal-exclusive end indices and clamps them to the route shape', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      edges: [{
+        names: ['terminal edge'],
+        way_id: 1,
+        road_class: 'primary',
+        use: 'road',
+        forward: true,
+        traversability: 'both',
+        length: 1,
+        begin_shape_index: 0,
+        end_shape_index: 3
+      }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    const edges = await traceRouteAttributes({
+      geometry: [[25, 121], [24.999, 121], [24.998, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' });
+
+    expect(edges).toHaveLength(1);
+    expect(edges[0]).toMatchObject({ beginShapeIndex: 0, endShapeIndex: 2 });
+  });
+
+  it('uses the overlapped next chunk to cover one omitted terminal segment', async () => {
+    let requestIndex = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const currentIndex = requestIndex;
+      requestIndex += 1;
+      return new Response(JSON.stringify({
+        edges: [{
+          names: [`overlap-${currentIndex}`],
+          way_id: currentIndex + 1,
+          road_class: 'primary',
+          use: 'road',
+          forward: true,
+          traversability: 'both',
+          length: 1,
+          begin_shape_index: 0,
+          end_shape_index: currentIndex === 0 ? 1 : 2
+        }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    const edges = await traceRouteAttributes({
+      geometry: [[25, 121], [24.5, 121], [24, 121], [23.5, 121]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' });
+
+    expect(edges.map((edge) => [edge.beginShapeIndex, edge.endShapeIndex]))
+      .toEqual([[0, 1], [1, 3]]);
   });
 
   it('does not start queued trace chunks after the first request fails', async () => {
