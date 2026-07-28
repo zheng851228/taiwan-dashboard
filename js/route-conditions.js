@@ -214,7 +214,7 @@
 
   function roadEventCoverageText(coverage) {
     if (!coverage || !Array.isArray(coverage.requestedScopes)) {
-      return '\u76ee\u524d\u67e5\u8a62 TDX \u7701\u9053\u5373\u6642\uff0f\u9810\u544a\u8207\u9ad8\u901f\u516c\u8def\u5373\u6642\u4e8b\u4ef6\uff1b\u5e02\u5340\u9053\u8def\u5c1a\u672a\u7d0d\u5165\u3002';
+      return '\u9053\u8def\u4e8b\u4ef6\u4f86\u6e90\u672a\u56de\u5831\u6db5\u84cb\u7bc4\u570d\uff1b\u672a\u5c07\u7f3a\u5c11\u8cc7\u6599\u8996\u70ba\u300c\u6cbf\u9014\u7121\u4e8b\u4ef6\u300d\u3002';
     }
     var labels = {
       'highway:live': '\u7701\u9053\u5373\u6642',
@@ -577,6 +577,21 @@
     var data = payload.data || {};
     var overall = data.overall || {};
     var sections = data.sections || [];
+    var incidentCoverageReported = Boolean(
+      data.incidentCoverage && Array.isArray(data.incidentCoverage.requestedScopes)
+    );
+    var readyIncidentScopes = Array.isArray(data.incidentCoverage && data.incidentCoverage.readyScopes)
+      ? data.incidentCoverage.readyScopes
+      : [];
+    var upstreamIssues = Array.isArray(data.issues) ? data.issues : [];
+    var failedIncidentScopes = Array.isArray(data.incidentCoverage && data.incidentCoverage.failedScopes)
+      ? data.incidentCoverage.failedScopes
+      : [];
+    var effectivePartial = payload.status === 'partial'
+      || upstreamIssues.length > 0
+      || failedIncidentScopes.length > 0
+      || !incidentCoverageReported
+      || readyIncidentScopes.length === 0;
     AppState.routeConditions = data;
     AppState.updatedAt.conditions = payload.updatedAt;
     lastRefreshAt = Date.now();
@@ -637,7 +652,9 @@
           + (eventSummary.unknownFullClosureCount
             ? '\uff0c\u53e6\u6709 ' + eventSummary.unknownFullClosureCount + ' \u4ef6\u5168\u7dda\u5c01\u9589\u6642\u9593\u672a\u660e'
             : '')
-        : roadEventCoverageText(data.incidentCoverage) + '\u6cbf\u9014\u672a\u914d\u5c0d\u5230\u9053\u8def\u4e8b\u4ef6'
+        : (readyIncidentScopes.length
+          ? roadEventCoverageText(data.incidentCoverage) + '\u5728\u5df2\u56de\u5831\u4f86\u6e90\u4e2d\uff0c\u6cbf\u9014\u672a\u914d\u5c0d\u5230\u9053\u8def\u4e8b\u4ef6'
+          : roadEventCoverageText(data.incidentCoverage))
     );
     setText(
       'map-legend-event-count',
@@ -652,7 +669,7 @@
       badge.classList.remove('error');
       badge.textContent = data.dataMode === 'fixture'
         ? 'DEMO \u793a\u7bc4'
-        : (payload.status === 'partial' ? '\u90e8\u5206\u5373\u6642' : '\u5b98\u65b9\u5373\u6642');
+        : (effectivePartial ? '\u90e8\u5206\u5373\u6642' : '\u5b98\u65b9\u5373\u6642');
     }
     var refresh = Dom.byId('condition-refresh');
     if (refresh) refresh.classList.remove('loading');
