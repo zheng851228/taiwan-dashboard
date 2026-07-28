@@ -164,7 +164,7 @@ npm run worker:deploy -- --env production --strict --secrets-file worker/.dev.va
 - `effectiveAt`、`expiresAt`、`regulationCodes`、`blockedLanes` 與事件座標。
 - `canonicalId`、`sourceScope` 與 `feedType`：保留省道／高速公路及即時／預告來源，避免跨來源相同 ID 被錯誤合併。
 
-同一來源範圍內的事件只計一次，`overall.affectedIncidentSections` 另外表示已定位的受影響路段數，`overall.roadLevelIncidentCount` 表示來源未提供座標的道路級警告。地圖保留原交通實線顏色，官方有座標時最多顯示三個事件位置；沒有官方受影響線型時不把整個 section 畫成施工範圍。沒有座標的事件只顯示「位置未提供」，不會假造精確 marker，避免把「有施工」誤讀成特定路段壅塞或順暢。
+同一來源範圍內的事件只計一次；向後相容欄位 `overall.affectedIncidentSections` 計算包含已定位事件點的分析段數，`overall.roadLevelIncidentCount` 表示來源未提供座標的道路級警告。地圖保留原交通實線顏色，官方有座標時最多顯示三個事件位置，並在最接近路線的位置畫約 600 公尺的分類短色條（施工橘、事故紅、管制紫、天候藍）；短色條只協助找到事件位置，不代表官方公布的完整影響範圍。沒有座標的事件只顯示「位置未提供」，不會假造精確 marker 或路線色，避免把「有施工」誤讀成整段壅塞或封閉。
 
 ## 驗證
 

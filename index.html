@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=16" />
+  <link rel="stylesheet" href="css/style.css?v=17" />
 </head>
 <body class="text-slate-100">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -244,7 +244,7 @@
         <div class="condition-metric"><span>預估</span><strong id="condition-duration">--</strong></div>
         <div class="condition-metric rain"><span>降雨</span><strong id="condition-rain">--</strong></div>
         <div class="condition-metric danger"><span>壅塞</span><strong id="condition-congestion">--</strong></div>
-        <div class="condition-metric warning"><span>狀況路段</span><strong id="condition-incidents">--</strong></div>
+        <div class="condition-metric warning"><span>狀況位置</span><strong id="condition-incidents">--</strong></div>
         <div class="condition-metric coverage"><span>覆蓋</span><strong id="condition-coverage">--</strong></div>
       </div>
       <div class="condition-update-row">
@@ -258,7 +258,7 @@
       </div>
       <div id="apple-leg-links" class="apple-leg-links hidden"></div>
       <div id="condition-timeline" class="condition-timeline"></div>
-      <div class="condition-footnote">實線顏色代表交通速度，事件圖示代表官方已提供座標的施工、事故或管制；「位置未提供」不會畫成精確路段，預告事件也不等於正在發生。<span id="condition-event-coverage">目前查詢 TDX 省道即時／預告與高速公路即時事件；市區道路尚未納入。</span>灰色代表資料不足，不代表順暢。監視器僅供現場畫面佐證，未使用 AI 自動判讀。</div>
+      <div class="condition-footnote">綠／黃／紅／灰實線代表交通速度；施工橘、事故紅、管制紫、天候藍的短色條只標示官方事件點在路線上的位置，不代表官方公布的完整影響範圍。「位置未提供」不會畫成精確路段，預告事件使用虛線，也不等於正在發生。<span id="condition-event-coverage">目前查詢 TDX 省道即時／預告與高速公路即時事件；市區道路尚未納入。</span>灰色代表資料不足，不代表順暢。監視器僅供現場畫面佐證，未使用 AI 自動判讀。</div>
     </div>
     <div id="condition-error" class="condition-error hidden">
       <i class="fa-solid fa-triangle-exclamation"></i>
@@ -331,9 +331,10 @@
       <div class="map-legend-weather"><i class="fa-solid fa-cloud-rain"></i></div>
       <span>天氣警示</span>
     </div>
-    <div id="map-legend-event-item" class="map-legend-item">
-      <div class="map-legend-incident"><i class="fa-solid fa-person-digging"></i></div>
-      <span id="map-legend-event-count">施工／事件</span>
+    <div id="map-legend-event-item" class="map-legend-item"
+      title="彩色短線為事件位置提示，不代表官方公布的完整影響範圍">
+      <div class="map-legend-incident" aria-hidden="true"></div>
+      <span id="map-legend-event-count">彩色短線·施工／事件</span>
     </div>
   </aside>
 

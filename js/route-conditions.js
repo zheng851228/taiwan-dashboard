@@ -29,6 +29,24 @@
     no_impact: { label: '\u4e0d\u5f71\u97ff\u901a\u884c', priority: 10 },
     unknown: { label: '\u6ce8\u610f\u73fe\u5834', priority: 20 }
   };
+  var ROAD_EVENT_MAP_COLORS = {
+    accident: '#f43f5e',
+    construction: '#f59e0b',
+    congestion: '#ef4444',
+    control: '#8b5cf6',
+    weather: '#0ea5e9',
+    disaster: '#be123c',
+    activity: '#06b6d4',
+    hazard: '#f97316',
+    other: '#64748b'
+  };
+  var ROAD_EVENT_IMPACT_MAP_COLORS = {
+    full_closure: '#dc2626',
+    lane_closure: '#e11d48',
+    controlled: '#8b5cf6',
+    shoulder: '#ca8a04',
+    no_impact: '#16a34a'
+  };
   var currentRoute = null;
   var lastRefreshAt = 0;
   var autoTimer = null;
@@ -136,6 +154,9 @@
       status: status,
       label: label,
       icon: impact === 'full_closure' ? 'fa-ban' : kindMeta.icon,
+      mapColor: ROAD_EVENT_IMPACT_MAP_COLORS[impact]
+        || ROAD_EVENT_MAP_COLORS[kind]
+        || ROAD_EVENT_MAP_COLORS.other,
       priority: kindMeta.priority + impactMeta.priority - (status === 'scheduled' ? 5 : 0)
     };
   }
@@ -573,8 +594,8 @@
     setText(
       'condition-incidents',
       affectedIncidentSections
-        ? affectedIncidentSections + '\u6bb5\u00b7' + incidentCount + '\u4ef6'
-        : (incidentCount ? '\u672a\u5b9a\u4f4d\u00b7' + incidentCount + '\u4ef6' : '0 \u6bb5')
+        ? affectedIncidentSections + '\u8655\u00b7' + incidentCount + '\u4ef6'
+        : (incidentCount ? '\u672a\u5b9a\u4f4d\u00b7' + incidentCount + '\u4ef6' : '0 \u8655')
     );
     setText('condition-coverage', Number(overall.coveragePercent || 0) + '%');
     setText('condition-updated', '\u66f4\u65b0 ' + formatUpdatedAt(payload.updatedAt));
@@ -593,7 +614,7 @@
           : (eventSummary.unknownFullClosureCount
             ? '\u5c01\u9589\u72c0\u6cc1 ' + eventSummary.unknownFullClosureCount
             : (affectedIncidentSections
-              ? '\u72c0\u6cc1 ' + affectedIncidentSections + '\u6bb5'
+              ? '\u72c0\u6cc1 ' + affectedIncidentSections + '\u8655'
               : (incidentCount
                 ? '\u672a\u5b9a\u4f4d ' + eventSummary.roadLevelIncidentCount + '\u4ef6'
                 : emptyRoadEventSummary(data.incidentCoverage)))));
@@ -603,7 +624,7 @@
       'condition-event-status',
       incidentCount
         ? '\u6cbf\u9014 ' + incidentCount + ' \u4ef6\u9053\u8def\u72c0\u6cc1\uff0c\u5f71\u97ff '
-          + affectedIncidentSections + ' \u500b\u5df2\u5b9a\u4f4d\u8def\u6bb5'
+          + affectedIncidentSections + ' \u500b\u5df2\u5b9a\u4f4d\u4e8b\u4ef6\u9ede'
           + (eventSummary.roadLevelIncidentCount
             ? '\uff0c\u53e6\u6709 ' + eventSummary.roadLevelIncidentCount + ' \u4ef6\u4f4d\u7f6e\u672a\u63d0\u4f9b'
             : '')
@@ -618,7 +639,10 @@
             : '')
         : roadEventCoverageText(data.incidentCoverage) + '\u6cbf\u9014\u672a\u914d\u5c0d\u5230\u9053\u8def\u4e8b\u4ef6'
     );
-    setText('map-legend-event-count', incidentCount ? '\u72c0\u6cc1 ' + incidentCount : '\u65bd\u5de5\uff0f\u4e8b\u4ef6');
+    setText(
+      'map-legend-event-count',
+      incidentCount ? '\u72c0\u6cc1 ' + incidentCount : '\u5f69\u8272\u77ed\u7dda\u00b7\u65bd\u5de5\uff0f\u4e8b\u4ef6'
+    );
     var legendEventItem = Dom.byId('map-legend-event-item');
     if (legendEventItem) legendEventItem.classList.toggle('has-events', incidentCount > 0);
 
@@ -790,7 +814,7 @@
     var panel = Dom.byId('route-conditions-panel');
     if (panel) panel.classList.add('hidden');
     AppState.routeConditions = null;
-    setText('map-legend-event-count', '\u65bd\u5de5\uff0f\u4e8b\u4ef6');
+    setText('map-legend-event-count', '\u5f69\u8272\u77ed\u7dda\u00b7\u65bd\u5de5\uff0f\u4e8b\u4ef6');
     var legendEventItem = Dom.byId('map-legend-event-item');
     if (legendEventItem) legendEventItem.classList.remove('has-events');
   }

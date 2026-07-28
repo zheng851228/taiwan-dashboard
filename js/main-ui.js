@@ -85,9 +85,88 @@
     }
   };
 
+  var ROUTE_EVENT_CUE_HALF_METERS = 300;
+  var ROUTE_EVENT_CUE_MAX_OFFSET_METERS = 750;
+
+  function routeDistanceMeters(start, end) {
+    var referenceLat = ((Number(start[0]) + Number(end[0])) / 2) * Math.PI / 180;
+    var deltaX = (Number(end[1]) - Number(start[1])) * 111320 * Math.cos(referenceLat);
+    var deltaY = (Number(end[0]) - Number(start[0])) * 110540;
+    return Math.hypot(deltaX, deltaY);
+  }
+
+  function routePointAtDistance(latlngs, cumulative, distance) {
+    if (distance <= 0) return latlngs[0].slice();
+    var total = cumulative[cumulative.length - 1];
+    if (distance >= total) return latlngs[latlngs.length - 1].slice();
+    for (var index = 0; index < cumulative.length - 1; index += 1) {
+      if (distance > cumulative[index + 1]) continue;
+      var span = cumulative[index + 1] - cumulative[index];
+      var ratio = span > 0 ? (distance - cumulative[index]) / span : 0;
+      return [
+        latlngs[index][0] + (latlngs[index + 1][0] - latlngs[index][0]) * ratio,
+        latlngs[index][1] + (latlngs[index + 1][1] - latlngs[index][1]) * ratio
+      ];
+    }
+    return latlngs[latlngs.length - 1].slice();
+  }
+
+  function projectEventOntoRoute(latlngs, eventPoint) {
+    var referenceLat = Number(eventPoint[0]) * Math.PI / 180;
+    var scaleX = 111320 * Math.cos(referenceLat);
+    var scaleY = 110540;
+    var cumulative = [0];
+    var best = null;
+    for (var index = 0; index < latlngs.length - 1; index += 1) {
+      var start = latlngs[index];
+      var end = latlngs[index + 1];
+      var segmentMeters = routeDistanceMeters(start, end);
+      cumulative.push(cumulative[cumulative.length - 1] + segmentMeters);
+      if (!segmentMeters) continue;
+      var startX = (start[1] - eventPoint[1]) * scaleX;
+      var startY = (start[0] - eventPoint[0]) * scaleY;
+      var endX = (end[1] - eventPoint[1]) * scaleX;
+      var endY = (end[0] - eventPoint[0]) * scaleY;
+      var deltaX = endX - startX;
+      var deltaY = endY - startY;
+      var squaredLength = deltaX * deltaX + deltaY * deltaY;
+      var ratio = squaredLength
+        ? Math.max(0, Math.min(1, -(startX * deltaX + startY * deltaY) / squaredLength))
+        : 0;
+      var projectedX = startX + ratio * deltaX;
+      var projectedY = startY + ratio * deltaY;
+      var offsetMeters = Math.hypot(projectedX, projectedY);
+      if (!best || offsetMeters < best.offsetMeters) {
+        best = {
+          offsetMeters: offsetMeters,
+          distanceAlong: cumulative[index] + segmentMeters * ratio
+        };
+      }
+    }
+    if (best) best.cumulative = cumulative;
+    return best;
+  }
+
+  function routeEventCueGeometry(latlngs, eventPoint) {
+    var projection = projectEventOntoRoute(latlngs, eventPoint);
+    if (!projection || projection.offsetMeters > ROUTE_EVENT_CUE_MAX_OFFSET_METERS) return [];
+    var total = projection.cumulative[projection.cumulative.length - 1];
+    if (!Number.isFinite(total) || total <= 0) return [];
+    var startDistance = Math.max(0, projection.distanceAlong - ROUTE_EVENT_CUE_HALF_METERS);
+    var endDistance = Math.min(total, projection.distanceAlong + ROUTE_EVENT_CUE_HALF_METERS);
+    var cue = [routePointAtDistance(latlngs, projection.cumulative, startDistance)];
+    for (var index = 1; index < latlngs.length - 1; index += 1) {
+      if (projection.cumulative[index] > startDistance && projection.cumulative[index] < endDistance) {
+        cue.push(latlngs[index].slice());
+      }
+    }
+    cue.push(routePointAtDistance(latlngs, projection.cumulative, endDistance));
+    return cue;
+  }
+
   var MapMod = {
     map: null, tileLayer: null, markers: [], routeLayer: null,
-    routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [],
+    routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [], routeIncidentLayers: [],
     startEndMarkers: [], _canvas: null, _camData: [], _markerSignature: '',
     init: function() {
       MapMod.map = L.map('map', {
@@ -141,14 +220,7 @@
       InfoMod.open(cam);
     },
     drawRoute: function(coords, mode) {
-      if (MapMod.routeLayer) {
-        if (Array.isArray(MapMod.routeLayer)) {
-          MapMod.routeLayer.forEach(function(l) { MapMod.map.removeLayer(l); });
-        } else {
-          MapMod.map.removeLayer(MapMod.routeLayer);
-        }
-        MapMod.routeLayer = null;
-      }
+      MapMod.clearRoute();
       if (!coords || coords.length < 2) return;
       var latlngs = coords.map(function(c) { return [c[0], c[1]]; });
       var isMoto = (mode !== 'car');
@@ -231,6 +303,45 @@
           var eventLabel = (section.roadRef || section.roadName || '沿途路段') + ' ' + eventView.label
             + (group.incidents.length > 1 ? '，同位置 ' + group.incidents.length + ' 件' : '')
             + (hiddenLocationCount ? '，另有 ' + hiddenLocationCount + ' 個事件位置' : '');
+          if (eventView.impact !== 'no_impact') {
+            var cueLatLngs = routeEventCueGeometry(latlngs, incidentPoint);
+            if (cueLatLngs.length >= 2) {
+              var cueDashArray = eventView.status === 'scheduled'
+                ? '10 8'
+                : (eventView.status === 'last_known' ? '2 7' : null);
+              var cueOpacity = eventView.status === 'last_known' ? 0.62 : 0.96;
+              var cueOutline = L.polyline(cueLatLngs, {
+                color: '#0f172a',
+                weight: 12,
+                opacity: 0.78,
+                dashArray: cueDashArray,
+                lineCap: 'round',
+                lineJoin: 'round',
+                interactive: false
+              }).addTo(MapMod.map);
+              var cueLine = L.polyline(cueLatLngs, {
+                color: eventView.mapColor || '#f59e0b',
+                weight: 8,
+                opacity: cueOpacity,
+                dashArray: cueDashArray,
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(MapMod.map);
+              cueOutline._conditionOrder = section.order;
+              cueOutline._roadEventOutline = true;
+              cueLine._conditionOrder = section.order;
+              cueLine._roadEventKind = eventView.kind;
+              cueLine._roadEventImpact = eventView.impact;
+              cueLine._roadEventStatus = eventView.status;
+              cueLine._roadEventLocationCue = true;
+              cueLine.on('click', function() { Bus.emit('condition:select', section.order); });
+              cueLine.bindTooltip(
+                escapeHtml(eventLabel + '；彩色短線為事件位置提示，不代表官方影響範圍'),
+                { direction: 'top', sticky: true }
+              );
+              MapMod.routeIncidentLayers.push(cueOutline, cueLine);
+            }
+          }
           var eventIcon = L.divIcon({
             className: 'route-incident-marker',
             html: '<div class="route-incident-pin road-event-' + eventView.kind
@@ -287,6 +398,8 @@
       MapMod.routeSectionLayers = [];
       MapMod.routeWeatherMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
       MapMod.routeWeatherMarkers = [];
+      MapMod.routeIncidentLayers.forEach(function(layer) { MapMod.map.removeLayer(layer); });
+      MapMod.routeIncidentLayers = [];
       MapMod.routeIncidentMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
       MapMod.routeIncidentMarkers = [];
     },

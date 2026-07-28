@@ -30,12 +30,33 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expect(constructionEvent).toContainText('交通管制');
   await expect(page.locator('.condition-section.has-road-event[data-event-kind="construction"]')).toBeVisible();
   await expect(page.locator('.route-incident-pin.road-event-construction')).toBeVisible();
-  await expect(page.locator('#condition-incidents')).toContainText('1段·1件');
+  await expect(page.locator('#condition-incidents')).toContainText('1處·1件');
   await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
   await expect(page.locator('#condition-event-coverage')).toContainText('高速公路即時');
   expect(await page.evaluate(() => (
     MapMod.routeSectionLayers.length === AppState.routeConditions.sections.length * 2
   ))).toBe(true);
+  expect(await page.evaluate(() => {
+    const cue = MapMod.routeIncidentLayers.find((layer) => layer._roadEventLocationCue);
+    return {
+      layers: MapMod.routeIncidentLayers.length,
+      kind: cue?._roadEventKind,
+      impact: cue?._roadEventImpact,
+      color: cue?.options?.color,
+      dashArray: cue?.options?.dashArray || null,
+      points: cue?.getLatLngs?.().length || 0
+    };
+  })).toEqual({
+    layers: 2,
+    kind: 'construction',
+    impact: 'controlled',
+    color: '#8b5cf6',
+    dashArray: null,
+    points: expect.any(Number)
+  });
+  expect(await page.evaluate(() => (
+    MapMod.routeIncidentLayers.find((layer) => layer._roadEventLocationCue).getLatLngs().length
+  ))).toBeGreaterThanOrEqual(2);
   expect(await page.evaluate(() => ({
     partial: window.getRoadEventPresentation({
       kind: 'accident',
@@ -52,6 +73,10 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await page.locator('#condition-clear').click();
   await expect(page.locator('#map-legend-event-item')).not.toHaveClass(/has-events/);
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
+  expect(await page.evaluate(() => ({
+    eventLayers: MapMod.routeIncidentLayers.length,
+    eventMarkers: MapMod.routeIncidentMarkers.length
+  }))).toEqual({ eventLayers: 0, eventMarkers: 0 });
   expect(browserErrors).toEqual([]);
 });
 
@@ -82,6 +107,7 @@ test('keeps coordinate-free road events visible without inventing a precise map 
   await expect(page.locator('#condition-incidents')).toContainText('未定位·1件');
   await expect(page.locator('.condition-section.has-road-event')).toHaveCount(0);
   await expect(page.locator('.route-incident-pin')).toHaveCount(0);
+  expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBe(0);
 });
 
 test('keeps separate official event locations as separate map markers', async ({ page }, testInfo) => {
@@ -99,6 +125,7 @@ test('keeps separate official event locations as separate map markers', async ({
         canonicalId: 'tdx:highway:second-location',
         title: '另一處事故',
         kind: 'accident',
+        status: 'scheduled',
         lat: Number(original.lat) + 0.002,
         lng: Number(original.lng) + 0.002
       });
@@ -111,8 +138,52 @@ test('keeps separate official event locations as separate map markers', async ({
   await page.locator('#js-route-btn').click();
 
   await expect(page.locator('.route-incident-pin')).toHaveCount(2);
-  await expect(page.locator('#condition-incidents')).toContainText('1段·2件');
+  await expect(page.locator('#condition-incidents')).toContainText('1處·2件');
   await expect(page.locator('.condition-road-event')).toHaveCount(2);
+  expect(await page.evaluate(() => (
+    MapMod.routeIncidentLayers.filter((layer) => layer._roadEventLocationCue).length
+  ))).toBe(2);
+  expect(await page.evaluate(() => (
+    MapMod.routeIncidentLayers
+      .filter((layer) => layer._roadEventLocationCue)
+      .map((layer) => ({
+        kind: layer._roadEventKind,
+        status: layer._roadEventStatus,
+        dashArray: layer.options.dashArray || null
+      }))
+  ))).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: 'construction', dashArray: null }),
+    expect.objectContaining({ kind: 'accident', status: 'scheduled', dashArray: '10 8' })
+  ]));
+});
+
+test('removes old event colors before drawing a replacement route', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Map layer lifecycle verification runs once.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect(page.locator('.route-incident-pin')).toBeVisible();
+
+  expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => {
+    MapMod.drawRoute([
+      [25.0478, 121.5170],
+      [25.0350, 121.5400]
+    ], 'motorcycle');
+    return {
+      routeLayers: Array.isArray(MapMod.routeLayer) ? MapMod.routeLayer.length : 0,
+      eventLayers: MapMod.routeIncidentLayers.length,
+      eventMarkers: MapMod.routeIncidentMarkers.length,
+      weatherMarkers: MapMod.routeWeatherMarkers.length
+    };
+  })).toEqual({
+    routeLayers: 3,
+    eventLayers: 0,
+    eventMarkers: 0,
+    weatherMarkers: 0
+  });
 });
 
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
@@ -194,7 +265,7 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
   ).toBe(true);
   await page.locator('#condition-toggle').click();
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.locator('#condition-collapsed-summary')).toContainText('狀況 1段');
+  await expect(page.locator('#condition-collapsed-summary')).toContainText('狀況 1處');
   await expect(page.locator('.condition-road-event')).toBeHidden();
 
   const status = page.locator('#ride-status-card');
