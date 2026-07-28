@@ -344,31 +344,30 @@
   window.geocodeName = function(name) {
     name = name.trim();
     if (_geocodeCache[name]) return Promise.resolve(_geocodeCache[name]);
-    var variants = getSearchVariants(name).concat([name + ' 台灣', name + ' Taiwan']);
-    var tried = {};
-    var chain = Promise.resolve(null);
-
-    variants.forEach(function(variant) {
-      chain = chain.then(function(found) {
-        if (found || tried[variant]) return found;
-        tried[variant] = true;
-        return AppServices.searchPlaces(variant)
-          .then(function(payload) {
-            var data = payload.data || [];
-            if (data.length > 0) {
-              var result = [parseFloat(data[0].lat), parseFloat(data[0].lng)];
-              _geocodeCache[name] = result;
-              Diag.ok('\u5730\u540d\u89e3\u6790: ' + name + ' \u2192 ' + result[0].toFixed(4) + ',' + result[1].toFixed(4));
-              return result;
-            }
-            return null;
-          })
-          .catch(function() { return null; });
-      });
+    // Worker 已負責台／臺、台灣範圍與公部門名稱正規化。
+    // 只在完整名稱查無結果時補一次道路常用名，避免舊流程的多次串行等待。
+    var fallback = getSearchVariants(name).find(function(candidate) {
+      return candidate !== name
+        && candidate.indexOf(' ') === -1
+        && normalizeSearchText(candidate) !== normalizeSearchText(name);
     });
-
-    return chain.then(function(result) {
-      if (result) return result;
+    function pointFromPayload(payload) {
+      var data = payload.data || [];
+      if (data.length > 0) {
+        return [parseFloat(data[0].lat), parseFloat(data[0].lng)];
+      }
+      return null;
+    }
+    return AppServices.searchPlaces(name).then(function(payload) {
+      var result = pointFromPayload(payload);
+      if (result || !fallback) return result;
+      return AppServices.searchPlaces(fallback).then(pointFromPayload);
+    }).then(function(result) {
+      if (result) {
+        _geocodeCache[name] = result;
+        Diag.ok('\u5730\u540d\u89e3\u6790: ' + name + ' \u2192 ' + result[0].toFixed(4) + ',' + result[1].toFixed(4));
+        return result;
+      }
       Diag.err('\u5730\u540d\u89e3\u6790\u5931\u6557: ' + name);
       Diag.show();
       return null;
@@ -448,7 +447,15 @@
     return null;
   };
 
-  window.autoFillRoute = function(text, onFill) {
+  window.autoFillRoute = function(text, onFill, onError) {
+    function fail(message) {
+      AppState.workerResult = null;
+      if (typeof onError === 'function') {
+        onError(message);
+      } else {
+        Toast.show(message);
+      }
+    }
     text = text.trim();
     if (!text) return false;
     if (text.indexOf('google.com/maps/dir') !== -1) {
@@ -491,10 +498,13 @@
           Toast.show('地點帶入為起點，請補充終點');
           return;
         }
-        Toast.show('無法解析，請手動輸入起終點');
+        fail('無法解析，請保留連結並手動輸入起終點');
+      }).catch(function() {
+        fail('讀取路線連結失敗，請稍後重試或手動輸入');
       });
       return true;
     }
+    fail('目前僅支援 Google Maps 或 Apple Maps 路線連結');
     return false;
   };
 

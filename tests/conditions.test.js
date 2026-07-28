@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assignRoadEvents,
+  buildOverall,
   classifyTraffic,
+  compactGeometry,
   createRouteSections,
   fuseConditions,
   headingDifference,
@@ -163,6 +166,155 @@ describe('route segmentation', () => {
     expect(sections.map((section) => section.order)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(sections[11].toKm).toBe(160);
   });
+
+  it('bounds condition overlay geometry while preserving both endpoints', () => {
+    const geometry = Array.from({ length: 1000 }, (_, index) => [25 - index * 0.001, 121.5]);
+    const compacted = compactGeometry(geometry, 96);
+    expect(compacted).toHaveLength(96);
+    expect(compacted[0]).toEqual(geometry[0]);
+    expect(compacted.at(-1)).toEqual(geometry.at(-1));
+  });
+});
+
+describe('road event assignment', () => {
+  const sections = [
+    {
+      order: 1,
+      roadRef: '台9',
+      sample: [24.95, 121.5],
+      geometry: [[25, 121.5], [24.9, 121.5]]
+    },
+    {
+      order: 2,
+      roadRef: '台9',
+      sample: [24.8, 121.5],
+      geometry: [[24.9, 121.5], [24.7, 121.5]]
+    }
+  ];
+
+  it('matches an event near the start of a long section using the complete geometry', () => {
+    const assignments = assignRoadEvents(sections, [{
+      id: 'work-1',
+      title: '施工',
+      typeCode: 2,
+      severityCode: 1,
+      regulationCodes: [2],
+      roadRef: '台9線',
+      lat: 24.999,
+      lng: 121.5,
+      effectiveAt: '2026-07-27T03:00:00.000Z',
+      expiresAt: '2026-07-27T05:00:00.000Z',
+      source: 'TDX'
+    }], new Date('2026-07-27T04:00:00.000Z'));
+
+    expect(assignments.get(1)).toHaveLength(1);
+    expect(assignments.get(1)[0]).toMatchObject({
+      kind: 'construction',
+      impact: 'lane_closure',
+      status: 'active'
+    });
+    expect(assignments.get(2)).toEqual([]);
+  });
+
+  it('shows near-term scheduled work but excludes distant and expired events', () => {
+    const assignments = assignRoadEvents(sections, [
+      {
+        id: 'scheduled-near',
+        title: '預定施工',
+        typeCode: 2,
+        roadRef: '台9',
+        lat: 24.95,
+        lng: 121.5,
+        effectiveAt: '2026-07-29T04:00:00.000Z'
+      },
+      {
+        id: 'scheduled-far',
+        title: '遠期施工',
+        typeCode: 2,
+        roadRef: '台9',
+        lat: 24.95,
+        lng: 121.5,
+        effectiveAt: '2026-08-10T04:00:00.000Z'
+      },
+      {
+        id: 'expired',
+        title: '已結束施工',
+        typeCode: 2,
+        roadRef: '台9',
+        lat: 24.95,
+        lng: 121.5,
+        expiresAt: '2026-07-27T03:59:59.000Z'
+      }
+    ], new Date('2026-07-27T04:00:00.000Z'));
+
+    expect(assignments.get(1).map((event) => event.id)).toEqual(['scheduled-near']);
+    expect(assignments.get(1)[0].status).toBe('scheduled');
+  });
+
+  it('attaches a coordinate-free same-road event once and marks the location approximate', () => {
+    const assignments = assignRoadEvents(sections, [{
+      id: 'no-point',
+      title: '台9線施工',
+      typeCode: 2,
+      roadRef: '台9'
+    }], NOW);
+
+    expect(assignments.get(1)[0]).toMatchObject({
+      id: 'no-point',
+      locationApproximate: true
+    });
+    expect(assignments.get(2)).toEqual([]);
+  });
+
+  it('reports unique events separately from affected sections', () => {
+    const shared = {
+      id: 'same-event',
+      kind: 'construction',
+      impact: 'full_closure',
+      status: 'active',
+      lat: 24.95,
+      lng: 121.5
+    };
+    const scheduled = {
+      id: 'scheduled-closure',
+      kind: 'construction',
+      impact: 'full_closure',
+      status: 'scheduled',
+      lat: 24.9,
+      lng: 121.5
+    };
+    const section = (incidents) => ({
+      traffic: { level: 'unknown' },
+      weather: { condition: '未知' },
+      incidents
+    });
+    const overall = buildOverall([section([shared]), section([shared, scheduled])]);
+
+    expect(overall.incidentCount).toBe(2);
+    expect(overall.affectedIncidentSections).toBe(2);
+    expect(overall.incidentCounts).toEqual({ construction: 2 });
+    expect(overall.fullClosureCount).toBe(2);
+    expect(overall.activeFullClosureCount).toBe(1);
+    expect(overall.scheduledFullClosureCount).toBe(1);
+  });
+
+  it('counts a coordinate-free warning without claiming an affected section', () => {
+    const overall = buildOverall([{
+      traffic: { level: 'unknown' },
+      weather: { condition: '未知' },
+      incidents: [{
+        id: 'road-level-only',
+        kind: 'construction',
+        impact: 'unknown',
+        status: 'unknown',
+        locationApproximate: true
+      }]
+    }]);
+
+    expect(overall.incidentCount).toBe(1);
+    expect(overall.affectedIncidentSections).toBe(0);
+    expect(overall.roadLevelIncidentCount).toBe(1);
+  });
 });
 
 describe('weather fusion', () => {
@@ -266,5 +418,76 @@ describe('camera fusion', () => {
     }, NOW);
 
     expect(result.sections[0].cameras).toEqual([]);
+  });
+
+  it('queries adjacent spatial buckets without scanning distant camera metadata', () => {
+    const farCameras = Array.from({ length: 5000 }, (_, index) => {
+      const camera = {
+        id: `far-${index}`,
+        name: `遠端-${index}`,
+        lat: 22 + (index % 100) * 0.001,
+        lng: 120 + (index % 80) * 0.001
+      };
+      Object.defineProperty(camera, 'roadRef', {
+        get() {
+          throw new Error('distant camera road metadata should not be inspected');
+        }
+      });
+      return camera;
+    });
+    const result = fuseConditions(route, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: farCameras.concat([
+        {
+          id: 'across-cell',
+          name: '台9線相鄰格',
+          roadRef: '台9線',
+          lat: 25,
+          lng: 121.549
+        }
+      ])
+    }, NOW);
+
+    expect(result.sections[0].cameras.map((camera) => camera.id)).toEqual(['across-cell']);
+  });
+
+  it('does not treat a longer provincial road number as the same road', () => {
+    const routeOnTai1 = {
+      ...route,
+      edges: [{ names: ['台1線'], beginShapeIndex: 0, endShapeIndex: 1 }]
+    };
+    const result = fuseConditions(routeOnTai1, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: [
+        { id: 'tai10-near', name: '台10線近端', roadRef: '台10線', lat: 24.994, lng: 121.506 },
+        { id: 'tai1-far', name: '台1線遠端', roadRef: '台1線', lat: 24.975, lng: 121.525 }
+      ]
+    }, NOW);
+
+    expect(result.sections[0].cameras.map((camera) => camera.id)).toEqual(['tai1-far', 'tai10-near']);
+  });
+
+  it('deduplicates repeated camera ids before selecting the nearest two', () => {
+    const result = fuseConditions(route, {
+      detectors: [],
+      weather: [],
+      incidents: [],
+      trafficSource: 'TDX',
+      cameras: [
+        { id: 'duplicate', name: '台9線鏡頭', roadRef: '台9線', lat: 24.994, lng: 121.506 },
+        { id: 'duplicate', name: '台9線鏡頭副本', roadRef: '台9線', lat: 24.993, lng: 121.507 },
+        { id: 'second', name: '台9線第二鏡頭', roadRef: '台9線', lat: 24.992, lng: 121.508 }
+      ]
+    }, NOW);
+
+    const cameraIds = result.sections[0].cameras.map((camera) => camera.id);
+    expect(cameraIds).toEqual(['second', 'duplicate']);
+    expect(new Set(cameraIds).size).toBe(2);
   });
 });

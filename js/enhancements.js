@@ -283,13 +283,30 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     var startEl2    = Dom.byId('js-route-start');
     var endEl2      = Dom.byId('js-route-end');
 
+    function analyzeNextFrame() {
+      if (window.requestAnimationFrame) {
+        window.requestAnimationFrame(function() { RouteMod.analyze(); });
+      } else {
+        RouteMod.analyze();
+      }
+    }
+
     function doGmapsParse(urlText) {
       urlText = urlText ? urlText.trim() : '';
       if (!urlText) return;
-      if (gmapsStatus) { gmapsStatus.textContent = '解析中...'; gmapsStatus.classList.remove('hidden'); }
+      if (gmapsInput) gmapsInput.value = urlText;
+      if (gmapsStatus) { gmapsStatus.textContent = '正在讀取路線連結...'; gmapsStatus.classList.remove('hidden'); }
       autoFillRoute(urlText, function(start, end, waypoints) {
-        if (startEl2) startEl2.value = start || '';
-        if (endEl2)   endEl2.value   = end   || '';
+        if (startEl2) {
+          startEl2.value = start || '';
+          delete startEl2.dataset.routePoint;
+          delete startEl2.dataset.routePointLabel;
+        }
+        if (endEl2) {
+          endEl2.value = end || '';
+          delete endEl2.dataset.routePoint;
+          delete endEl2.dataset.routePointLabel;
+        }
         if (gmapsInput) gmapsInput.value = '';
         if (gmapsStatus) { gmapsStatus.classList.add('hidden'); }
         AppState.pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
@@ -302,7 +319,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         if (start && end) {
           var msg = wpCount > 0 ? '起點→' + wpCount + '個停靠點→終點，解析中...' : '起終點已帶入，解析中...';
           Toast.show(msg, 2000);
-          setTimeout(function() { RouteMod.analyze(); }, 300);
+          analyzeNextFrame();
         } else if (end && !start) {
           Toast.show('終點已帶入，請補充起點', 3000);
         } else if (start && !end) {
@@ -310,6 +327,12 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         } else {
           Toast.show('解析完成，請確認起終點');
         }
+      }, function(message) {
+        if (gmapsStatus) {
+          gmapsStatus.textContent = '';
+          gmapsStatus.classList.add('hidden');
+        }
+        Toast.show(message || '無法解析，請手動輸入起終點', 3500);
       });
     }
 
@@ -319,7 +342,10 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     if (gmapsInput) {
       Dom.on(gmapsInput, 'paste', function(e) {
         var txt = (e.clipboardData || window.clipboardData).getData('text');
-        setTimeout(function() { doGmapsParse(txt || gmapsInput.value); }, 80);
+        if (txt) {
+          e.preventDefault();
+          doGmapsParse(txt);
+        }
       });
       Dom.on(gmapsInput, 'keydown', function(e) {
         if (e.key === 'Enter') doGmapsParse(gmapsInput.value);
@@ -335,25 +361,14 @@ function haversineKm(lat1, lon1, lat2, lon2) {
       });
       Dom.on(btn, 'click', function() {
         inp.value = '';
+        delete inp.dataset.routePoint;
+        delete inp.dataset.routePointLabel;
         btn.classList.add('hidden');
         inp.focus();
       });
     }
     bindClearBtn('js-route-start', 'clear-start');
     bindClearBtn('js-route-end',   'clear-end');
-
-    var _origDoGmaps = doGmapsParse;
-    doGmapsParse = function(urlText) {
-      _origDoGmaps(urlText);
-      setTimeout(function() {
-        var s = Dom.byId('js-route-start');
-        var e = Dom.byId('js-route-end');
-        var cs = Dom.byId('clear-start');
-        var ce = Dom.byId('clear-end');
-        if (s && cs) cs.classList.toggle('hidden', s.value.length === 0);
-        if (e && ce) ce.classList.toggle('hidden', e.value.length === 0);
-      }, 600);
-    };
   });
 })();
 
@@ -372,28 +387,44 @@ function haversineKm(lat1, lon1, lat2, lon2) {
       Dom.on(pasteInput, 'focus', doExpand);
       Dom.on(pasteInput, 'paste', function(e) {
         var text = (e.clipboardData || window.clipboardData).getData('text');
-        setTimeout(function() {
-          pasteInput.value = '';
+        if (!text) return;
+        e.preventDefault();
+        function importPastedRoute() {
+          pasteInput.value = text;
           doExpand();
           var status = Dom.byId('js-route-status');
           if (status) status.textContent = '\u89e3\u6790\u9023\u7d50\u4e2d...';
-          var filled = autoFillRoute(text, function(start, end, waypoints) {
-            if (startEl) startEl.value = start || '';
-            if (endEl && end) endEl.value = end;
+          autoFillRoute(text, function(start, end, waypoints) {
+            pasteInput.value = '';
+            if (startEl) {
+              startEl.value = start || '';
+              delete startEl.dataset.routePoint;
+              delete startEl.dataset.routePointLabel;
+            }
+            if (endEl && end) {
+              endEl.value = end;
+              delete endEl.dataset.routePoint;
+              delete endEl.dataset.routePointLabel;
+            }
             if (status) status.textContent = '';
             AppState.pendingWaypoints = (waypoints && waypoints.length > 0) ? waypoints : [];
             WaypointsMod.render(AppState.pendingWaypoints);
             // 填入後自動執行路線解析
             if (start && end) {
-              setTimeout(function() { RouteMod.analyze(); }, 200);
+              if (window.requestAnimationFrame) {
+                window.requestAnimationFrame(function() { RouteMod.analyze(); });
+              } else {
+                RouteMod.analyze();
+              }
             } else {
               Toast.show(end ? '\u8d77\u7d42\u9ede\u5df2\u5e36\u5165\uff01' : '\u8d77\u9ede\u5df2\u5e36\u5165');
             }
-          });
-          if (!filled) {
+          }, function(message) {
             if (status) status.textContent = '';
-          }
-        }, 50);
+            Toast.show(message || '\u7121\u6cd5\u89e3\u6790\uff0c\u8acb\u624b\u52d5\u8f38\u5165\u8d77\u7d42\u9ede', 3500);
+          });
+        }
+        importPastedRoute();
       });
       Dom.on(pasteInput, 'input', function() { if (pasteInput.value.length > 3) doExpand(); });
     }
@@ -628,12 +659,14 @@ var RouteStripMod = {
 
 // ===== 地名建議模組 =====
 var PlaceSuggest = {
-  _requestId: 0,
   // 台灣常用地名快速候選
   PLACES: [
     '台北','新北','基隆','桃園','新竹','苗栗','台中','彰化','南投','雲林',
     '嘉義','台南','高雄','屏東','宜蘭','花蓮','台東','澎湖','金門','馬祖',
-    '台北車站','台中車站','高雄車站','台南車站','桃園機場','高雄機場',
+    '基隆車站','台北車站','板橋車站','桃園車站','新竹車站','苗栗車站',
+    '台中車站','彰化車站','斗六車站','嘉義車站','台南車站','高雄車站',
+    '屏東車站','宜蘭車站','蘇澳車站','花蓮車站','台東車站','枋寮車站',
+    '台中市政府','奇美博物館','桃園機場','高雄機場',
     '墾丁','日月潭','阿里山','合歡山','太魯閣','九份','淡水','烏來',
     '北海岸','東海岸','花東縱谷','南橫公路','北橫公路','中橫公路',
     '蘇花公路','蘇花改','北宜公路','淡金公路','羅馬公路','南迴公路',
@@ -643,6 +676,51 @@ var PlaceSuggest = {
     '國道1號','國道3號','國道5號','國道6號','國道10號',
     '中山高','二高','北宜','北二高','北部濱海','西濱','雪隧'
   ],
+  // 座標取自 repo 的全台路線稽核案例；選取後可直接規劃，不必再做地名解析。
+  PLACE_COORDS: {
+    '基隆': [25.1327, 121.7393],
+    '台北': [25.0478, 121.5170],
+    '新北': [25.0143, 121.4637],
+    '桃園': [24.9892, 121.3133],
+    '新竹': [24.8016, 120.9716],
+    '苗栗': [24.5700, 120.8223],
+    '台中': [24.1370, 120.6868],
+    '彰化': [24.0818, 120.5385],
+    '雲林': [23.7110, 120.5411],
+    '嘉義': [23.4791, 120.4412],
+    '台南': [22.9971, 120.2127],
+    '高雄': [22.6394, 120.3020],
+    '屏東': [22.6692, 120.4863],
+    '宜蘭': [24.7540, 121.7580],
+    '花蓮': [23.9937, 121.6013],
+    '台東': [22.7937, 121.1230],
+    '澎湖': [23.5663, 119.5770],
+    '金門': [24.4321, 118.3171],
+    '馬祖': [26.1592, 119.9432],
+    '基隆車站': [25.1327, 121.7393],
+    '台北車站': [25.0478, 121.5170],
+    '板橋車站': [25.0143, 121.4637],
+    '桃園車站': [24.9892, 121.3133],
+    '新竹車站': [24.8016, 120.9716],
+    '苗栗車站': [24.5700, 120.8223],
+    '台中車站': [24.1370, 120.6868],
+    '彰化車站': [24.0818, 120.5385],
+    '斗六車站': [23.7110, 120.5411],
+    '嘉義車站': [23.4791, 120.4412],
+    '台南車站': [22.9971, 120.2127],
+    '高雄車站': [22.6394, 120.3020],
+    '屏東車站': [22.6692, 120.4863],
+    '宜蘭車站': [24.7540, 121.7580],
+    '蘇澳車站': [24.5960, 121.8510],
+    '花蓮車站': [23.9937, 121.6013],
+    '台東車站': [22.7937, 121.1230],
+    '枋寮車站': [22.3672, 120.5924],
+    '淡水': [25.1676, 121.4450],
+    '埔里': [23.9660, 120.9680],
+    '阿里山': [23.5110, 120.8050],
+    '台中市政府': [24.1618, 120.6466],
+    '奇美博物館': [22.9346, 120.2260]
+  },
   PLACE_ALIASES: {
     '台北': ['臺北', '台北市', '信義區', '西門', '士林'],
     '新北': ['新北市', '板橋', '淡水', '汐止', '三重'],
@@ -686,8 +764,6 @@ var PlaceSuggest = {
     '台9線': ['南迴', '北宜', '蘇花'],
     '台11線': ['東海岸', '海線']
   },
-  _timer: null,
-
   isMotorcycleHotspot: function(place) {
     return [
       '北宜公路', '淡金公路', '羅馬公路', '北橫公路', '中橫公路', '南橫公路',
@@ -790,70 +866,69 @@ var PlaceSuggest = {
     return fallback.slice(0, 4);
   },
 
-  rankLocal: function(q) {
+  rankLocal: function(q, context) {
     var nq = normalizeSearchText(q);
-    var isMotorcycleMode = typeof RouteMod !== 'undefined' && RouteMod && RouteMod.mode === 'motorcycle';
+    var prioritizeRoads = context === 'traffic';
+    var prioritizePlaces = context === 'route';
     var scored = [];
     PlaceSuggest.PLACES.forEach(function(place) {
       var variants = [place].concat(PlaceSuggest.PLACE_ALIASES[place] || []);
       var bestScore = -1;
-      variants.forEach(function(variant) {
+      var matchedName = place;
+      variants.forEach(function(variant, variantIndex) {
         var nv = normalizeSearchText(variant);
         if (!nv) return;
-        if (nv === nq) bestScore = Math.max(bestScore, 100);
-        else if (nv.indexOf(nq) !== -1) bestScore = Math.max(bestScore, 80 - Math.max(0, nv.length - nq.length));
-        else if (nq.indexOf(nv) !== -1) bestScore = Math.max(bestScore, 60);
+        var score = -1;
+        if (nv === nq) score = 100;
+        else if (nv.indexOf(nq) === 0) score = 90 - Math.max(0, nv.length - nq.length);
+        else if (nv.indexOf(nq) !== -1) score = 72 - Math.max(0, nv.length - nq.length);
+        else if (
+          prioritizeRoads
+          && PlaceSuggest.isMotorcycleHotspot(place)
+          && nq.indexOf(nv) !== -1
+        ) score = 60;
+        if (score > bestScore) {
+          bestScore = score;
+          matchedName = variantIndex === 0 ? place : variant;
+        }
       });
-      if (bestScore >= 0 && isMotorcycleMode && PlaceSuggest.isMotorcycleHotspot(place)) {
+      var canonicalMatch = normalizeSearchText(matchedName) === normalizeSearchText(place);
+      var coords = PlaceSuggest.PLACE_COORDS[matchedName]
+        || (canonicalMatch ? PlaceSuggest.PLACE_COORDS[place] : null);
+      if (bestScore >= 0 && prioritizeRoads && PlaceSuggest.isMotorcycleHotspot(place)) {
         bestScore += 12;
       }
+      if (bestScore >= 0 && prioritizePlaces && coords) bestScore += nq.length === 1 ? 24 : 12;
+      if (bestScore >= 0 && prioritizePlaces && PlaceSuggest.isMotorcycleHotspot(place)) bestScore -= 8;
       if (bestScore >= 0) scored.push({
-        name: place,
-        sub: (PlaceSuggest.PLACE_ALIASES[place] || []).slice(0, 2).join('、') || '快速選擇',
-        lat: null,
-        lng: null,
+        name: matchedName,
+        sub: coords
+          ? '可直接規劃'
+          : (matchedName !== place
+            ? place + '常用地名'
+            : ((PlaceSuggest.PLACE_ALIASES[place] || []).slice(0, 2).join('、') || '快速選擇')),
+        lat: coords ? coords[0] : null,
+        lng: coords ? coords[1] : null,
         score: bestScore
       });
     });
-    return scored.sort(function(a, b) { return b.score - a.score; }).slice(0, 6);
+    var seen = {};
+    return scored.sort(function(a, b) { return b.score - a.score; }).filter(function(item) {
+      var key = normalizeSearchText(item.name);
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    }).slice(0, 6);
   },
 
-  // 地名搜尋一律經 Worker，避免瀏覽器直接連第三方 API。
-  search: function(q, cb) {
+  // 輸入建議只用本地索引。遠端 Nominatim 僅在使用者送出完整地名時解析，
+  // 避免逐字查詢造成額外等待，也符合 public Nominatim 不提供 autocomplete 的規範。
+  search: function(q, cb, options) {
     if (!q || q.length < 1) { cb([]); return; }
-    var requestId = ++PlaceSuggest._requestId;
-    // 先用本地快速候選
-    var local = PlaceSuggest.rankLocal(q);
+    var context = options && options.context ? options.context : 'traffic';
+    var local = PlaceSuggest.rankLocal(q, context);
     var fallback = PlaceSuggest.buildFallbacks(q, local.map(function(item) { return item.name; }));
-    // 再用 Worker 地名服務補足遠端結果（debounce 350ms）
-    clearTimeout(PlaceSuggest._timer);
-    PlaceSuggest._timer = setTimeout(function() {
-      AppServices.searchPlaces(q, { silent: true })
-        .then(function(payload) {
-          if (requestId !== PlaceSuggest._requestId) return;
-          var remote = (payload.data || []).map(function(item) {
-            return {
-              name: item.name || String(item.displayName || '').split(',')[0].trim(),
-              sub: item.sub || '',
-              lat: parseFloat(item.lat),
-              lng: parseFloat(item.lng)
-            };
-          });
-          // 合併去重
-          var seen = {};
-          var merged = local.concat(fallback, remote).filter(function(r) {
-            var key = normalizeSearchText(r.name);
-            if (seen[key]) return false;
-            seen[key] = 1; return true;
-          });
-          cb(merged.slice(0, 6));
-        })
-        .catch(function() {
-          if (requestId === PlaceSuggest._requestId) cb(local.concat(fallback).slice(0, 6));
-        });
-    }, 350);
-    // 立即回傳本地結果
-    if (local.length > 0 || fallback.length > 0) cb(local.concat(fallback).slice(0, 6));
+    cb(local.concat(fallback).slice(0, 6));
   },
 
   // 綁定輸入框和建議框
@@ -861,39 +936,125 @@ var PlaceSuggest = {
     var inp = Dom.byId(inputId);
     var box = Dom.byId(suggestId);
     if (!inp || !box) return;
+    var results = [];
+    var activeIndex = -1;
+
+    inp.setAttribute('role', 'combobox');
+    inp.setAttribute('aria-autocomplete', 'list');
+    inp.setAttribute('aria-controls', suggestId);
+    inp.setAttribute('aria-expanded', 'false');
+    box.setAttribute('role', 'listbox');
+
+    function hasCoordinates(item) {
+      return item && item.lat !== null && item.lat !== '' && item.lng !== null && item.lng !== ''
+        && Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng));
+    }
+
+    function hide() {
+      results = [];
+      activeIndex = -1;
+      box.innerHTML = '';
+      box.classList.remove('visible');
+      inp.setAttribute('aria-expanded', 'false');
+      inp.removeAttribute('aria-activedescendant');
+    }
+
+    function setActive(index) {
+      var items = Dom.queryAll('.suggest-item', box);
+      if (!items.length) return;
+      activeIndex = (index + items.length) % items.length;
+      items.forEach(function(item, itemIndex) {
+        var isActive = itemIndex === activeIndex;
+        item.classList.toggle('is-active', isActive);
+        item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+      inp.setAttribute('aria-activedescendant', items[activeIndex].id);
+      items[activeIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    function select(item) {
+      if (!item) return;
+      inp.value = item.name;
+      if (hasCoordinates(item)) {
+        inp.dataset.routePoint = Number(item.lat) + ',' + Number(item.lng);
+        inp.dataset.routePointLabel = item.name;
+      } else {
+        delete inp.dataset.routePoint;
+        delete inp.dataset.routePointLabel;
+      }
+      hide();
+      var cs = Dom.byId('clear-' + inputId.replace('js-route-',''));
+      if (cs) cs.classList.remove('hidden');
+      if (onSelect) onSelect(item.name, item.lat, item.lng);
+    }
+
+    function render(nextResults) {
+      results = nextResults || [];
+      activeIndex = -1;
+      if (!results.length) { hide(); return; }
+      box.innerHTML = results.map(function(r, index) {
+        var icon = hasCoordinates(r) ? 'fa-location-dot' : 'fa-road';
+        return '<div id="' + suggestId + '-option-' + index + '" role="option" aria-selected="false"'
+          + ' class="suggest-item" data-index="' + index + '">'
+          + '<i class="fa-solid ' + icon + ' suggest-icon"></i>'
+          + '<span class="suggest-name">' + escapeHtml(r.name) + '</span>'
+          + '<span class="suggest-sub">' + escapeHtml(r.sub||'') + '</span>'
+          + '</div>';
+      }).join('');
+      box.classList.add('visible');
+      inp.setAttribute('aria-expanded', 'true');
+    }
 
     Dom.on(inp, 'input', function() {
       var q = inp.value.trim();
-      if (!q) { box.innerHTML = ''; box.classList.remove('visible'); return; }
+      if (inp.dataset.routePointLabel !== q) {
+        delete inp.dataset.routePoint;
+        delete inp.dataset.routePointLabel;
+      }
+      if (!q) { hide(); return; }
       PlaceSuggest.search(q, function(results) {
-        if (!results.length) { box.innerHTML = ''; box.classList.remove('visible'); return; }
-        var html = results.map(function(r) {
-          var icon = r.lat ? 'fa-location-dot' : 'fa-road';
-          return '<div class="suggest-item" data-name="' + escapeHtml(r.name) + '" data-lat="' + (Number(r.lat)||'') + '" data-lng="' + (Number(r.lng)||'') + '">'
-            + '<i class="fa-solid ' + icon + ' suggest-icon"></i>'
-            + '<span class="suggest-name">' + escapeHtml(r.name) + '</span>'
-            + '<span class="suggest-sub">' + escapeHtml(r.sub||'') + '</span>'
-            + '</div>';
-        }).join('');
-        box.innerHTML = html;
-        box.classList.add('visible');
-        Dom.queryAll('.suggest-item', box).forEach(function(item) {
-          Dom.on(item, 'click', function() {
-            var name = item.dataset.name;
-            var lat  = item.dataset.lat;
-            var lng  = item.dataset.lng;
-            inp.value = (lat && lng) ? (lat + ',' + lng) : name;
-            box.innerHTML = ''; box.classList.remove('visible');
-            var cs = Dom.byId('clear-' + inputId.replace('js-route-',''));
-            if (cs) cs.classList.remove('hidden');
-            if (onSelect) onSelect(name, lat, lng);
-          });
-        });
-      });
+        render(results);
+      }, { context: 'route' });
+    });
+
+    function activateOption(event) {
+      var itemEl = event.target.closest('.suggest-item');
+      if (!itemEl || !box.contains(itemEl)) return;
+      event.preventDefault();
+      select(results[Number(itemEl.dataset.index)]);
+    }
+    Dom.on(box, 'mousedown', activateOption);
+    // VoiceOver 等輔助技術可能只送出 synthetic click。
+    Dom.on(box, 'click', activateOption);
+
+    // Capture 先於 RouteMod 的 Enter handler，選單展開時 Enter 用來選取候選。
+    Dom.on(inp, 'keydown', function(event) {
+      if (!box.classList.contains('visible') || !results.length) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActive(activeIndex + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActive(activeIndex <= 0 ? results.length - 1 : activeIndex - 1);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        select(results[activeIndex >= 0 ? activeIndex : 0]);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        hide();
+      }
+    }, true);
+
+    Dom.on(inp, 'focus', function() {
+      var q = inp.value.trim();
+      if (!q) return;
+      PlaceSuggest.search(q, render, { context: 'route' });
     });
 
     Dom.on(inp, 'blur', function() {
-      setTimeout(function() { box.innerHTML = ''; box.classList.remove('visible'); }, 200);
+      setTimeout(hide, 120);
     });
   }
 };

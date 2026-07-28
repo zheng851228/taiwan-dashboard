@@ -19,6 +19,10 @@
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   }
 
+  function isIPhone() {
+    return /iPhone|iPod/.test(navigator.userAgent);
+  }
+
   function isSafari() {
     return /WebKit/i.test(navigator.userAgent) && !/(CriOS|FxiOS|EdgiOS|OPiOS)/i.test(navigator.userAgent);
   }
@@ -82,6 +86,16 @@
     if (remember) Storage.set(INSTALL_DISMISSED_KEY, String(Date.now()));
   }
 
+  function installGuideWouldInterrupt() {
+    var routePlanner = Dom.byId('route-expanded');
+    var conditions = Dom.byId('route-conditions-panel');
+    return Boolean(
+      (window.AppState && AppState.activeRoute)
+      || (routePlanner && !routePlanner.classList.contains('hidden'))
+      || (conditions && !conditions.classList.contains('hidden'))
+    );
+  }
+
   function initInstallGuidance() {
     updateInstallState();
     Dom.onId('pwa-install-open', 'click', openInstallSheet);
@@ -89,8 +103,10 @@
     Dom.onId('pwa-install-done', 'click', function() { closeInstallSheet(true); });
     Dom.onId('pwa-install-backdrop', 'click', function() { closeInstallSheet(true); });
 
-    if (isIOS() && isSafari() && !isStandalone() && !Storage.get(INSTALL_DISMISSED_KEY, '')) {
-      window.setTimeout(openInstallSheet, 1200);
+    if (isIPhone() && isSafari() && !isStandalone() && !Storage.get(INSTALL_DISMISSED_KEY, '')) {
+      window.setTimeout(function() {
+        if (!installGuideWouldInterrupt()) openInstallSheet();
+      }, 1200);
     }
   }
 

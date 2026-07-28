@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import worker, { mergeLastKnownConditions } from '../worker/src/index.js';
+import worker, {
+  isCachedConditionsFresh,
+  mergeLastKnownConditions
+} from '../worker/src/index.js';
 import { encodePolyline6 } from '../worker/src/polyline.js';
 
 const env = { USE_FIXTURES: 'true' };
@@ -54,6 +57,18 @@ describe('Worker v2 fixture API', () => {
     const body = await response.json();
     expect(response.status).toBe(400);
     expect(body.data).toBeNull();
+  });
+
+  it('rejects oversized geocode queries before calling an upstream service', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const query = encodeURIComponent('地'.repeat(121));
+    const response = await worker.fetch(new Request(`https://worker.test/v2/geocode?q=${query}`), env);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.message).toContain('過長');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('serves deterministic fixture cameras and county weather without upstream access', async () => {
@@ -113,8 +128,10 @@ describe('Worker v2 fixture API', () => {
   it('keeps live conditions partial when an optional upstream source is unavailable', async () => {
     const shape = encodePolyline6([[25.0478, 121.517], [25.02, 121.55], [24.99, 121.58]]);
     const observedAt = new Date().toISOString();
+    const upstreamUrls = [];
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       const value = String(url);
+      upstreamUrls.push(value);
       if (value.endsWith('/route')) {
         return new Response(JSON.stringify({
           trip: {
@@ -179,6 +196,18 @@ describe('Worker v2 fixture API', () => {
         });
       }
         if (value.includes('/Traffic/RoadEvent/LiveEvent/Highway')) {
+          return new Response(JSON.stringify({ LiveEvents: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        if (value.includes('/Traffic/RoadEvent/Event/Highway')) {
+          return new Response(JSON.stringify({ Events: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        if (value.includes('/Traffic/RoadEvent/LiveEvent/Freeway')) {
           return new Response(JSON.stringify({ LiveEvents: [] }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
@@ -249,6 +278,19 @@ describe('Worker v2 fixture API', () => {
         method: 'published-section',
         source: 'THB'
       });
+      const roadEventUrls = [
+        '/Traffic/RoadEvent/LiveEvent/Highway',
+        '/Traffic/RoadEvent/Event/Highway',
+        '/Traffic/RoadEvent/LiveEvent/Freeway'
+      ].map((path) => new URL(upstreamUrls.find((url) => url.includes(path))));
+      roadEventUrls.forEach((url) => {
+        expect(url.searchParams.get('$top')).toBe('1000');
+        expect(url.searchParams.get('$count')).toBe('true');
+      });
+      expect(conditions.data.incidentCoverage).toMatchObject({
+        readyScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+        failedScopes: []
+      });
     });
 });
 
@@ -306,5 +348,88 @@ describe('last-known condition fallback', () => {
     expect(merged.sections[0].weather.condition).toBe('\u672a\u77e5');
     expect(merged.sections[0].traffic.lastKnown).toBeUndefined();
     expect(merged.sections[0].weather.lastKnown).toBeUndefined();
+  });
+});
+
+describe('conditions cache freshness', () => {
+  function cachedEnvelope(overrides = {}) {
+    return {
+      updatedAt: '2026-07-27T04:00:00.000Z',
+      data: {
+        snapshotGeneratedAt: '2026-07-27T03:55:00.000Z',
+        sections: [{
+          traffic: {
+            level: 'clear',
+            observedAt: '2026-07-27T03:50:00.000Z'
+          },
+          weather: {
+            condition: '多雲',
+            observedAt: '2026-07-27T03:00:00.000Z'
+          }
+        }],
+        ...overrides
+      }
+    };
+  }
+
+  it('accepts known values exactly at their freshness boundaries', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope(),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(true);
+  });
+
+  it('rejects a recently cached envelope after its traffic observation expires', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope(),
+      new Date('2026-07-27T04:00:00.001Z')
+    )).toBe(false);
+  });
+
+  it('rejects a stale provider snapshot even when all sections are unknown', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope({
+        snapshotGeneratedAt: '2026-07-27T03:44:59.999Z',
+        sections: [{
+          traffic: { level: 'unknown', observedAt: null },
+          weather: { condition: '未知', observedAt: null }
+        }]
+      }),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(false);
+  });
+
+  it('refreshes when a scheduled event becomes active', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope({
+        sections: [{
+          traffic: { level: 'unknown', observedAt: null },
+          weather: { condition: '未知', observedAt: null },
+          incidents: [{
+            id: 'scheduled-work',
+            status: 'scheduled',
+            effectiveAt: '2026-07-27T04:00:00.000Z'
+          }]
+        }]
+      }),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(false);
+  });
+
+  it('does not serve a cached event after its expiry time', () => {
+    expect(isCachedConditionsFresh(
+      cachedEnvelope({
+        sections: [{
+          traffic: { level: 'unknown', observedAt: null },
+          weather: { condition: '未知', observedAt: null },
+          incidents: [{
+            id: 'expired-work',
+            status: 'active',
+            expiresAt: '2026-07-27T04:00:00.000Z'
+          }]
+        }]
+      }),
+      new Date('2026-07-27T04:00:00.000Z')
+    )).toBe(false);
   });
 });

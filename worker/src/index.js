@@ -5,6 +5,7 @@ import {
   fuseConditions,
   isFresh
 } from './conditions.js';
+import { roadEventState } from './road-events.js';
 import {
   buildFixtureCameras,
   buildFixtureCountyWeather,
@@ -15,6 +16,7 @@ import {
   loadCameras,
   loadCountyWeather,
   loadLiveProviderData,
+  loadProviderSnapshotHttpEnvelope,
   traceRouteAttributes
 } from './providers.js';
 import { buildAvoidLocations, validateRouteEdges } from './rules.js';
@@ -64,11 +66,23 @@ async function routeRequest(request, env) {
   }
 
   if (path === '/v2/cams' && request.method === 'GET') {
+    if (!isFixtureMode(env) && isSnapshotMode(env)) {
+      const cached = await loadProviderSnapshotHttpEnvelope('cams', env);
+      return cached
+        ? jsonTextResponse(cached)
+        : jsonResponse(envelope('partial', [], '攝影機快照暫時無法取得'));
+    }
     const cameras = isFixtureMode(env) ? buildFixtureCameras() : await loadCameras(env);
     return jsonResponse(envelope(cameras.length ? 'ok' : 'partial', cameras, cameras.length ? '' : '目前沒有攝影機資料'));
   }
 
   if (path === '/v2/weather' && request.method === 'GET') {
+    if (!isFixtureMode(env) && isSnapshotMode(env)) {
+      const cached = await loadProviderSnapshotHttpEnvelope('weather', env);
+      return cached
+        ? jsonTextResponse(cached)
+        : jsonResponse(envelope('partial', {}, '氣象快照暫時無法取得'));
+    }
     const weather = isFixtureMode(env) ? buildFixtureCountyWeather() : await loadCountyWeather(env);
     return jsonResponse(envelope(Object.keys(weather).length ? 'ok' : 'partial', weather, Object.keys(weather).length ? '' : 'CWA 金鑰尚未設定'));
   }
@@ -76,6 +90,7 @@ async function routeRequest(request, env) {
   if (path === '/v2/geocode' && request.method === 'GET') {
     const query = String(url.searchParams.get('q') || '').trim();
     if (!query) throw new HttpError(400, '請提供搜尋關鍵字');
+    if (query.length > 120) throw new HttpError(400, '搜尋關鍵字過長');
     const places = await geocodePlace(query);
     return jsonResponse(envelope(places.length ? 'ok' : 'partial', places, places.length ? '' : '找不到相符地點'));
   }
@@ -89,10 +104,23 @@ async function routeRequest(request, env) {
 
   // One-version compatibility bridge for the existing frontend.
   if (path === '/cam-list' && request.method === 'GET') {
+    if (!isFixtureMode(env) && isSnapshotMode(env)) {
+      return jsonResponse(envelope(
+        'partial',
+        [],
+        '舊版攝影機端點不在低 CPU 快照模式提供，請改用 /v2/cams'
+      ));
+    }
     const cameras = isFixtureMode(env) ? buildFixtureCameras() : await loadCameras(env);
     return jsonResponse(envelope('ok', cameras.map(legacyCamera)));
   }
   if (path === '/weather' && request.method === 'GET') {
+    if (!isFixtureMode(env) && isSnapshotMode(env)) {
+      const cached = await loadProviderSnapshotHttpEnvelope('weather', env);
+      return cached
+        ? jsonTextResponse(cached)
+        : jsonResponse(envelope('partial', {}, '氣象快照暫時無法取得'));
+    }
     const weather = isFixtureMode(env) ? buildFixtureCountyWeather() : await loadCountyWeather(env);
     return jsonResponse(envelope('ok', weather));
   }
@@ -177,12 +205,22 @@ function isFixtureMode(env) {
   return String(env.USE_FIXTURES || '').toLowerCase() === 'true';
 }
 
+function isSnapshotMode(env) {
+  return String(env.PROVIDER_SNAPSHOT_MODE || '').toLowerCase() === 'kv';
+}
+
 async function handleConditions(routeId, env, forceRefresh) {
   const record = await cacheGet(env, `route:${routeId}`);
   if (!record) throw new HttpError(404, '路線已過期，請重新規劃');
   const cachedKey = `conditions:${routeId}`;
   const cached = await cacheGet(env, cachedKey);
-  if (!forceRefresh && cached && Date.now() - new Date(cached.updatedAt).getTime() < 5 * 60 * 1000) {
+  const now = new Date();
+  if (
+    !forceRefresh
+    && cached
+    && now.getTime() - new Date(cached.updatedAt).getTime() < 5 * 60 * 1000
+    && isCachedConditionsFresh(cached, now)
+  ) {
     return jsonResponse(cached);
   }
 
@@ -190,7 +228,7 @@ async function handleConditions(routeId, env, forceRefresh) {
   const fixtureMode = record.dataMode === 'fixture';
   const providerData = fixtureMode
     ? { ...buildFixtureProviderData(baseSections), issues: [] }
-    : await loadLiveProviderData(baseSections, env);
+    : await loadLiveProviderData(baseSections, env, { vehicle: record.vehicle });
   let conditionData = fuseConditions(record, providerData);
   if (!fixtureMode && providerData.issues?.length && cached) {
     conditionData = mergeLastKnownConditions(conditionData, cached, providerData.issues);
@@ -199,15 +237,39 @@ async function handleConditions(routeId, env, forceRefresh) {
   conditionData.dataMode = fixtureMode ? 'fixture' : 'live';
   conditionData.sources = fixtureMode ? ['DEMO'] : ['TDX', 'THB', 'CWA', 'CCTV'];
   conditionData.issues = providerData.issues || [];
+  if (!fixtureMode && providerData.incidentCoverage) {
+    conditionData.incidentCoverage = providerData.incidentCoverage;
+  }
+  if (!fixtureMode && providerData.snapshotGeneratedAt) {
+    conditionData.snapshotGeneratedAt = providerData.snapshotGeneratedAt;
+  }
   const isPartial = conditionData.sections.some((section) => (
     section.traffic.level === 'unknown' || section.weather.condition === '未知'
-  ));
+  )) || Boolean(providerData.issues?.length);
   const message = fixtureMode
     ? '示範資料模式：僅供介面測試，不代表即時路況或合法導航。'
     : (providerData.issues?.length ? '部分官方資料暫時無法取得，未知路段已保留灰色。' : '');
   const response = envelope(isPartial ? 'partial' : 'ok', conditionData, message);
   await cachePut(env, cachedKey, response, ROUTE_TTL_SECONDS);
   return jsonResponse(response);
+}
+
+export function isCachedConditionsFresh(cachedEnvelope, now = new Date()) {
+  const data = cachedEnvelope?.data;
+  if (!data || !Array.isArray(data.sections)) return false;
+  if (data.snapshotGeneratedAt && !isFresh(data.snapshotGeneratedAt, 15, now)) return false;
+  return data.sections.every((section) => {
+    const trafficFresh = section.traffic?.level === 'unknown'
+      || isFresh(section.traffic?.observedAt, 10, now);
+    const weatherFresh = section.weather?.condition === '未知'
+      || isFresh(section.weather?.observedAt, 90, now);
+    const incidentsFresh = (section.incidents || []).every((incident) => {
+      const currentState = roadEventState(incident, now);
+      return currentState !== 'expired'
+        && !(incident.status === 'scheduled' && currentState === 'active');
+    });
+    return trafficFresh && weatherFresh && incidentsFresh;
+  });
 }
 
 export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = new Date()) {
@@ -253,7 +315,13 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
       && previous.incidents?.length
       && isFresh(cacheUpdatedAt, 10, now)
     ) {
-      next.incidents = previous.incidents.map((incident) => ({ ...incident, lastKnown: true }));
+      next.incidents = previous.incidents
+        .filter((incident) => roadEventState(incident, now) !== 'expired')
+        .map((incident) => ({
+          ...incident,
+          status: roadEventState(incident, now),
+          lastKnown: true
+        }));
     }
     if (
       failedSources.has('CCTV')
@@ -346,6 +414,13 @@ function envelope(status, data, message = '') {
 
 function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+  });
+}
+
+function jsonTextResponse(value, status = 200) {
+  return new Response(value, {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8' }
   });

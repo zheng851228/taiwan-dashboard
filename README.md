@@ -33,15 +33,16 @@ Static HTML/CSS/JS
         v
 Cloudflare Worker /v2
   |-- Valhalla route + trace_attributes
-  |-- THB 168 published sections + shapes + travel speed
-  |-- TDX VD live traffic + incidents
-  |-- CWA observations + township 3-hour forecast
-  |-- CCTV source
+  |-- Prebuilt provider snapshots (TDX / THB / CWA / CCTV)
+  |     `-- route cells + roadRef index, immutable time slots
   |-- Nominatim geocoding proxy
   `-- KV route cache (6 hours)
 ```
 
 前端不保存 CWA 或 TDX 金鑰，也不直接呼叫第三方資料服務。短網址展開只允許 Google Maps 與 Apple Maps 網域。
+Staging 的 conditions 熱路徑只讀由本機／CI 預處理的 KV 快照，不在 Worker 內解析全台 THB XML。快照的
+`generatedAt` 只代表產生時間，交通與氣象仍各自使用官方 `observedAt` 驗證時效；缺少、過期或格式錯誤時維持
+`partial` 與灰色 `unknown`，不會回頭直打上游或標成順暢。
 
 ## 開始使用
 
@@ -110,10 +111,32 @@ TDX_CLIENT_SECRET="ROTATED_VALUE"
 - `TDX_VD_LIVE_ENDPOINT`
 - `TDX_SECTION_ENDPOINT`
 - `TDX_INCIDENT_ENDPOINT`
+- `TDX_SCHEDULED_INCIDENT_ENDPOINT`
+- `TDX_FREEWAY_INCIDENT_ENDPOINT`
 - `THB_SECTION_ENDPOINT`
 - `THB_SECTION_SHAPE_ENDPOINT`
 - `THB_LIVE_TRAFFIC_ENDPOINT`
 - `THB_CONGESTION_ENDPOINT`
+
+### Staging provider snapshot
+
+`env.staging` 使用 `PROVIDER_SNAPSHOT_MODE=kv`；production 尚未啟用。先從被 Git 忽略的
+`worker/.dev.vars` 讀取憑證，在本機抓取並正規化公開資料，再把不含憑證的 immutable slot 寫入 staging KV：
+
+```bash
+npm run worker:snapshot:build
+npm run worker:snapshot:upload:staging
+```
+
+產物固定寫到 `/tmp/taiwan-dashboard-provider-snapshot.json`，包含：
+
+- 五分鐘交通快照：TDX VD、TDX 事件、THB 發布路段與 CWA 樣本。
+- 六小時攝影機格網，以及可直接回傳的 `/v2/cams` JSON。
+- 十五分鐘縣市氣象 `/v2/weather` JSON。
+
+每個 slot 都有到期時間；Worker 先讀目前 slot，KV 尚未同步時再讀前一 slot。交通快照超過十五分鐘即不可用，
+攝影機硬上限十二小時，且個別交通觀測仍必須在十分鐘內。此命令只更新 staging namespace，不會部署或修改
+production。正式自動排程與 production snapshot 必須另行批准。
 
 先 dry-run，再明確指定 production environment 部署；禁止省略 `--env production`，避免誤碰 root Worker：
 
@@ -132,6 +155,16 @@ npm run worker:deploy -- --env production --strict --secrets-file worker/.dev.va
 - `GET /v2/expand?url=...`
 
 舊 `/route`、`/cam-list`、`/weather` 與根路徑展開端點保留一個版本週期。
+
+`conditions` 的每個道路事件保留原有 `title`、`description`、`severity`，並增加向後相容的語意欄位：
+
+- `kind`：事故、施工、壅塞通報、特殊管制、天候、災害、活動、道路障礙或其他。
+- `impact`：全線封閉、車道封閉、交通管制、路肩作業、不影響通行或未知。
+- `status`：`active`、`scheduled` 或 `unknown`；已過期事件不回傳。
+- `effectiveAt`、`expiresAt`、`regulationCodes`、`blockedLanes` 與事件座標。
+- `canonicalId`、`sourceScope` 與 `feedType`：保留省道／高速公路及即時／預告來源，避免跨來源相同 ID 被錯誤合併。
+
+同一來源範圍內的事件只計一次；向後相容欄位 `overall.affectedIncidentSections` 計算包含已定位事件點的分析段數，`overall.roadLevelIncidentCount` 表示來源未提供座標的道路級警告。地圖保留原交通實線顏色，官方有座標時最多顯示三個事件位置，並在最接近路線的位置畫約 600 公尺的分類短色條（施工橘、事故紅、管制紫、天候藍）；短色條只協助找到事件位置，不代表官方公布的完整影響範圍。沒有座標的事件只顯示「位置未提供」，不會假造精確 marker 或路線色，避免把「有施工」誤讀成整段壅塞或封閉。
 
 ## 驗證
 
@@ -155,7 +188,7 @@ npm run test:routes:live
 
 - 路由與道路屬性使用 [Valhalla API](https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/)。
 - 省道發布路段速度、方向與線型使用公路局 [168 交通資料庫開放資料](https://thbapp.thb.gov.tw/opendata/)，來源標示為 `THB`。動態資料至少快取 60 秒，靜態路段與線型快取六小時；無法匹配、超過十分鐘或官方標示資料異常時維持灰色。
-- VD 即時交通使用 [TDX 路況資訊 v2](https://tdx.transportdata.tw/api-service/swagger/basic/7f07d940-91a4-495d-9465-1c9df89d709c)，道路事件使用 [TDX 道路事件 v1](https://tdx.transportdata.tw/api-service/swagger/basic/60abfa19-ffe3-4eef-a4b1-0539435dfca9)。VD 方向來自 `DetectionLinks.Bearing`，沒有有效 VD 時才使用公路局發布路段；兩者都必須符合一公里、方向差小於 60 度與十分鐘時效限制。
+- VD 即時交通使用 [TDX 路況資訊 v2](https://tdx.transportdata.tw/api-service/swagger/basic/7f07d940-91a4-495d-9465-1c9df89d709c)，道路事件使用 [TDX 道路事件 v1](https://tdx.transportdata.tw/api-service/swagger/basic/60abfa19-ffe3-4eef-a4b1-0539435dfca9)。VD 方向來自 `DetectionLinks.Bearing`，沒有有效 VD 時才使用公路局發布路段；兩者都必須符合一公里、方向差小於 60 度與十分鐘時效限制。事件查詢涵蓋省道即時／預告及高速公路即時，三個來源每頁要求 1000 筆並強制取得總筆數，超過一頁時以 `$skip` 完整讀取；頁面截斷會標成來源失效，不會被解讀為沿途零事件。官方沒有高速公路預告事件 endpoint。事件依官方 `EventType`、`Impact.Severity` 與 `Regulations` 區分種類和封閉程度，代表點會對完整路段線型找最近段；未開始的事件標為預告，已過期事件不顯示。快照將有座標事件依格網、無座標事件依道路索引，讀取時沿完整路線幾何選格網，避免每條路線掃描全台事件或漏掉長路段端點事件。市區事件尚未納入，介面會明確提示來源範圍；逐城市資料不得在單一路線請求中同步大量 fan-out。
 - 氣象使用中央氣象署的 `O-A0001-001` 自動氣象站、`F-D0047-089` 鄉鎮三小時預報，以及工具頁的 `F-C0032-001` 縣市預報；資料入口見 [CWA 開放資料](https://opendata.cwa.gov.tw/)。
 - Google 導航交接依 [Google Maps URLs](https://developers.google.com/maps/documentation/urls/get-started)；行動瀏覽器支援的停靠點數可能有限。
 - Apple 導航交接依 [Apple Map Links](https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html)，官方格式只有 `saddr` 與 `daddr`。

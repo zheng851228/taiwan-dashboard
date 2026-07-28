@@ -17,6 +17,7 @@
       "vars": {
         "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
         "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",
+        "PROVIDER_SNAPSHOT_MODE": "kv",
         "USE_FIXTURES": "false"
       },
       "kv_namespaces": [
