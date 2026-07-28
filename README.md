@@ -111,6 +111,8 @@ TDX_CLIENT_SECRET="ROTATED_VALUE"
 - `TDX_VD_LIVE_ENDPOINT`
 - `TDX_SECTION_ENDPOINT`
 - `TDX_INCIDENT_ENDPOINT`
+- `TDX_SCHEDULED_INCIDENT_ENDPOINT`
+- `TDX_FREEWAY_INCIDENT_ENDPOINT`
 - `THB_SECTION_ENDPOINT`
 - `THB_SECTION_SHAPE_ENDPOINT`
 - `THB_LIVE_TRAFFIC_ENDPOINT`
@@ -160,8 +162,9 @@ npm run worker:deploy -- --env production --strict --secrets-file worker/.dev.va
 - `impact`：全線封閉、車道封閉、交通管制、路肩作業、不影響通行或未知。
 - `status`：`active`、`scheduled` 或 `unknown`；已過期事件不回傳。
 - `effectiveAt`、`expiresAt`、`regulationCodes`、`blockedLanes` 與事件座標。
+- `canonicalId`、`sourceScope` 與 `feedType`：保留省道／高速公路及即時／預告來源，避免跨來源相同 ID 被錯誤合併。
 
-同一事件只計一次，`overall.affectedIncidentSections` 另外表示已定位的受影響路段數，`overall.roadLevelIncidentCount` 表示來源未提供座標的道路級警告。地圖保留原交通實線顏色，再以事件虛線與圖示疊加；沒有座標的事件只顯示「位置未提供」，不會假造精確 marker，避免把「有施工」誤讀成特定路段壅塞或順暢。
+同一來源範圍內的事件只計一次，`overall.affectedIncidentSections` 另外表示已定位的受影響路段數，`overall.roadLevelIncidentCount` 表示來源未提供座標的道路級警告。地圖保留原交通實線顏色，官方有座標時最多顯示三個事件位置；沒有官方受影響線型時不把整個 section 畫成施工範圍。沒有座標的事件只顯示「位置未提供」，不會假造精確 marker，避免把「有施工」誤讀成特定路段壅塞或順暢。
 
 ## 驗證
 
@@ -185,7 +188,7 @@ npm run test:routes:live
 
 - 路由與道路屬性使用 [Valhalla API](https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/)。
 - 省道發布路段速度、方向與線型使用公路局 [168 交通資料庫開放資料](https://thbapp.thb.gov.tw/opendata/)，來源標示為 `THB`。動態資料至少快取 60 秒，靜態路段與線型快取六小時；無法匹配、超過十分鐘或官方標示資料異常時維持灰色。
-- VD 即時交通使用 [TDX 路況資訊 v2](https://tdx.transportdata.tw/api-service/swagger/basic/7f07d940-91a4-495d-9465-1c9df89d709c)，道路事件使用 [TDX 道路事件 v1](https://tdx.transportdata.tw/api-service/swagger/basic/60abfa19-ffe3-4eef-a4b1-0539435dfca9)。VD 方向來自 `DetectionLinks.Bearing`，沒有有效 VD 時才使用公路局發布路段；兩者都必須符合一公里、方向差小於 60 度與十分鐘時效限制。省道即時與預告事件各明確要求最多 1000 筆，避免沿用 API 預設 30 筆而漏掉全台施工；事件依官方 `EventType`、`Impact.Severity` 與 `Regulations` 區分種類和封閉程度，代表點會對完整路段線型找最近段；未開始的事件標為預告，已過期事件不顯示。市區事件尚未納入，介面會明確提示來源範圍。
+- VD 即時交通使用 [TDX 路況資訊 v2](https://tdx.transportdata.tw/api-service/swagger/basic/7f07d940-91a4-495d-9465-1c9df89d709c)，道路事件使用 [TDX 道路事件 v1](https://tdx.transportdata.tw/api-service/swagger/basic/60abfa19-ffe3-4eef-a4b1-0539435dfca9)。VD 方向來自 `DetectionLinks.Bearing`，沒有有效 VD 時才使用公路局發布路段；兩者都必須符合一公里、方向差小於 60 度與十分鐘時效限制。事件查詢涵蓋省道即時／預告及高速公路即時，三個來源每頁要求 1000 筆並強制取得總筆數，超過一頁時以 `$skip` 完整讀取；頁面截斷會標成來源失效，不會被解讀為沿途零事件。官方沒有高速公路預告事件 endpoint。事件依官方 `EventType`、`Impact.Severity` 與 `Regulations` 區分種類和封閉程度，代表點會對完整路段線型找最近段；未開始的事件標為預告，已過期事件不顯示。快照將有座標事件依格網、無座標事件依道路索引，讀取時沿完整路線幾何選格網，避免每條路線掃描全台事件或漏掉長路段端點事件。市區事件尚未納入，介面會明確提示來源範圍；逐城市資料不得在單一路線請求中同步大量 fan-out。
 - 氣象使用中央氣象署的 `O-A0001-001` 自動氣象站、`F-D0047-089` 鄉鎮三小時預報，以及工具頁的 `F-C0032-001` 縣市預報；資料入口見 [CWA 開放資料](https://opendata.cwa.gov.tw/)。
 - Google 導航交接依 [Google Maps URLs](https://developers.google.com/maps/documentation/urls/get-started)；行動瀏覽器支援的停靠點數可能有限。
 - Apple 導航交接依 [Apple Map Links](https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html)，官方格式只有 `saddr` 與 `daddr`。

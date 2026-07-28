@@ -71,6 +71,29 @@ export function roadEventState(event = {}, now = new Date()) {
   return 'unknown';
 }
 
+export function roadEventIdentity(event = {}) {
+  const existing = String(event.canonicalId || '').trim();
+  if (existing) return existing;
+  const source = String(event.source || 'TDX').trim().toLowerCase() || 'tdx';
+  const scope = String(event.sourceScope || 'unknown').trim().toLowerCase() || 'unknown';
+  const id = String(event.id || event.EventID || event.IncidentID || '').trim();
+  if (id) return `${source}:${scope}:${id}`;
+  const roadRef = String(event.roadRef || event.RoadName || '').trim();
+  const title = String(event.title || event.EventTitle || '').trim();
+  const effectiveAt = String(event.effectiveAt || event.EffectiveTime || event.updatedAt || '').trim();
+  const lat = finiteCoordinate(event.lat);
+  const lng = finiteCoordinate(event.lng);
+  return [
+    source,
+    scope,
+    roadRef,
+    title,
+    effectiveAt,
+    lat === null ? '' : lat.toFixed(5),
+    lng === null ? '' : lng.toFixed(5)
+  ].join(':');
+}
+
 function inferKind(text) {
   if (/事故|車禍|追撞|碰撞|翻覆|火燒車/.test(text)) return 'accident';
   if (/施工|工程|養護|修繕|開挖|清掃|割草|修剪/.test(text)) return 'construction';
@@ -132,4 +155,10 @@ function finiteInteger(value) {
 function timestamp(value) {
   if (!value) return NaN;
   return new Date(value).getTime();
+}
+
+function finiteCoordinate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }

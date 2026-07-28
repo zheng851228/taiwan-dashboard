@@ -129,8 +129,9 @@
 .pwa-network-banner,
 .pwa-action-banner {
   position: fixed;
+  top: calc(var(--safe-top) + 4.2rem);
   left: 50%;
-  z-index: 2800;
+  z-index: 900;
   width: min(92vw, 430px);
   transform: translateX(-50%);
   border: 1px solid rgba(251,146,60,0.28);
@@ -161,13 +162,21 @@
   color: #fb923c;
 }
 .pwa-action-banner {
-  bottom: calc(var(--safe-bottom) + 5.3rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 10px 10px 14px;
   background: rgba(15,23,42,0.96);
+}
+body:has(#pwa-update-banner:not(.hidden)) .map-top-panel {
+  top: calc(var(--safe-top) + 8.5rem);
+}
+body.is-offline .pwa-action-banner {
+  top: calc(var(--safe-top) + 7.8rem);
+}
+body.is-offline:has(#pwa-update-banner:not(.hidden)) .map-top-panel {
+  top: calc(var(--safe-top) + 12.1rem);
 }
 .pwa-action-banner div {
   display: flex;
@@ -974,6 +983,9 @@ body.light .route-text-input {
   padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(255,255,255,0.07);
 }
+.condition-panel-head > :first-child {
+  min-width: 0;
+}
 .condition-kicker {
   color: #67e8f9;
   font-size: 9px;
@@ -1014,6 +1026,10 @@ body.light .route-text-input {
 }
 .condition-collapsed-summary {
   display: none;
+  max-width: min(42vw, 10rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 3px 7px;
   border-radius: 999px;
   color: #fdba74;
@@ -1040,6 +1056,7 @@ body.light .route-text-input {
 }
 .condition-head-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 7px;
 }
 .condition-icon-btn {
@@ -1470,6 +1487,18 @@ body.light .route-text-input {
 .route-conditions-panel.is-collapsed {
   max-height: 64px;
 }
+.route-conditions-panel.is-collapsed .condition-panel-head {
+  min-height: 62px;
+  padding: 10px 12px;
+}
+.route-conditions-panel.is-collapsed .condition-kicker,
+.route-conditions-panel.is-collapsed .condition-title-row h2,
+.route-conditions-panel.is-collapsed #condition-refresh {
+  display: none;
+}
+.route-conditions-panel.is-collapsed .condition-title-row {
+  margin-top: 0;
+}
 .route-conditions-panel.is-collapsed .condition-source-badge {
   display: none;
 }
@@ -1798,7 +1827,7 @@ body.light .condition-road-event-icon {
     margin: 0;
     font-size: 9px;
   }
-  .map-legend-item:has(.map-legend-incident) {
+  .map-legend-item.has-events:has(.map-legend-incident) {
     display: flex;
     gap: 5px;
     margin: 0;

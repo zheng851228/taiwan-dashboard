@@ -166,7 +166,7 @@
         affectedSections += 1;
       }
       events.forEach(function(incident) {
-        var identity = incident.id
+        var identity = incident.canonicalId || incident.id
           || [incident.title, incident.roadRef, incident.effectiveAt || incident.updatedAt || ''].join(':');
         if (!unique.has(identity)) unique.set(identity, incident);
       });
@@ -189,6 +189,42 @@
       else summary.unknownFullClosureCount += 1;
     });
     return summary;
+  }
+
+  function roadEventCoverageText(coverage) {
+    if (!coverage || !Array.isArray(coverage.requestedScopes)) {
+      return '\u76ee\u524d\u67e5\u8a62 TDX \u7701\u9053\u5373\u6642\uff0f\u9810\u544a\u8207\u9ad8\u901f\u516c\u8def\u5373\u6642\u4e8b\u4ef6\uff1b\u5e02\u5340\u9053\u8def\u5c1a\u672a\u7d0d\u5165\u3002';
+    }
+    var labels = {
+      'highway:live': '\u7701\u9053\u5373\u6642',
+      'highway:scheduled': '\u7701\u9053\u9810\u544a',
+      'freeway:live': '\u9ad8\u901f\u516c\u8def\u5373\u6642'
+    };
+    var ready = (coverage.readyScopes || []).map(function(scope) {
+      return labels[scope] || scope;
+    });
+    var failed = (coverage.failedScopes || []).map(function(scope) {
+      return labels[scope] || scope;
+    });
+    var text = ready.length
+      ? '\u5df2\u67e5\u8a62 ' + ready.join('\u3001') + '\u4e8b\u4ef6\u3002'
+      : '\u9053\u8def\u4e8b\u4ef6\u4f86\u6e90\u76ee\u524d\u7121\u6cd5\u53d6\u5f97\u3002';
+    if (failed.length) {
+      text += failed.join('\u3001') + '\u66ab\u6642\u5931\u6548\uff0c\u672a\u8996\u70ba\u300c\u7121\u4e8b\u4ef6\u300d\u3002';
+    }
+    return text + '\u5e02\u5340\u9053\u8def\u5c1a\u672a\u7d0d\u5165\uff1b\u9ad8\u901f\u516c\u8def\u7121\u5b98\u65b9\u9810\u544a\u4e8b\u4ef6\u4f86\u6e90\u3002';
+  }
+
+  function emptyRoadEventSummary(coverage) {
+    var readyCount = Array.isArray(coverage && coverage.readyScopes)
+      ? coverage.readyScopes.length
+      : 0;
+    var failedCount = Array.isArray(coverage && coverage.failedScopes)
+      ? coverage.failedScopes.length
+      : 0;
+    if (readyCount && !failedCount) return '\u6cbf\u9014\u672a\u767c\u73fe\u72c0\u6cc1';
+    if (readyCount && failedCount) return '\u90e8\u5206\u4e8b\u4ef6\u4f86\u6e90\u672a\u56de\u5831';
+    return '\u4e8b\u4ef6\u4f86\u6e90\u672a\u56de\u5831';
   }
 
   function showLoading() {
@@ -542,6 +578,7 @@
     );
     setText('condition-coverage', Number(overall.coveragePercent || 0) + '%');
     setText('condition-updated', '\u66f4\u65b0 ' + formatUpdatedAt(payload.updatedAt));
+    setText('condition-event-coverage', roadEventCoverageText(data.incidentCoverage));
 
     var validationText = currentRoute.validation && currentRoute.validation.rerouted
       ? '\u5df2\u907f\u958b\u7981\u884c\u8def\u6bb5\u4e26\u91cd\u65b0\u9a57\u8b49'
@@ -559,7 +596,7 @@
               ? '\u72c0\u6cc1 ' + affectedIncidentSections + '\u6bb5'
               : (incidentCount
                 ? '\u672a\u5b9a\u4f4d ' + eventSummary.roadLevelIncidentCount + '\u4ef6'
-                : '\u7701\u9053\u672a\u56de\u5831'))));
+                : emptyRoadEventSummary(data.incidentCoverage)))));
       collapsedSummary.classList.toggle('danger', eventSummary.activeFullClosureCount > 0);
     }
     setText(
@@ -579,9 +616,11 @@
           + (eventSummary.unknownFullClosureCount
             ? '\uff0c\u53e6\u6709 ' + eventSummary.unknownFullClosureCount + ' \u4ef6\u5168\u7dda\u5c01\u9589\u6642\u9593\u672a\u660e'
             : '')
-        : '\u7701\u9053\u5373\u6642\u8207\u9810\u544a\u4e8b\u4ef6\u4f86\u6e90\u672a\u914d\u5c0d\u5230\u9053\u8def\u4e8b\u4ef6\uff1b\u5e02\u5340\u9053\u8def\u53ef\u80fd\u672a\u6db5\u84cb'
+        : roadEventCoverageText(data.incidentCoverage) + '\u6cbf\u9014\u672a\u914d\u5c0d\u5230\u9053\u8def\u4e8b\u4ef6'
     );
     setText('map-legend-event-count', incidentCount ? '\u72c0\u6cc1 ' + incidentCount : '\u65bd\u5de5\uff0f\u4e8b\u4ef6');
+    var legendEventItem = Dom.byId('map-legend-event-item');
+    if (legendEventItem) legendEventItem.classList.toggle('has-events', incidentCount > 0);
 
     var badge = Dom.byId('condition-source-badge');
     if (badge) {
@@ -752,9 +791,14 @@
     if (panel) panel.classList.add('hidden');
     AppState.routeConditions = null;
     setText('map-legend-event-count', '\u65bd\u5de5\uff0f\u4e8b\u4ef6');
+    var legendEventItem = Dom.byId('map-legend-event-item');
+    if (legendEventItem) legendEventItem.classList.remove('has-events');
   }
 
   function init() {
+    Dom.onId('condition-clear', 'click', function() {
+      if (window.RouteMod) RouteMod.clear();
+    });
     Dom.onId('condition-refresh', 'click', refresh);
     Dom.onId('condition-retry', 'click', refresh);
     Dom.onId('condition-toggle', 'click', toggleCollapsed);

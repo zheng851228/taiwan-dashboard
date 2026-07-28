@@ -122,6 +122,20 @@ describe('KV provider snapshot contract', () => {
     ]));
   });
 
+  it('selects cells along a long section geometry instead of only its midpoint', () => {
+    const cells = selectRouteSnapshotBucketKeys([{
+      order: 1,
+      sample: [24.5, 121],
+      geometry: [[24, 121], [25, 121]]
+    }], { gridDegrees: 0.1, halo: 0 });
+
+    expect(cells).toEqual(expect.arrayContaining([
+      '240:1210',
+      '245:1210',
+      '250:1210'
+    ]));
+  });
+
   it('loads and deduplicates a fresh route-scoped snapshot without upstream fetches', async () => {
     const bucketKeys = selectRouteSnapshotBucketKeys(
       ROUTE_SECTIONS,
@@ -209,6 +223,7 @@ describe('KV provider snapshot contract', () => {
   it('preserves road event type, impact, timing, and restriction metadata', async () => {
     const incident = {
       id: 'event-closure',
+      canonicalId: 'tdx:highway:event-closure',
       title: '道路施工',
       description: '施工期間全線封閉',
       severity: 2,
@@ -227,12 +242,23 @@ describe('KV provider snapshot contract', () => {
       blockWay: 2,
       blockedLanes: '全線',
       impactDescription: '雙向完全阻斷',
+      sourceScope: 'highway',
+      feedType: 'live',
+      cityCode: null,
       source: 'TDX'
     };
     const document = buildProviderSnapshotDocument({
       detectors: [],
       publishedTraffic: [],
       incidents: [incident],
+      incidentCoverage: {
+        requestedScopes: ['highway:live', 'freeway:live'],
+        readyScopes: ['highway:live', 'freeway:live'],
+        failedScopes: [],
+        unsupportedScopes: ['freeway:scheduled'],
+        notRequestedScopes: ['city'],
+        fetchedAt: '2026-07-27T03:55:00.000Z'
+      },
       weather: [],
       cameras: []
     }, { generatedAt: '2026-07-27T03:55:00.000Z' });
@@ -245,6 +271,112 @@ describe('KV provider snapshot contract', () => {
     );
 
     expect(result.incidents).toEqual([incident]);
+    expect(result.incidentCoverage).toMatchObject({
+      readyScopes: ['highway:live', 'freeway:live'],
+      failedScopes: []
+    });
+  });
+
+  it('loads located road events only near the route while retaining unlocated warnings', async () => {
+    const nearIncident = {
+      id: 'event-near-route',
+      title: '附近施工',
+      roadRef: '台9',
+      lat: 25.0001,
+      lng: 121.0001,
+      updatedAt: '2026-07-27T03:50:00.000Z',
+      source: 'TDX'
+    };
+    const farIncident = {
+      id: 'event-far-away',
+      title: '遠方施工',
+      roadRef: '台9',
+      lat: 22.627,
+      lng: 120.301,
+      updatedAt: '2026-07-27T03:50:00.000Z',
+      source: 'TDX'
+    };
+    const unlocatedIncident = {
+      id: 'event-road-level',
+      title: '位置未提供的道路事件',
+      roadRef: '台9',
+      lat: null,
+      lng: null,
+      updatedAt: '2026-07-27T03:50:00.000Z',
+      source: 'TDX'
+    };
+    const unrelatedUnlocatedIncident = {
+      id: 'event-other-road',
+      title: '其他道路位置未提供事件',
+      roadRef: '台61',
+      lat: null,
+      lng: null,
+      updatedAt: '2026-07-27T03:50:00.000Z',
+      source: 'TDX'
+    };
+    const document = buildProviderSnapshotDocument({
+      detectors: [],
+      publishedTraffic: [],
+      incidents: [
+        nearIncident,
+        farIncident,
+        unlocatedIncident,
+        unrelatedUnlocatedIncident
+      ],
+      weather: [],
+      cameras: []
+    }, { generatedAt: '2026-07-27T03:55:00.000Z' });
+    const kv = createKv({}, packProviderSnapshot(document));
+
+    const result = await loadSnapshotProviderData(
+      ROUTE_SECTIONS,
+      { ROUTE_CACHE: kv },
+      { now: NOW, maxAgeMs: MAX_AGE_MS }
+    );
+
+    expect(result.incidents.map((incident) => incident.id).sort()).toEqual([
+      'event-near-route',
+      'event-road-level'
+    ]);
+  });
+
+  it('loads a located road event near the endpoint of a long route section', async () => {
+    const endpointIncident = {
+      id: 'event-near-long-section-endpoint',
+      title: '端點附近施工',
+      roadRef: '台9',
+      lat: 24.01,
+      lng: 121,
+      updatedAt: '2026-07-27T03:50:00.000Z',
+      source: 'TDX'
+    };
+    const document = buildProviderSnapshotDocument({
+      detectors: [],
+      publishedTraffic: [],
+      incidents: [endpointIncident],
+      weather: [],
+      cameras: []
+    }, {
+      generatedAt: '2026-07-27T03:55:00.000Z',
+      gridDegrees: 0.1
+    });
+    const kv = createKv({}, packProviderSnapshot(document));
+    const sections = [{
+      order: 1,
+      sample: [24.5, 121],
+      roadRef: '台9',
+      geometry: [[24, 121], [25, 121]]
+    }];
+
+    const result = await loadSnapshotProviderData(
+      sections,
+      { ROUTE_CACHE: kv },
+      { now: NOW, maxAgeMs: MAX_AGE_MS }
+    );
+
+    expect(result.incidents.map((incident) => incident.id)).toEqual([
+      'event-near-long-section-endpoint'
+    ]);
   });
 
   it('restores published geometry fragments in their original route order', async () => {

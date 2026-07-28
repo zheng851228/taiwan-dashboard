@@ -31,8 +31,10 @@ describe('PWA install and offline assets', () => {
   });
 
   it('keeps the complete app shell local and cacheable', async () => {
-    const [html, serviceWorker] = await Promise.all([
+    const [html, pwaScript, styles, serviceWorker] = await Promise.all([
       readFile(path.join(root, 'index.html'), 'utf8'),
+      readFile(path.join(root, 'js/pwa.js'), 'utf8'),
+      readFile(path.join(root, 'css/style.css'), 'utf8'),
       readFile(path.join(root, 'sw.js'), 'utf8')
     ]);
     expect(html).not.toMatch(/(?:unpkg|cdnjs|fonts\.googleapis)\.com/);
@@ -42,7 +44,10 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v15"');
-    expect(serviceWorker).toContain('./css/style.css?v=15');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v16"');
+    expect(serviceWorker).toContain('./css/style.css?v=16');
+    expect(pwaScript).toContain('isIPhone() && isSafari()');
+    expect(pwaScript).toContain('installGuideWouldInterrupt()');
+    expect(styles).toContain('body:has(#pwa-update-banner:not(.hidden)) .map-top-panel');
   });
 });

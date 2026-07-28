@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { classifyRoadEvent, roadEventState } from '../worker/src/road-events.js';
+import {
+  classifyRoadEvent,
+  roadEventIdentity,
+  roadEventState
+} from '../worker/src/road-events.js';
 
 const NOW = new Date('2026-07-27T04:00:00.000Z');
 
@@ -72,5 +76,22 @@ describe('road event semantics', () => {
     expect(roadEventState({ effectiveAt: NOW.toISOString() }, NOW)).toBe('active');
     expect(roadEventState({ expiresAt: NOW.toISOString() }, NOW)).toBe('expired');
     expect(roadEventState({}, NOW)).toBe('unknown');
+  });
+
+  it('deduplicates live and scheduled variants only inside the same source scope', () => {
+    const highway = roadEventIdentity({
+      id: 'shared-id',
+      source: 'TDX',
+      sourceScope: 'highway'
+    });
+    const freeway = roadEventIdentity({
+      id: 'shared-id',
+      source: 'TDX',
+      sourceScope: 'freeway'
+    });
+
+    expect(highway).toBe('tdx:highway:shared-id');
+    expect(freeway).toBe('tdx:freeway:shared-id');
+    expect(highway).not.toBe(freeway);
   });
 });

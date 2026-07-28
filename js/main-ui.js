@@ -23,26 +23,6 @@
   var RIDE_ROUTE_CHIPS = [
     '北宜公路', '台61線', '蘇花公路', '南迴公路', '台14甲', '北橫公路', '182縣道', '淡金公路'
   ];
-  var ROAD_EVENT_MAP_COLORS = {
-    full_closure: '#ef4444',
-    lane_closure: '#f43f5e',
-    controlled: '#8b5cf6',
-    shoulder: '#eab308',
-    no_impact: '#22c55e',
-    unknown: '#f97316'
-  };
-  var ROAD_EVENT_KIND_MAP_COLORS = {
-    accident: '#fb7185',
-    construction: '#f59e0b',
-    congestion: '#ef4444',
-    control: '#8b5cf6',
-    weather: '#0ea5e9',
-    disaster: '#dc2626',
-    activity: '#06b6d4',
-    hazard: '#f97316',
-    other: '#64748b'
-  };
-
   function setFlexVisible(el, isVisible) {
     if (!el) return;
     el.classList.toggle('hidden', !isVisible);
@@ -226,39 +206,40 @@
             && incident.lng !== null && incident.lng !== undefined && incident.lng !== ''
             && Number.isFinite(Number(incident.lat)) && Number.isFinite(Number(incident.lng));
         });
-        var primaryEvent = window.getPrimaryRoadEvent
-          ? window.getPrimaryRoadEvent(locatedIncidents)
-          : null;
-        if (primaryEvent) {
+        var incidentGroups = [];
+        var incidentGroupsByPoint = new Map();
+        locatedIncidents.forEach(function(incident) {
+          var pointKey = Number(incident.lat).toFixed(5) + ':' + Number(incident.lng).toFixed(5);
+          if (!incidentGroupsByPoint.has(pointKey)) {
+            var group = { incidents: [], lat: Number(incident.lat), lng: Number(incident.lng) };
+            incidentGroupsByPoint.set(pointKey, group);
+            incidentGroups.push(group);
+          }
+          incidentGroupsByPoint.get(pointKey).incidents.push(incident);
+        });
+        incidentGroups.slice(0, 3).forEach(function(group, groupIndex) {
+          var primaryEvent = window.getPrimaryRoadEvent
+            ? window.getPrimaryRoadEvent(group.incidents)
+            : null;
+          if (!primaryEvent) return;
           var eventView = primaryEvent.presentation;
-          var eventColor = eventView.impact === 'unknown'
-            ? (ROAD_EVENT_KIND_MAP_COLORS[eventView.kind] || ROAD_EVENT_MAP_COLORS.unknown)
-            : (ROAD_EVENT_MAP_COLORS[eventView.impact] || ROAD_EVENT_MAP_COLORS.unknown);
-          var eventLine = L.polyline(latlngs, {
-            color: eventColor,
-            weight: eventView.impact === 'full_closure' ? 5 : 4,
-            opacity: eventView.status === 'scheduled' ? 0.68 : 0.98,
-            dashArray: eventView.status === 'scheduled' ? '3 8' : '10 7',
-            lineCap: 'round',
-            lineJoin: 'round'
-          }).addTo(MapMod.map);
-          eventLine._conditionOrder = section.order;
-          eventLine.on('click', function() { Bus.emit('condition:select', section.order); });
-          MapMod.routeSectionLayers.push(eventLine);
-
-          var incident = primaryEvent.incident || {};
-          var incidentPoint = [Number(incident.lat), Number(incident.lng)];
-          var eventCount = locatedIncidents.length;
-          var eventLabel = (section.roadRef || section.roadName || '沿途路段') + ' ' + eventView.label;
+          var incidentPoint = [group.lat, group.lng];
+          var hiddenLocationCount = groupIndex === 0 ? Math.max(0, incidentGroups.length - 3) : 0;
+          var markerBadge = group.incidents.length > 1
+            ? String(group.incidents.length)
+            : (hiddenLocationCount ? '+' + hiddenLocationCount : '');
+          var eventLabel = (section.roadRef || section.roadName || '沿途路段') + ' ' + eventView.label
+            + (group.incidents.length > 1 ? '，同位置 ' + group.incidents.length + ' 件' : '')
+            + (hiddenLocationCount ? '，另有 ' + hiddenLocationCount + ' 個事件位置' : '');
           var eventIcon = L.divIcon({
             className: 'route-incident-marker',
             html: '<div class="route-incident-pin road-event-' + eventView.kind
               + ' road-impact-' + eventView.impact
               + (eventView.status === 'scheduled' ? ' is-scheduled' : '')
               + '" aria-label="' + escapeHtml(eventLabel) + '"><i class="fa-solid '
-              + eventView.icon + '"></i>' + (eventCount > 1 ? '<span>' + eventCount + '</span>' : '') + '</div>',
-            iconSize: [eventCount > 1 ? 42 : 30, 30],
-            iconAnchor: [eventCount > 1 ? 21 : 15, 15]
+              + eventView.icon + '"></i>' + (markerBadge ? '<span>' + markerBadge + '</span>' : '') + '</div>',
+            iconSize: [markerBadge ? 42 : 30, 30],
+            iconAnchor: [markerBadge ? 21 : 15, 15]
           });
           var eventMarker = L.marker(incidentPoint, {
             icon: eventIcon,
@@ -270,7 +251,7 @@
           eventMarker.on('click', function() { Bus.emit('condition:select', section.order); });
           eventMarker.bindTooltip(escapeHtml(eventLabel), { direction: 'top', offset: [0, -16] });
           MapMod.routeIncidentMarkers.push(eventMarker);
-        }
+        });
 
         var weather = section.weather || {};
         if ((weather.condition || '').indexOf('雨') !== -1 || Number(weather.rainChance) >= 60) {

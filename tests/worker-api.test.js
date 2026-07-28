@@ -207,6 +207,12 @@ describe('Worker v2 fixture API', () => {
             headers: { 'Content-Type': 'application/json' }
           });
         }
+        if (value.includes('/Traffic/RoadEvent/LiveEvent/Freeway')) {
+          return new Response(JSON.stringify({ LiveEvents: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
         if (value.includes('/section/sectioninfo/SectionList.xml')) {
           return new Response(`
             <SectionList><Sections><Section><SectionID>section-1</SectionID>
@@ -272,10 +278,19 @@ describe('Worker v2 fixture API', () => {
         method: 'published-section',
         source: 'THB'
       });
-      expect(upstreamUrls.find((url) => url.includes('/Traffic/RoadEvent/LiveEvent/Highway')))
-        .toContain('$top=1000');
-      expect(upstreamUrls.find((url) => url.includes('/Traffic/RoadEvent/Event/Highway')))
-        .toContain('$top=1000');
+      const roadEventUrls = [
+        '/Traffic/RoadEvent/LiveEvent/Highway',
+        '/Traffic/RoadEvent/Event/Highway',
+        '/Traffic/RoadEvent/LiveEvent/Freeway'
+      ].map((path) => new URL(upstreamUrls.find((url) => url.includes(path))));
+      roadEventUrls.forEach((url) => {
+        expect(url.searchParams.get('$top')).toBe('1000');
+        expect(url.searchParams.get('$count')).toBe('true');
+      });
+      expect(conditions.data.incidentCoverage).toMatchObject({
+        readyScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+        failedScopes: []
+      });
     });
 });
 

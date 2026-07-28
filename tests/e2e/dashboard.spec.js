@@ -32,6 +32,10 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expect(page.locator('.route-incident-pin.road-event-construction')).toBeVisible();
   await expect(page.locator('#condition-incidents')).toContainText('1段·1件');
   await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
+  await expect(page.locator('#condition-event-coverage')).toContainText('高速公路即時');
+  expect(await page.evaluate(() => (
+    MapMod.routeSectionLayers.length === AppState.routeConditions.sections.length * 2
+  ))).toBe(true);
   expect(await page.evaluate(() => ({
     partial: window.getRoadEventPresentation({
       kind: 'accident',
@@ -45,6 +49,9 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
     partial: 'lane_closure',
     semanticEmpty: 'unknown'
   });
+  await page.locator('#condition-clear').click();
+  await expect(page.locator('#map-legend-event-item')).not.toHaveClass(/has-events/);
+  await expect(page.locator('#route-conditions-panel')).toBeHidden();
   expect(browserErrors).toEqual([]);
 });
 
@@ -77,11 +84,73 @@ test('keeps coordinate-free road events visible without inventing a precise map 
   await expect(page.locator('.route-incident-pin')).toHaveCount(0);
 });
 
+test('keeps separate official event locations as separate map markers', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic multi-location verification runs once.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      const section = payload.data.sections.find((item) => item.incidents?.length);
+      const original = section.incidents[0];
+      section.incidents.push({
+        ...original,
+        id: 'second-location',
+        canonicalId: 'tdx:highway:second-location',
+        title: '另一處事故',
+        kind: 'accident',
+        lat: Number(original.lat) + 0.002,
+        lng: Number(original.lng) + 0.002
+      });
+      return payload;
+    };
+  });
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+
+  await expect(page.locator('.route-incident-pin')).toHaveCount(2);
+  await expect(page.locator('#condition-incidents')).toContainText('1段·2件');
+  await expect(page.locator('.condition-road-event')).toHaveCount(2);
+});
+
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
   await expect(page.getByText('資料不足', { exact: true })).toBeVisible();
   await page.locator('#nav-tools').click();
   await expect(page.getByText(/灰色路段代表資料不足/)).toBeVisible();
+});
+
+test('distinguishes a checked route with no incidents from unavailable event sources', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic coverage semantics run once.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      payload.data.sections.forEach((section) => {
+        section.incidents = [];
+      });
+      payload.data.overall.incidentSections = 0;
+      payload.data.incidentCoverage = {
+        requestedScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+        readyScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+        failedScopes: [],
+        unsupportedScopes: ['freeway:scheduled'],
+        notRequestedScopes: ['city']
+      };
+      return payload;
+    };
+  });
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await page.locator('#condition-toggle').click();
+
+  await expect(page.locator('#condition-collapsed-summary')).toHaveText('沿途未發現狀況');
+  await expect(page.locator('#condition-collapsed-summary')).not.toContainText('未回報');
 });
 
 test('keeps the mobile route planner focused on the active task', async ({ page }) => {
@@ -106,12 +175,23 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
   const viewport = page.viewportSize();
   test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
 
+  await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#route-toggle').click();
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await page.evaluate(() => {
+    document.querySelector('#pwa-update-banner')?.classList.remove('hidden');
+  });
+  const expandedConditionsBox = await page.locator('#route-conditions-panel').boundingBox();
+  const expandedUpdateBox = await page.locator('#pwa-update-banner').boundingBox();
+  expect(
+    expandedUpdateBox
+      && expandedConditionsBox
+      && expandedUpdateBox.y + expandedUpdateBox.height <= expandedConditionsBox.y
+  ).toBe(true);
   await page.locator('#condition-toggle').click();
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#condition-collapsed-summary')).toContainText('狀況 1段');
@@ -129,13 +209,40 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
 
   const conditionsBox = await page.locator('#route-conditions-panel').boundingBox();
   expect(conditionsBox?.height).toBeLessThanOrEqual(80);
+  const updateBox = await page.locator('#pwa-update-banner').boundingBox();
+  expect(updateBox && conditionsBox && updateBox.y + updateBox.height <= conditionsBox.y).toBe(true);
   await page.locator('#condition-toggle').click();
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.condition-road-event[data-event-kind="construction"]')).toBeVisible();
 });
 
+test('keeps collapsed route actions and summary inside a short 320px screen', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Small-viewport geometry runs once.');
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await page.locator('#condition-toggle').click();
+
+  await expect(page.locator('#condition-collapsed-summary')).toBeVisible();
+  await expect(page.locator('#condition-refresh')).toBeHidden();
+  const [panelBox, headBox, clearBox, toggleBox] = await Promise.all([
+    page.locator('#route-conditions-panel').boundingBox(),
+    page.locator('.condition-panel-head').boundingBox(),
+    page.locator('#condition-clear').boundingBox(),
+    page.locator('#condition-toggle').boundingBox()
+  ]);
+  expect(panelBox && headBox && headBox.y + headBox.height <= panelBox.y + panelBox.height + 1).toBe(true);
+  expect(panelBox && clearBox && clearBox.y + clearBox.height <= panelBox.y + panelBox.height + 1).toBe(true);
+  expect(panelBox && toggleBox && toggleBox.y + toggleBox.height <= panelBox.y + panelBox.height + 1).toBe(true);
+});
+
 test('surfaces a conditions refresh failure even when the mobile panel was collapsed', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'Collapsed failure visibility verification runs on iPhone.');
+  await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#route-toggle').click();
   await page.locator('#js-route-start').fill('25.0478,121.5170');
@@ -146,8 +253,8 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
   await page.evaluate(() => {
     AppServices.loadRouteConditions = () => Promise.reject(new Error('測試更新失敗'));
+    RouteConditionsMod.refresh();
   });
-  await page.locator('#condition-refresh').click();
 
   await expect(page.locator('#route-conditions-panel')).not.toHaveClass(/is-collapsed/);
   await expect(page.locator('#condition-error')).toBeVisible();
@@ -445,6 +552,14 @@ test('shows iPhone Safari install guidance once and keeps a fixed install entry'
 
   await page.locator('#nav-tools').click();
   await expect(page.locator('#pwa-install-open')).toBeVisible();
+});
+
+test('keeps the automatic install guide from interrupting tablet use', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'tablet', 'Automatic install guidance is intentionally iPhone-only.');
+  await page.addInitScript(() => localStorage.removeItem('tw_pwa_install_dismissed_v1'));
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.waitForTimeout(1400);
+  await expect(page.locator('#pwa-install-sheet')).toBeHidden();
 });
 
 test('uses foreground location only after the location button is pressed', async ({ page, context }, testInfo) => {

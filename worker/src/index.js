@@ -237,6 +237,9 @@ async function handleConditions(routeId, env, forceRefresh) {
   conditionData.dataMode = fixtureMode ? 'fixture' : 'live';
   conditionData.sources = fixtureMode ? ['DEMO'] : ['TDX', 'THB', 'CWA', 'CCTV'];
   conditionData.issues = providerData.issues || [];
+  if (!fixtureMode && providerData.incidentCoverage) {
+    conditionData.incidentCoverage = providerData.incidentCoverage;
+  }
   if (!fixtureMode && providerData.snapshotGeneratedAt) {
     conditionData.snapshotGeneratedAt = providerData.snapshotGeneratedAt;
   }

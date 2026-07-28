@@ -1,4 +1,5 @@
 import { decodePolyline6, encodePolyline6, haversineKm } from './polyline.js';
+import { roadEventIdentity } from './road-events.js';
 
 const SNAPSHOT_SCHEMA_VERSION = 1;
 const SNAPSHOT_PREFIX = 'provider-snapshot:v1:live:';
@@ -36,23 +37,63 @@ export function isProviderSnapshotFresh(
 
 export function selectRouteSnapshotBucketKeys(sections, bucketConfig = {}) {
   const gridDegrees = positiveNumber(bucketConfig.gridDegrees, DEFAULT_GRID_DEGREES);
-  const halo = Math.max(0, Math.floor(positiveNumber(bucketConfig.halo, 1)));
+  const configuredHalo = Number(bucketConfig.halo);
+  const halo = Math.max(
+    0,
+    Math.floor(Number.isFinite(configuredHalo) ? configuredHalo : 1)
+  );
   const keys = new Set();
 
   for (const section of sections || []) {
-    const point = Array.isArray(section?.sample) ? section.sample : null;
-    const lat = Number(point?.[0]);
-    const lng = Number(point?.[1]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    const latCell = Math.floor(lat / gridDegrees);
-    const lngCell = Math.floor(lng / gridDegrees);
-    for (let latOffset = -halo; latOffset <= halo; latOffset += 1) {
-      for (let lngOffset = -halo; lngOffset <= halo; lngOffset += 1) {
-        keys.add(`${latCell + latOffset}:${lngCell + lngOffset}`);
+    const geometry = Array.isArray(section?.geometry)
+      ? section.geometry.filter(validCoordinate)
+      : [];
+    const points = geometry.length
+      ? geometry
+      : (validCoordinate(section?.sample) ? [section.sample] : []);
+    for (let index = 0; index < points.length; index += 1) {
+      addRouteCellWithHalo(keys, points[index], gridDegrees, halo);
+      if (index > 0) {
+        addRouteSegmentCellsWithHalo(
+          keys,
+          points[index - 1],
+          points[index],
+          gridDegrees,
+          halo
+        );
       }
     }
   }
   return [...keys].sort();
+}
+
+function addRouteSegmentCellsWithHalo(keys, start, end, gridDegrees, halo) {
+  const startLatCell = Math.floor(Number(start[0]) / gridDegrees);
+  const startLngCell = Math.floor(Number(start[1]) / gridDegrees);
+  const endLatCell = Math.floor(Number(end[0]) / gridDegrees);
+  const endLngCell = Math.floor(Number(end[1]) / gridDegrees);
+  const steps = Math.max(
+    Math.abs(endLatCell - startLatCell),
+    Math.abs(endLngCell - startLngCell)
+  );
+  if (steps <= 1) return;
+  for (let step = 1; step < steps; step += 1) {
+    const ratio = step / steps;
+    addRouteCellWithHalo(keys, [
+      Number(start[0]) + (Number(end[0]) - Number(start[0])) * ratio,
+      Number(start[1]) + (Number(end[1]) - Number(start[1])) * ratio
+    ], gridDegrees, halo);
+  }
+}
+
+function addRouteCellWithHalo(keys, point, gridDegrees, halo) {
+  const latCell = Math.floor(Number(point[0]) / gridDegrees);
+  const lngCell = Math.floor(Number(point[1]) / gridDegrees);
+  for (let latOffset = -halo; latOffset <= halo; latOffset += 1) {
+    for (let lngOffset = -halo; lngOffset <= halo; lngOffset += 1) {
+      keys.add(`${latCell + latOffset}:${lngCell + lngOffset}`);
+    }
+  }
 }
 
 export async function loadSnapshotProviderData(sections, env, options = {}) {
@@ -132,9 +173,15 @@ export async function loadSnapshotProviderData(sections, env, options = {}) {
       }).map((cellId) => `p:${cellId}:${roadKey}`);
     })
     : [];
+  const incidentRoadCells = decoded.header.incidentsByRoad
+    ? (sections || [])
+      .map((section) => snapshotRoadKey(section.roadRef || section.roadName))
+      .filter(Boolean)
+      .map((roadKey) => `i:${roadKey}`)
+    : [];
   const cellsToRead = [
     '__global__',
-    ...new Set([...selectedCells, ...publishedCells, ...weatherCells])
+    ...new Set([...selectedCells, ...publishedCells, ...incidentRoadCells, ...weatherCells])
   ];
   const data = emptyProviderArrays();
   const issues = Array.isArray(decoded.header.issues)
@@ -219,7 +266,8 @@ export async function loadSnapshotProviderData(sections, env, options = {}) {
     trafficSource: 'TDX/THB',
     issues,
     snapshotGeneratedAt: decoded.header.generatedAt,
-    snapshotProviders: decoded.header.providers || {}
+    snapshotProviders: decoded.header.providers || {},
+    incidentCoverage: decoded.header.incidentCoverage || null
   };
 }
 
@@ -261,8 +309,11 @@ export function buildProviderSnapshotDocument(providerData, options = {}) {
     ensureCell(cellId).publishedTraffic.push(...byId.values());
   }
 
-  const globalCell = ensureCell('__global__');
-  globalCell.incidents.push(...(providerData.incidents || []));
+  for (const incident of providerData.incidents || []) {
+    const cellId = pointCellId(incident.lat, incident.lng, gridDegrees);
+    const roadKey = snapshotRoadKey(incident.roadRef);
+    ensureCell(cellId || (roadKey ? `i:${roadKey}` : '__global__')).incidents.push(incident);
+  }
   for (const weather of providerData.weather || []) {
     const cellId = pointCellId(weather.lat, weather.lng, WEATHER_GRID_DEGREES);
     if (cellId) ensureCell(`w:${cellId}`).weather.push(weather);
@@ -274,7 +325,9 @@ export function buildProviderSnapshotDocument(providerData, options = {}) {
     gridDegrees,
     weatherGridDegrees: WEATHER_GRID_DEGREES,
     publishedByRoad: true,
+    incidentsByRoad: true,
     providers: options.providers || {},
+    incidentCoverage: options.incidentCoverage || providerData.incidentCoverage || null,
     issues: options.issues || providerData.issues || [],
     cameraSnapshotRequired: Boolean(options.cameraSnapshotRequired),
     routeHalo: Number(options.routeHalo) || 1,
@@ -300,7 +353,9 @@ export function packProviderSnapshot(snapshot) {
     gridDegrees: snapshot.gridDegrees,
     weatherGridDegrees: snapshot.weatherGridDegrees,
     publishedByRoad: Boolean(snapshot.publishedByRoad),
+    incidentsByRoad: Boolean(snapshot.incidentsByRoad),
     providers: snapshot.providers || {},
+    incidentCoverage: snapshot.incidentCoverage || null,
     issues: snapshot.issues || [],
     cameraSnapshotRequired: Boolean(snapshot.cameraSnapshotRequired),
     routeHalo: Number(snapshot.routeHalo) || 1,
@@ -456,7 +511,8 @@ function compactProviderCell(cell) {
       item.id, item.title, item.description, item.severity, item.roadRef,
       item.lat, item.lng, item.updatedAt, item.expiresAt, item.kind, item.impact,
       item.effectiveAt, item.severityCode, item.typeCode, item.subtypeCode,
-      item.regulationCodes, item.blockWay, item.blockedLanes, item.impactDescription
+      item.regulationCodes, item.blockWay, item.blockedLanes, item.impactDescription,
+      item.canonicalId, item.sourceScope, item.feedType, item.cityCode
     ]),
     w: (cell.weather || []).map((item) => [
       item.lat, item.lng, item.condition, item.temperatureC, item.rainChance,
@@ -518,6 +574,10 @@ function expandProviderCell(cell) {
       blockWay: item[16],
       blockedLanes: item[17],
       impactDescription: item[18],
+      canonicalId: item[19],
+      sourceScope: item[20],
+      feedType: item[21],
+      cityCode: item[22],
       source: 'TDX'
     })),
     weather: cell.w.map((item) => ({
@@ -558,7 +618,8 @@ function emptySnapshotProviderData(issues) {
     trafficSource: 'TDX/THB',
     issues: [...issues],
     snapshotGeneratedAt: null,
-    snapshotProviders: {}
+    snapshotProviders: {},
+    incidentCoverage: null
   };
 }
 
@@ -573,10 +634,24 @@ function emptyProviderArrays() {
 }
 
 function pointCellId(latValue, lngValue, gridDegrees) {
+  if (
+    latValue === null || latValue === undefined || latValue === ''
+    || lngValue === null || lngValue === undefined || lngValue === ''
+  ) {
+    return null;
+  }
   const lat = Number(latValue);
   const lng = Number(lngValue);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   return `${Math.floor(lat / gridDegrees)}:${Math.floor(lng / gridDegrees)}`;
+}
+
+function validCoordinate(value) {
+  return Array.isArray(value)
+    && value[0] !== null && value[0] !== undefined && value[0] !== ''
+    && value[1] !== null && value[1] !== undefined && value[1] !== ''
+    && Number.isFinite(Number(value[0]))
+    && Number.isFinite(Number(value[1]));
 }
 
 function positiveNumber(value, fallback) {
@@ -621,7 +696,7 @@ function mergePublishedTraffic(items) {
 }
 
 function incidentIdentity(item) {
-  return item?.id || `${item?.title}:${item?.roadRef}:${item?.updatedAt}`;
+  return roadEventIdentity(item);
 }
 
 function weatherIdentity(item) {

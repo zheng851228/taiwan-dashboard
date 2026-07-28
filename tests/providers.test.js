@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildReferenceSpeedByLink,
   geocodePlace,
+  loadTdxRoadEvents,
   mergeTdxDetectors,
   mergePublishedSections,
   normalizeCwaForecasts,
@@ -464,6 +465,148 @@ describe('CWA township forecast normalization', () => {
 });
 
 describe('TDX road-event normalization', () => {
+  it('aggregates national feeds without merging identical ids across road scopes', async () => {
+    const env = {
+      TDX_INCIDENT_ENDPOINT: 'https://events.test/highway-live?case=scope',
+      TDX_SCHEDULED_INCIDENT_ENDPOINT: 'https://events.test/highway-scheduled?case=scope',
+      TDX_FREEWAY_INCIDENT_ENDPOINT: 'https://events.test/freeway-live?case=scope'
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const value = String(url);
+      if (value.includes('highway-live')) {
+        return new Response(JSON.stringify({
+          LiveEvents: [{ EventID: 'shared', EventTitle: '省道施工', EventType: 2 }]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (value.includes('highway-scheduled')) {
+        return new Response(JSON.stringify({
+          Events: [{ EventID: 'shared', EventTitle: '同一省道預告', EventType: 2 }]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        LiveEvents: [{ EventID: 'shared', EventTitle: '國道事故', EventType: 1 }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+
+    const result = await loadTdxRoadEvents(env, { Authorization: 'Bearer test' });
+
+    expect(result.incidents).toHaveLength(2);
+    expect(result.incidents.map((incident) => incident.canonicalId).sort()).toEqual([
+      'tdx:freeway:shared',
+      'tdx:highway:shared'
+    ]);
+    expect(result.incidentCoverage).toMatchObject({
+      readyScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+      failedScopes: []
+    });
+    expect(result.issues).toEqual([]);
+  });
+
+  it('loads every road-event page before marking a source ready', async () => {
+    const env = {
+      TDX_INCIDENT_ENDPOINT: 'https://events.test/highway-live?case=paged&$top=2',
+      TDX_SCHEDULED_INCIDENT_ENDPOINT: 'https://events.test/highway-scheduled?case=paged&$top=2',
+      TDX_FREEWAY_INCIDENT_ENDPOINT: 'https://events.test/freeway-live?case=paged&$top=2'
+    };
+    const fetchMock = vi.fn(async (url) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname.includes('highway-live')) {
+        const skip = Number(parsed.searchParams.get('$skip') || 0);
+        return new Response(JSON.stringify({
+          Count: 3,
+          LiveEvents: skip
+            ? [{ EventID: 'page-3', EventTitle: '第三件事件', EventType: 1 }]
+            : [
+              { EventID: 'page-1', EventTitle: '第一件事件', EventType: 1 },
+              { EventID: 'page-2', EventTitle: '第二件事件', EventType: 2 }
+            ]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        Count: 0,
+        [parsed.pathname.includes('highway-scheduled') ? 'Events' : 'LiveEvents']: []
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await loadTdxRoadEvents(env, { Authorization: 'Bearer test' });
+
+    expect(result.incidents.map((incident) => incident.id)).toEqual([
+      'page-1',
+      'page-2',
+      'page-3'
+    ]);
+    expect(result.incidentCoverage.failedScopes).toEqual([]);
+    expect(fetchMock.mock.calls.some(([url]) => (
+      new URL(String(url)).searchParams.get('$skip') === '2'
+    ))).toBe(true);
+    expect(fetchMock.mock.calls.every(([url]) => (
+      new URL(String(url)).searchParams.get('$count') === 'true'
+    ))).toBe(true);
+  });
+
+  it('marks a truncated road-event page as failed instead of reporting zero missing events', async () => {
+    const env = {
+      TDX_INCIDENT_ENDPOINT: 'https://events.test/highway-live?case=truncated&$top=2',
+      TDX_SCHEDULED_INCIDENT_ENDPOINT: 'https://events.test/highway-scheduled?case=truncated&$top=2',
+      TDX_FREEWAY_INCIDENT_ENDPOINT: 'https://events.test/freeway-live?case=truncated&$top=2'
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname.includes('highway-live')) {
+        const skip = Number(parsed.searchParams.get('$skip') || 0);
+        return new Response(JSON.stringify({
+          Count: 3,
+          LiveEvents: skip
+            ? []
+            : [
+              { EventID: 'partial-1', EventTitle: '第一件事件', EventType: 1 },
+              { EventID: 'partial-2', EventTitle: '第二件事件', EventType: 2 }
+            ]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ Count: 0, LiveEvents: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }));
+
+    const result = await loadTdxRoadEvents(env, { Authorization: 'Bearer test' });
+
+    expect(result.incidents).toEqual([]);
+    expect(result.incidentCoverage.readyScopes).toEqual([
+      'highway:scheduled',
+      'freeway:live'
+    ]);
+    expect(result.incidentCoverage.failedScopes).toEqual(['highway:live']);
+    expect(result.issues[0]).toMatch(/truncated feed/);
+  });
+
+  it('keeps successful road-event feeds when Freeway is temporarily unavailable', async () => {
+    const env = {
+      TDX_INCIDENT_ENDPOINT: 'https://events.test/highway-live?case=partial',
+      TDX_SCHEDULED_INCIDENT_ENDPOINT: 'https://events.test/highway-scheduled?case=partial',
+      TDX_FREEWAY_INCIDENT_ENDPOINT: 'https://events.test/freeway-live?case=partial'
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url) => (
+      String(url).includes('freeway-live')
+        ? new Response('{}', { status: 503 })
+        : new Response(JSON.stringify({ LiveEvents: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+    )));
+
+    const result = await loadTdxRoadEvents(env, { Authorization: 'Bearer test' });
+
+    expect(result.incidents).toEqual([]);
+    expect(result.incidentCoverage).toMatchObject({
+      readyScopes: ['highway:live', 'highway:scheduled'],
+      failedScopes: ['freeway:live']
+    });
+    expect(result.issues[0]).toMatch(/freeway road events unavailable: HTTP 503/);
+  });
+
   it('maps the current LiveEvent schema and WKT coordinates', () => {
     const [incident] = normalizeTdxIncidents({
       UpdateTime: '2026-07-23T00:20:00+08:00',
@@ -505,6 +648,9 @@ describe('TDX road-event normalization', () => {
       blockedLanes: '外側車道',
       updatedAt: '2026-07-23T00:15:01+08:00',
       expiresAt: '2026-07-23T02:00:00+08:00',
+      canonicalId: 'tdx:highway:event-1',
+      sourceScope: 'highway',
+      feedType: 'live',
       source: 'TDX'
     });
   });
@@ -533,13 +679,51 @@ describe('TDX road-event normalization', () => {
       id: 'scheduled-1',
       severity: 'warning',
       severityCode: null,
-      kind: 'construction'
+      kind: 'construction',
+      sourceScope: 'highway',
+      feedType: 'scheduled'
     });
     expect(incidents[1]).toMatchObject({
       id: 'scheduled-2',
       severity: 'warning',
       severityCode: null,
-      kind: 'activity'
+      kind: 'activity',
+      sourceScope: 'highway',
+      feedType: 'scheduled'
+    });
+  });
+
+  it('preserves a City roadway name and provenance', () => {
+    const [incident] = normalizeTdxIncidents({
+      LiveEvents: [{
+        EventID: 'city-1',
+        EventTitle: '市區道路施工',
+        EventType: 2,
+        Positions: 'POINT (120.6500 24.1600)',
+        Location: {
+          CityRoad: {
+            Roadways: [{
+              City: '臺中市',
+              Town: '西屯區',
+              Road: '臺灣大道',
+              Direction: 0
+            }]
+          }
+        }
+      }]
+    }, {
+      sourceScope: 'city:Taichung',
+      feedType: 'live',
+      cityCode: 'Taichung'
+    });
+
+    expect(incident).toMatchObject({
+      id: 'city-1',
+      canonicalId: 'tdx:city:taichung:city-1',
+      roadRef: '臺灣大道',
+      sourceScope: 'city:Taichung',
+      feedType: 'live',
+      cityCode: 'Taichung'
     });
   });
 });

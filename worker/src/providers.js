@@ -1,5 +1,5 @@
 import { encodePolyline6, haversineKm, mergeLegShapes } from './polyline.js';
-import { classifyRoadEvent } from './road-events.js';
+import { classifyRoadEvent, roadEventIdentity } from './road-events.js';
 import { validateRouteEdges } from './rules.js';
 import {
   buildProviderSnapshotDocument,
@@ -33,6 +33,7 @@ const DEFAULT_TDX_LIVE_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Tra
 const DEFAULT_TDX_SECTION_URL = 'https://tdx.transportdata.tw/api/basic/v2/Road/Traffic/Section/Highway?$format=JSON';
 const DEFAULT_TDX_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Highway?$top=1000&$format=JSON';
 const DEFAULT_TDX_SCHEDULED_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/Event/Highway?$top=1000&$format=JSON';
+const DEFAULT_TDX_FREEWAY_INCIDENT_URL = 'https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Freeway?$top=1000&$format=JSON';
 const DEFAULT_THB_SECTION_URL = 'https://thbapp.thb.gov.tw/opendata/section/sectioninfo/SectionList.xml';
 const DEFAULT_THB_SECTION_SHAPE_URL = 'https://thbapp.thb.gov.tw/opendata/section/sectionshapeinfo/SectionShapeList.xml';
 const DEFAULT_THB_LIVE_TRAFFIC_URL = 'https://thbapp.thb.gov.tw/opendata/section/livetrafficdata/LiveTrafficList.xml';
@@ -57,6 +58,7 @@ const CWA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 const CAMERA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
 const TRACE_CHUNK_DISTANCE_KM = 150;
+const TDX_ROAD_EVENT_PAGE_SIZE = 1000;
 const JSON_RESPONSE_CACHE_MAX = 256;
 
 export async function getValhallaRoute(locations, costing, env, avoidLocations = []) {
@@ -394,6 +396,7 @@ export async function loadLiveProviderData(sections, env, options = {}) {
       : [],
     publishedTraffic: thb.publishedTraffic || [],
     incidents: tdx.incidents || [],
+    incidentCoverage: tdx.incidentCoverage || emptyIncidentCoverage(),
     weather,
     cameras,
     trafficSource: 'TDX/THB',
@@ -433,6 +436,7 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
       : [],
     publishedTraffic: thb.publishedTraffic || [],
     incidents: tdx.incidents || [],
+    incidentCoverage: tdx.incidentCoverage || emptyIncidentCoverage(),
     weather,
     cameras,
     issues
@@ -450,6 +454,7 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
     generatedAt: now.toISOString(),
     providers,
     issues,
+    incidentCoverage: providerData.incidentCoverage,
     cameraSnapshotRequired: true
   });
   const routeCameras = buildRouteCameraSnapshot(providerData.cameras);
@@ -544,13 +549,10 @@ async function loadTdxData(env) {
   const token = await getTdxToken(env);
   const headers = { Authorization: `Bearer ${token}` };
   const liveUrl = env.TDX_VD_LIVE_ENDPOINT || DEFAULT_TDX_LIVE_URL;
-  const incidentUrl = env.TDX_INCIDENT_ENDPOINT || DEFAULT_TDX_INCIDENT_URL;
-  const scheduledIncidentUrl = env.TDX_SCHEDULED_INCIDENT_ENDPOINT || DEFAULT_TDX_SCHEDULED_INCIDENT_URL;
-  const [staticResponse, liveResponse, incidentResponse, scheduledIncidentResponse] = await Promise.allSettled([
+  const [staticResponse, liveResponse, roadEventResponse] = await Promise.allSettled([
     loadTdxStaticData(env, headers),
     requestJsonCached(liveUrl, { headers }, 15000, TDX_LIVE_TTL_MS),
-    requestJsonCached(incidentUrl, { headers }, 15000, TDX_LIVE_TTL_MS),
-    requestJsonCached(scheduledIncidentUrl, { headers }, 15000, TDX_LIVE_TTL_MS)
+    loadTdxRoadEvents(env, headers)
   ]);
   const issues = staticResponse.status === 'fulfilled'
     ? [...staticResponse.value.issues]
@@ -558,32 +560,184 @@ async function loadTdxData(env) {
   if (liveResponse.status !== 'fulfilled') {
     issues.push(`VD live feed unavailable: ${resultError(liveResponse)}`);
   }
-  if (incidentResponse.status !== 'fulfilled') {
-    issues.push(`road events unavailable: ${resultError(incidentResponse)}`);
-  }
-  if (scheduledIncidentResponse.status !== 'fulfilled') {
-    issues.push(`scheduled road events unavailable: ${resultError(scheduledIncidentResponse)}`);
-  }
-  const incidents = dedupeRoadEvents([
-    ...(incidentResponse.status === 'fulfilled' ? normalizeTdxIncidents(incidentResponse.value) : []),
-    ...(scheduledIncidentResponse.status === 'fulfilled'
-      ? normalizeTdxIncidents(scheduledIncidentResponse.value)
-      : [])
-  ]);
+  const roadEvents = roadEventResponse.status === 'fulfilled'
+    ? roadEventResponse.value
+    : {
+      incidents: [],
+      incidentCoverage: emptyIncidentCoverage(),
+      issues: [`road event feeds unavailable: ${resultError(roadEventResponse)}`]
+    };
+  issues.push(...roadEvents.issues);
   return {
     config: staticResponse.status === 'fulfilled' ? staticResponse.value.config : null,
     sections: staticResponse.status === 'fulfilled' ? staticResponse.value.sections : null,
     live: liveResponse.status === 'fulfilled' ? liveResponse.value : null,
-    incidents,
+    incidents: roadEvents.incidents,
+    incidentCoverage: roadEvents.incidentCoverage,
     issues
+  };
+}
+
+export async function loadTdxRoadEvents(env, headers = {}) {
+  const feeds = [
+    {
+      scope: 'highway:live',
+      sourceScope: 'highway',
+      feedType: 'live',
+      url: env.TDX_INCIDENT_ENDPOINT || DEFAULT_TDX_INCIDENT_URL,
+      issueLabel: 'road events'
+    },
+    {
+      scope: 'highway:scheduled',
+      sourceScope: 'highway',
+      feedType: 'scheduled',
+      url: env.TDX_SCHEDULED_INCIDENT_ENDPOINT || DEFAULT_TDX_SCHEDULED_INCIDENT_URL,
+      issueLabel: 'scheduled road events'
+    },
+    {
+      scope: 'freeway:live',
+      sourceScope: 'freeway',
+      feedType: 'live',
+      url: env.TDX_FREEWAY_INCIDENT_ENDPOINT || DEFAULT_TDX_FREEWAY_INCIDENT_URL,
+      issueLabel: 'freeway road events'
+    }
+  ];
+  const results = await Promise.allSettled(feeds.map((feed) => (
+    loadTdxRoadEventFeed(feed, headers)
+  )));
+  const issues = [];
+  const incidents = [];
+  results.forEach((result, index) => {
+    const feed = feeds[index];
+    if (result.status !== 'fulfilled') {
+      issues.push(`${feed.issueLabel} unavailable: ${resultError(result)}`);
+      return;
+    }
+    incidents.push(...result.value.incidents);
+  });
+  return {
+    incidents: dedupeRoadEvents(incidents),
+    incidentCoverage: buildIncidentCoverage(
+      feeds.map((feed, index) => [feed.scope, results[index]])
+    ),
+    issues
+  };
+}
+
+async function loadTdxRoadEventFeed(feed, headers) {
+  const url = new URL(feed.url);
+  url.searchParams.set('$count', 'true');
+  const firstPayload = await requestJsonCached(
+    url.toString(),
+    { headers },
+    15000,
+    TDX_LIVE_TTL_MS
+  );
+  const payloads = [firstPayload];
+  const firstItems = roadEventPayloadItems(firstPayload);
+  const totalCount = roadEventPayloadCount(firstPayload);
+  if (!Number.isFinite(totalCount) || totalCount <= firstItems.length) {
+    return {
+      incidents: normalizeRoadEventPayloads(payloads, feed),
+      totalCount: Number.isFinite(totalCount) ? totalCount : firstItems.length
+    };
+  }
+  if (!firstItems.length) {
+    throw new Error(`truncated feed: expected ${totalCount} road events but received 0`);
+  }
+
+  const configuredPageSize = Number(url.searchParams.get('$top'));
+  const pageSize = Number.isFinite(configuredPageSize) && configuredPageSize > 0
+    ? Math.min(TDX_ROAD_EVENT_PAGE_SIZE, Math.floor(configuredPageSize))
+    : Math.min(TDX_ROAD_EVENT_PAGE_SIZE, firstItems.length);
+  let receivedCount = firstItems.length;
+  const pageSignatures = new Set([roadEventPageSignature(firstItems)]);
+
+  while (receivedCount < totalCount) {
+    url.searchParams.set('$top', String(pageSize));
+    url.searchParams.set('$skip', String(receivedCount));
+    const payload = await requestJsonCached(
+      url.toString(),
+      { headers },
+      15000,
+      TDX_LIVE_TTL_MS
+    );
+    const items = roadEventPayloadItems(payload);
+    if (!items.length) {
+      throw new Error(
+        `truncated feed: expected ${totalCount} road events but received ${receivedCount}`
+      );
+    }
+    const signature = roadEventPageSignature(items);
+    if (pageSignatures.has(signature)) {
+      throw new Error(`pagination repeated before all ${totalCount} road events were received`);
+    }
+    pageSignatures.add(signature);
+    payloads.push(payload);
+    receivedCount += items.length;
+  }
+
+  const incidents = normalizeRoadEventPayloads(payloads, feed);
+  if (incidents.length < totalCount) {
+    throw new Error(
+      `truncated feed: expected ${totalCount} road events but normalized ${incidents.length}`
+    );
+  }
+  return { incidents, totalCount };
+}
+
+function normalizeRoadEventPayloads(payloads, feed) {
+  return payloads.flatMap((payload) => normalizeTdxIncidents(payload, {
+    sourceScope: feed.sourceScope,
+    feedType: feed.feedType
+  }));
+}
+
+function roadEventPayloadItems(payload) {
+  return arrayFromPayload(payload, ['LiveEvents', 'Events', 'Incidents', 'RoadIncidents']);
+}
+
+function roadEventPayloadCount(payload) {
+  const value = payload?.Count ?? payload?.count ?? payload?.data?.Count ?? payload?.data?.count;
+  const count = Number(value);
+  return Number.isFinite(count) && count >= 0 ? Math.floor(count) : null;
+}
+
+function roadEventPageSignature(items) {
+  const identity = (item) => item?.EventID || item?.IncidentID || item?.id || '';
+  return `${items.length}:${identity(items[0])}:${identity(items.at(-1))}`;
+}
+
+function emptyIncidentCoverage() {
+  return {
+    requestedScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+    readyScopes: [],
+    failedScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+    unsupportedScopes: ['freeway:scheduled'],
+    notRequestedScopes: ['city'],
+    fetchedAt: null
+  };
+}
+
+function buildIncidentCoverage(entries) {
+  return {
+    requestedScopes: entries.map(([scope]) => scope),
+    readyScopes: entries
+      .filter(([, result]) => result.status === 'fulfilled')
+      .map(([scope]) => scope),
+    failedScopes: entries
+      .filter(([, result]) => result.status !== 'fulfilled')
+      .map(([scope]) => scope),
+    unsupportedScopes: ['freeway:scheduled'],
+    notRequestedScopes: ['city'],
+    fetchedAt: new Date().toISOString()
   };
 }
 
 function dedupeRoadEvents(events) {
   const unique = new Map();
   for (const event of events || []) {
-    const identity = event.id
-      || `${event.title}:${event.roadRef}:${event.effectiveAt || event.updatedAt || ''}`;
+    const identity = roadEventIdentity(event);
     if (!unique.has(identity)) unique.set(identity, event);
   }
   return [...unique.values()];
@@ -1008,11 +1162,12 @@ function directionDegrees(value) {
   return directions[String(value || '').trim().toUpperCase()] ?? null;
 }
 
-export function normalizeTdxIncidents(payload) {
+export function normalizeTdxIncidents(payload, options = {}) {
   const payloadUpdatedAt = payload?.UpdateTime || payload?.SrcUpdateTime || null;
   return arrayFromPayload(payload, ['LiveEvents', 'Events', 'Incidents', 'RoadIncidents']).map((item) => {
     const point = parseWktPoint(item.Positions || item.Geometry);
     const roadLocation = item.Location?.FreeExpressHighway || {};
+    const cityRoadway = (item.Location?.CityRoad?.Roadways || [])[0] || {};
     const impact = item.Impact || {};
     const typeCode = optionalInteger(item.EventType);
     const subtypeCode = optionalInteger(item.EventSubType);
@@ -1029,7 +1184,7 @@ export function normalizeTdxIncidents(payload) {
       severityCode,
       typeCode,
       subtypeCode,
-      roadRef: roadLocation.Road || item.RoadName || item.RoadID || '',
+      roadRef: roadLocation.Road || cityRoadway.Road || item.RoadName || item.RoadID || '',
       lat: numeric(item.PositionLat, item.Position?.PositionLat, item.lat, point?.lat),
       lng: numeric(item.PositionLon, item.Position?.PositionLon, item.lng, point?.lng),
       effectiveAt: item.EffectiveTime || impact.Duration?.DurationStartTime || item.StartTime || null,
@@ -1039,9 +1194,13 @@ export function normalizeTdxIncidents(payload) {
       blockWay: optionalInteger(impact.BlockWay),
       blockedLanes: impact.BlockedLanes || '',
       impactDescription: impact.Description || '',
+      sourceScope: options.sourceScope || 'highway',
+      feedType: options.feedType || (Array.isArray(payload?.Events) ? 'scheduled' : 'live'),
+      cityCode: options.cityCode || null,
       source: 'TDX'
     };
-    return { ...normalized, ...classifyRoadEvent(normalized) };
+    const classified = { ...normalized, ...classifyRoadEvent(normalized) };
+    return { ...classified, canonicalId: roadEventIdentity(classified) };
   });
 }
 

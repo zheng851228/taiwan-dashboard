@@ -4,7 +4,7 @@ import {
   haversineKm,
   nearestCoordinateIndex
 } from './polyline.js';
-import { classifyRoadEvent, roadEventState } from './road-events.js';
+import { classifyRoadEvent, roadEventIdentity, roadEventState } from './road-events.js';
 import { extractRoadRef, validateRouteEdges } from './rules.js';
 
 const TRAFFIC_PRIORITY = { unknown: 0, clear: 1, slow: 2, congested: 3 };
@@ -273,6 +273,11 @@ function matchWeather(section, samples, now) {
 export function assignRoadEvents(sections, incidents, now = new Date()) {
   const assignments = new Map((sections || []).map((section) => [Number(section.order), []]));
   const currentTime = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const sectionIndex = (sections || []).map((section) => ({
+    section,
+    roadRef: normalizeRoadRef(section.roadRef),
+    bounds: roadEventSectionBounds(section)
+  }));
 
   for (const incident of incidents || []) {
     const status = roadEventState(incident, now);
@@ -287,13 +292,24 @@ export function assignRoadEvents(sections, incidents, now = new Date()) {
     }
 
     const roadRef = normalizeRoadRef(incident.roadRef);
-    const candidates = (sections || []).map((section) => ({
-      section,
-      sameRoad: Boolean(roadRef) && roadRef === normalizeRoadRef(section.roadRef),
-      distanceKm: eventDistanceToSection(incident, section)
-    }));
-    const sameRoadCandidates = candidates.filter((candidate) => candidate.sameRoad);
     const hasCoordinates = Number.isFinite(incident.lat) && Number.isFinite(incident.lng);
+    const candidates = sectionIndex.map((entry) => {
+      const sameRoad = Boolean(roadRef) && roadRef === entry.roadRef;
+      const maximumDistance = sameRoad ? ROAD_EVENT_MATCH_KM : ROAD_EVENT_FALLBACK_MATCH_KM;
+      const withinBounds = hasCoordinates && roadEventWithinSectionBounds(
+        incident,
+        entry.bounds,
+        maximumDistance
+      );
+      return {
+        section: entry.section,
+        sameRoad,
+        distanceKm: withinBounds
+          ? eventDistanceToSection(incident, entry.section)
+          : Infinity
+      };
+    });
+    const sameRoadCandidates = candidates.filter((candidate) => candidate.sameRoad);
     let match = null;
     let locationApproximate = false;
 
@@ -315,6 +331,7 @@ export function assignRoadEvents(sections, incidents, now = new Date()) {
     const classification = classifyRoadEvent(incident);
     const normalized = {
       id: incident.id,
+      canonicalId: roadEventIdentity(incident),
       title: incident.title || '道路事件',
       description: incident.description || '',
       severity: incident.severity ?? 'unknown',
@@ -333,6 +350,9 @@ export function assignRoadEvents(sections, incidents, now = new Date()) {
       blockedLanes: incident.blockedLanes || '',
       impactDescription: incident.impactDescription || '',
       locationApproximate,
+      sourceScope: incident.sourceScope || 'unknown',
+      feedType: incident.feedType || null,
+      cityCode: incident.cityCode || null,
       source: incident.source || 'TDX'
     };
     assignments.get(Number(match.section.order)).push(normalized);
@@ -342,6 +362,43 @@ export function assignRoadEvents(sections, incidents, now = new Date()) {
     events.sort((a, b) => roadEventPriority(b) - roadEventPriority(a));
   }
   return assignments;
+}
+
+function roadEventSectionBounds(section) {
+  const coordinates = Array.isArray(section?.geometry) && section.geometry.length
+    ? section.geometry
+    : [section?.sample];
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  for (const coordinate of coordinates) {
+    const lat = Number(coordinate?.[0]);
+    const lng = Number(coordinate?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+  }
+  return Number.isFinite(minLat)
+    ? { minLat, maxLat, minLng, maxLng }
+    : null;
+}
+
+function roadEventWithinSectionBounds(incident, bounds, paddingKm) {
+  if (!bounds) return true;
+  const lat = Number(incident.lat);
+  const lng = Number(incident.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const latitudePadding = paddingKm / 111.32;
+  const referenceLatitude = ((bounds.minLat + bounds.maxLat) / 2) * Math.PI / 180;
+  const longitudeScale = Math.max(0.2, Math.cos(referenceLatitude));
+  const longitudePadding = paddingKm / (111.32 * longitudeScale);
+  return lat >= bounds.minLat - latitudePadding
+    && lat <= bounds.maxLat + latitudePadding
+    && lng >= bounds.minLng - longitudePadding
+    && lng <= bounds.maxLng + longitudePadding;
 }
 
 function eventDistanceToSection(incident, section) {
@@ -493,8 +550,7 @@ export function buildOverall(sections) {
   )).length;
   for (const section of sections) {
     for (const incident of section.incidents) {
-      const identity = incident.id
-        || `${incident.title}:${incident.roadRef}:${incident.effectiveAt || incident.updatedAt || ''}`;
+      const identity = roadEventIdentity(incident);
       if (!incidentsByIdentity.has(identity)) incidentsByIdentity.set(identity, incident);
     }
   }
