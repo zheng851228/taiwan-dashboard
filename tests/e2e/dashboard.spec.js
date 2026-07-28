@@ -222,6 +222,7 @@ test('distinguishes a checked route with no incidents from unavailable event sou
 
   await expect(page.locator('#condition-collapsed-summary')).toHaveText('沿途未發現狀況');
   await expect(page.locator('#condition-collapsed-summary')).not.toContainText('未回報');
+  await expect(page.locator('#condition-incidents')).toHaveText('0 處');
   await expect(page.locator('#condition-event-coverage')).toContainText('高速公路即時');
   await expect(page.locator('#condition-event-status')).toContainText('在已回報來源中');
 });
@@ -253,6 +254,7 @@ test('keeps legacy Worker event failures partial and unknown', async ({ page }, 
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
   await expect(page.locator('#condition-event-status')).toContainText('未將缺少資料視為「沿途無事件」');
   await expect(page.locator('#condition-event-status')).not.toContainText('沿途未配對到道路事件');
+  await expect(page.locator('#condition-incidents')).toHaveText('未回報');
   await expect(page.locator('#condition-collapsed-summary')).toHaveText('事件來源未回報');
 });
 
@@ -282,6 +284,7 @@ test('keeps missing legacy coverage partial even without explicit issues', async
   await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
   await expect(page.locator('#condition-event-status')).not.toContainText('沿途未配對到道路事件');
+  await expect(page.locator('#condition-incidents')).toHaveText('未回報');
   await expect(page.locator('#condition-collapsed-summary')).toHaveText('事件來源未回報');
 });
 
@@ -317,7 +320,44 @@ test('does not claim no incidents when every reported event scope failed', async
   await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
   await expect(page.locator('#condition-event-coverage')).toContainText('道路事件來源目前無法取得');
   await expect(page.locator('#condition-event-status')).not.toContainText('沿途未配對到道路事件');
+  await expect(page.locator('#condition-incidents')).toHaveText('未回報');
   await expect(page.locator('#condition-collapsed-summary')).toHaveText('事件來源未回報');
+});
+
+test('marks a zero incident count as partially unknown when some event scopes failed', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Partial event-scope semantics run once.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      payload.status = 'ok';
+      payload.data.dataMode = 'live';
+      payload.data.issues = [];
+      payload.data.incidentCoverage = {
+        requestedScopes: ['highway:live', 'highway:scheduled', 'freeway:live'],
+        readyScopes: ['highway:live'],
+        failedScopes: ['highway:scheduled', 'freeway:live'],
+        unsupportedScopes: ['freeway:scheduled'],
+        notRequestedScopes: ['city']
+      };
+      payload.data.sections.forEach((section) => {
+        section.incidents = [];
+      });
+      payload.data.overall.incidentSections = 0;
+      return payload;
+    };
+  });
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+
+  await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
+  await expect(page.locator('#condition-incidents')).toHaveText('部分未知');
+  await expect(page.locator('#condition-event-coverage')).toContainText('暫時失效');
+  await expect(page.locator('#condition-collapsed-summary')).toHaveText('部分事件來源未回報');
+  await expect(page.locator('#condition-event-status')).toContainText('在已回報來源中');
 });
 
 test('keeps the mobile route planner focused on the active task', async ({ page }) => {

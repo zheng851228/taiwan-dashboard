@@ -610,7 +610,11 @@
       'condition-incidents',
       affectedIncidentSections
         ? affectedIncidentSections + '\u8655\u00b7' + incidentCount + '\u4ef6'
-        : (incidentCount ? '\u672a\u5b9a\u4f4d\u00b7' + incidentCount + '\u4ef6' : '0 \u8655')
+        : (incidentCount
+          ? '\u672a\u5b9a\u4f4d\u00b7' + incidentCount + '\u4ef6'
+          : (!readyIncidentScopes.length
+            ? '\u672a\u56de\u5831'
+            : (failedIncidentScopes.length ? '\u90e8\u5206\u672a\u77e5' : '0 \u8655')))
     );
     setText('condition-coverage', Number(overall.coveragePercent || 0) + '%');
     setText('condition-updated', '\u66f4\u65b0 ' + formatUpdatedAt(payload.updatedAt));
