@@ -11,10 +11,11 @@
     /* Dark surfaces need a brighter text ladder so route data stays readable over maps. */
     body:not(.light) {
       --ui-text-primary: #f8fafc;
-      --ui-text-secondary: #e5edf5;
-      --ui-text-muted: #b7c5d4;
-      --ui-text-subtle: #a4b4c4;
-      --ui-text-faint: #91a4b8;
+      --ui-text-secondary: #f1f5f9;
+      --ui-text-muted: #d5deea;
+      --ui-text-subtle: #c0cedc;
+      --ui-text-faint: #aec0d2;
+      color: var(--ui-text-secondary);
     }
     body:not(.light) .text-slate-300 { color: var(--ui-text-secondary) !important; }
     body:not(.light) .text-slate-400 { color: var(--ui-text-muted) !important; }
@@ -2637,4 +2638,52 @@ body.light .condition-road-event-icon {
   #nearby-panel { bottom: 14.7rem !important; }
   .desktop-cctv-media { height: 6.6rem; }
   #route-conditions-panel .condition-timeline { max-height: 5rem; }
+}
+
+/* v26 contrast refresh: keep small labels legible on dark map/surface layers.
+   These are dark-theme-only and intentionally leave the light theme intact. */
+body:not(.light) .ride-metric-label,
+body:not(.light) .tool-empty,
+body:not(.light) .tool-check-sub,
+body:not(.light) .favorite-sub,
+body:not(.light) .list-chip-head,
+body:not(.light) .suggest-group-title,
+body:not(.light) .route-option-head span:last-child,
+body:not(.light) .route-advanced,
+body:not(.light) .route-collapse-btn,
+body:not(.light) .condition-section-km,
+body:not(.light) .condition-road-event-meta,
+body:not(.light) .condition-metric span,
+body:not(.light) .condition-update-row,
+body:not(.light) .condition-footnote,
+body:not(.light) .desktop-muted,
+body:not(.light) .desktop-source-note,
+body:not(.light) .desktop-context-empty,
+body:not(.light) .desktop-context-label,
+body:not(.light) .desktop-context-grid span,
+body:not(.light) .desktop-elevation-heading span:last-child,
+body:not(.light) .desktop-cctv-media {
+  color: var(--ui-text-subtle) !important;
+}
+
+body:not(.light) .map-legend-item,
+body:not(.light) .suggest-item,
+body:not(.light) .condition-data-chip,
+body:not(.light) .condition-road-event-description,
+body:not(.light) .desktop-attention-list > div,
+body:not(.light) .desktop-panel-heading,
+body:not(.light) .desktop-context-grid strong,
+body:not(.light) .desktop-cctv-placeholder,
+body:not(.light) .desktop-cctv-meta > span,
+body:not(.light) .desktop-playback-controls,
+body:not(.light) .desktop-map-tools button {
+  color: var(--ui-text-muted) !important;
+}
+
+body:not(.light) .suggest-item .suggest-sub,
+body:not(.light) .desktop-cctv-meta button:disabled,
+body:not(.light) #nearby-radius-row,
+body:not(.light) #nearby-radius-row .text-slate-600,
+body:not(.light) #history-count {
+  color: var(--ui-text-faint) !important;
 }

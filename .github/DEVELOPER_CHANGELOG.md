@@ -2,6 +2,17 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-07-30 — PWA v26 contrast refresh
+
+### Changed
+
+- Refreshed the service-worker shell and stylesheet URL so installed PWAs receive the latest contrast fixes without reinstalling.
+- Increased dark-surface secondary, muted, subtle, and faint text colors and applied the ladder to route, condition, mobile summary, desktop rail, CCTV, and map attribution labels.
+
+### Scope
+
+- Frontend cache and text contrast only; no Worker, API, KV, secret, route rule, or endpoint change.
+
 ## 2026-07-30 — Conditions timeout fallback
 
 ### Changed
