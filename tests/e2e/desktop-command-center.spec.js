@@ -50,6 +50,25 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-cctv-card')).toBeHidden();
 });
 
+test('dark command-center labels use the refreshed readable text ladder', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Dark-theme contrast verification runs once.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.goto(WORKER);
+
+  const colors = await page.evaluate(() => {
+    const read = (selector) => getComputedStyle(document.querySelector(selector)).color;
+    return {
+      sourceNote: read('#desktop-source-note'),
+      routeHint: read('.route-option-head span:last-child'),
+      conditionMeta: read('.condition-metric span')
+    };
+  });
+
+  expect(colors.sourceNote).toBe('rgb(192, 206, 220)');
+  expect(colors.routeHint).toBe('rgb(192, 206, 220)');
+  expect(colors.conditionMeta).toBe('rgb(192, 206, 220)');
+});
+
 test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'desktop-chromium', 'Mobile and tablet request verification only.');
   const mapLibreRequests = [];
