@@ -44,9 +44,9 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v21"');
-    expect(serviceWorker).toContain('./css/style.css?v=21');
-    expect(serviceWorker).not.toContain('twdash-shell-v20');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v22"');
+    expect(serviceWorker).toContain('./css/style.css?v=22');
+    expect(serviceWorker).not.toContain('twdash-shell-v21');
     expect(pwaScript).toContain('tw_pwa_install_prompted_v2');
     expect(pwaScript).toContain('conditions:updated');
     expect(pwaScript).toContain('isIPhone()');

@@ -397,6 +397,45 @@ test('keeps the fresh mobile screen focused on route planning', async ({ page })
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });
 
+test('lets users optionally hide and restore the top clock and route banner', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.removeItem('tw_ui_clock_hidden_v1');
+    localStorage.removeItem('tw_ui_route_banner_hidden_v1');
+  });
+  await page.goto('/?worker=http://127.0.0.1:8787');
+
+  await expect(page.locator('#js-clock-wrap')).toBeVisible();
+  await page.locator('#js-clock-hide').click();
+  await expect(page.locator('#js-clock-wrap')).toBeHidden();
+
+  await page.locator('#nav-tools').click();
+  await expect(page.locator('#js-clock-setting')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#js-clock-setting-state')).toHaveText('已隱藏');
+  await page.locator('#js-clock-setting').click();
+  await expect(page.locator('#js-clock-wrap')).toBeVisible();
+
+  await page.locator('#nav-map').click();
+  await page.evaluate(() => {
+    const banner = document.querySelector('#js-route-banner');
+    banner?.classList.remove('hidden');
+    banner?.classList.add('flex');
+  });
+  await expect(page.locator('#js-route-banner')).toBeVisible();
+  await page.locator('#js-rb-hide').click();
+  await expect(page.locator('#js-route-banner')).toBeHidden();
+
+  await page.locator('#nav-tools').click();
+  await expect(page.locator('#js-route-banner-setting')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#js-route-banner-setting').click();
+  await page.locator('#nav-map').click();
+  await page.evaluate(() => {
+    const banner = document.querySelector('#js-route-banner');
+    banner?.classList.remove('hidden');
+    banner?.classList.add('flex');
+  });
+  await expect(page.locator('#js-route-banner')).toBeVisible();
+});
+
 test('makes tool empty states actionable without changing the three-page navigation', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#nav-tools').click();

@@ -23,6 +23,10 @@
   var RIDE_ROUTE_CHIPS = [
     '北宜公路', '台61線', '蘇花公路', '南迴公路', '台14甲', '北橫公路', '182縣道', '淡金公路'
   ];
+  var UI_PREF_KEYS = {
+    clockHidden: 'tw_ui_clock_hidden_v1',
+    routeBannerHidden: 'tw_ui_route_banner_hidden_v1'
+  };
   function setFlexVisible(el, isVisible) {
     if (!el) return;
     el.classList.toggle('hidden', !isVisible);
@@ -43,6 +47,44 @@
     }
   };
   window.RouteUiMod = RouteUiMod;
+
+  var UiPrefsMod = {
+    isHidden: function(kind) {
+      return Storage.get(UI_PREF_KEYS[kind], '0') === '1';
+    },
+    setHidden: function(kind, isHidden) {
+      Storage.set(UI_PREF_KEYS[kind], isHidden ? '1' : '0');
+      UiPrefsMod.sync();
+    },
+    syncSettingButton: function(id, stateId, isHidden) {
+      var button = Dom.byId(id);
+      var state = Dom.byId(stateId);
+      if (button) button.setAttribute('aria-pressed', String(isHidden));
+      if (state) state.textContent = isHidden ? '已隱藏' : '顯示中';
+    },
+    sync: function() {
+      var clockHidden = UiPrefsMod.isHidden('clockHidden');
+      var routeBannerHidden = UiPrefsMod.isHidden('routeBannerHidden');
+      if (document.body) {
+        document.body.classList.toggle('ui-clock-hidden', clockHidden);
+        document.body.classList.toggle('ui-route-banner-hidden', routeBannerHidden);
+      }
+      UiPrefsMod.syncSettingButton('js-clock-setting', 'js-clock-setting-state', clockHidden);
+      UiPrefsMod.syncSettingButton('js-route-banner-setting', 'js-route-banner-setting-state', routeBannerHidden);
+    },
+    init: function() {
+      Dom.onId('js-clock-hide', 'click', function() { UiPrefsMod.setHidden('clockHidden', true); });
+      Dom.onId('js-rb-hide', 'click', function() { UiPrefsMod.setHidden('routeBannerHidden', true); });
+      Dom.onId('js-clock-setting', 'click', function() {
+        UiPrefsMod.setHidden('clockHidden', !UiPrefsMod.isHidden('clockHidden'));
+      });
+      Dom.onId('js-route-banner-setting', 'click', function() {
+        UiPrefsMod.setHidden('routeBannerHidden', !UiPrefsMod.isHidden('routeBannerHidden'));
+      });
+      UiPrefsMod.sync();
+    }
+  };
+  window.UiPrefsMod = UiPrefsMod;
 
   var ThemeMod = {
     dark: Storage.get(THEME_KEY, 'dark') !== 'light',
@@ -559,7 +601,7 @@
           ? '\u5b89\u5168\u9a57\u8b49\u5b8c\u6210 \u00b7 ' + count + ' \u652f\u6cbf\u9014\u73fe\u5834\u756b\u9762'
           : '\u5b89\u5168\u9a57\u8b49\u5b8c\u6210 \u00b7 \u6cbf\u9014\u66ab\u7121\u73fe\u5834\u756b\u9762';
       }
-      setFlexVisible(banner, true);
+      setFlexVisible(banner, !UiPrefsMod.isHidden('routeBannerHidden'));
       setFlexVisible(info, true);
       if (cnt) {
         cnt.textContent = count > 0
@@ -1240,6 +1282,7 @@
 
   window.addEventListener('load', function() {
     ClockMod.init();
+    UiPrefsMod.init();
     MapMod.init();
     if (Storage.get(THEME_KEY, 'dark') === 'light') {
       document.body.classList.add('light');
