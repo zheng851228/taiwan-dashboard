@@ -157,10 +157,10 @@
                 base: {
                   type: 'raster',
                   tiles: [
-                    'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                    'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                    'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                    'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                    'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+                    'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+                    'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+                    'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
                   ],
                   tileSize: 256,
                   attribution: '&copy; OpenStreetMap &copy; CARTO',

@@ -2,6 +2,23 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-07-30 — CARTO raster URL follow-up
+
+### Changed
+
+- Removed the unsupported `{r}` placeholder from the desktop CARTO raster tile URLs so MapLibre requests concrete `.png` tiles.
+
+### Verification
+
+- `npm run check` — 146/146 passed.
+- Desktop command-center E2E — 4 passed; mobile/tablet MapLibre isolation — 4 passed.
+- Local production-Worker smoke — desktop 1536×1024 and iPhone 390×844 reached `ready`, resolved the route, and had 0px horizontal overflow.
+- Public production route audit `north-keelung-taipei` — 0 fail, 1 known data-coverage warning (25% live traffic coverage).
+
+### Scope
+
+- Frontend MapLibre tile URL only; no Worker, API, KV, secret, or routing change.
+
 ## 2026-07-30 — PWA v25
 
 ### Changed
