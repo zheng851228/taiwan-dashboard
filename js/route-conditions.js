@@ -51,6 +51,7 @@
   var lastRefreshAt = 0;
   var autoTimer = null;
   var requestVersion = 0;
+  var userAdjustedCollapse = false;
 
   function setVisible(id, visible) {
     var element = Dom.byId(id);
@@ -60,6 +61,27 @@
   function setText(id, value) {
     var element = Dom.byId(id);
     if (element) element.textContent = value;
+  }
+
+  function setCollapsed(collapsed) {
+    var panel = Dom.byId('route-conditions-panel');
+    if (!panel) return;
+    panel.classList.toggle('is-collapsed', !!collapsed);
+    var icon = Dom.query('#condition-toggle i');
+    if (icon) {
+      icon.className = collapsed
+        ? 'fa-solid fa-chevron-up'
+        : 'fa-solid fa-chevron-down';
+    }
+    var button = Dom.byId('condition-toggle');
+    if (button) {
+      button.setAttribute('aria-expanded', String(!collapsed));
+      button.setAttribute('aria-label', collapsed ? '\u5c55\u958b\u6cbf\u9014\u72c0\u6cc1' : '\u6536\u5408\u6cbf\u9014\u72c0\u6cc1');
+    }
+  }
+
+  function shouldUseMobileReadyLayout() {
+    return Boolean(window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
   }
 
   function sourceTime(source, observedAt, lastKnown) {
@@ -684,12 +706,23 @@
     renderAppleLegs(false);
     MapMod.drawConditionSections(sections);
     MapMod.drawStartEnd(AppState.routeAllPoints);
+    if (shouldUseMobileReadyLayout() && !userAdjustedCollapse) setCollapsed(true);
     Bus.emit('conditions:updated', data);
   }
 
   function load(route, forceRefresh) {
+    var previousRouteId = currentRoute && currentRoute.routeId;
     currentRoute = route || currentRoute;
     if (!currentRoute || !currentRoute.routeId) return;
+    if (currentRoute.routeId !== previousRouteId) {
+      userAdjustedCollapse = false;
+      if (shouldUseMobileReadyLayout()) {
+        setText('condition-collapsed-summary', '\u6574\u7406\u6cbf\u9014\u8def\u6cc1\u2026');
+        setCollapsed(true);
+      } else {
+        setCollapsed(false);
+      }
+    }
     var routeForRequest = currentRoute;
     var thisRequestVersion = ++requestVersion;
     setNavigationLinks();
@@ -812,28 +845,21 @@
   function toggleCollapsed() {
     var panel = Dom.byId('route-conditions-panel');
     if (!panel) return;
-    panel.classList.toggle('is-collapsed');
-    var collapsed = panel.classList.contains('is-collapsed');
-    var icon = Dom.query('#condition-toggle i');
-    if (icon) {
-      icon.className = collapsed
-        ? 'fa-solid fa-chevron-up'
-        : 'fa-solid fa-chevron-down';
-    }
-    var button = Dom.byId('condition-toggle');
-    if (button) {
-      button.setAttribute('aria-expanded', String(!collapsed));
-      button.setAttribute('aria-label', collapsed ? '\u5c55\u958b\u6cbf\u9014\u72c0\u6cc1' : '\u6536\u5408\u6cbf\u9014\u72c0\u6cc1');
-    }
+    userAdjustedCollapse = true;
+    setCollapsed(!panel.classList.contains('is-collapsed'));
   }
 
   function clear() {
     requestVersion += 1;
     currentRoute = null;
     lastRefreshAt = 0;
+    userAdjustedCollapse = false;
     setNavigationLinks();
     var panel = Dom.byId('route-conditions-panel');
-    if (panel) panel.classList.add('hidden');
+    if (panel) {
+      panel.classList.add('hidden');
+      setCollapsed(false);
+    }
     AppState.routeConditions = null;
     setText('map-legend-event-count', '\u5f69\u8272\u77ed\u7dda\u00b7\u65bd\u5de5\uff0f\u4e8b\u4ef6');
     var legendEventItem = Dom.byId('map-legend-event-item');

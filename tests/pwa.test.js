@@ -31,11 +31,12 @@ describe('PWA install and offline assets', () => {
   });
 
   it('keeps the complete app shell local and cacheable', async () => {
-    const [html, pwaScript, styles, serviceWorker] = await Promise.all([
+    const [html, pwaScript, styles, serviceWorker, developerChangelog] = await Promise.all([
       readFile(path.join(root, 'index.html'), 'utf8'),
       readFile(path.join(root, 'js/pwa.js'), 'utf8'),
       readFile(path.join(root, 'css/style.css'), 'utf8'),
-      readFile(path.join(root, 'sw.js'), 'utf8')
+      readFile(path.join(root, 'sw.js'), 'utf8'),
+      readFile(path.join(root, '.github/DEVELOPER_CHANGELOG.md'), 'utf8')
     ]);
     expect(html).not.toMatch(/(?:unpkg|cdnjs|fonts\.googleapis)\.com/);
     expect(html).toContain('js/pwa.js');
@@ -44,14 +45,17 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v22"');
-    expect(serviceWorker).toContain('./css/style.css?v=22');
-    expect(serviceWorker).not.toContain('twdash-shell-v21');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v23"');
+    expect(serviceWorker).toContain('./css/style.css?v=23');
+    expect(serviceWorker).not.toContain('twdash-shell-v22');
     expect(pwaScript).toContain('tw_pwa_install_prompted_v2');
     expect(pwaScript).toContain('conditions:updated');
     expect(pwaScript).toContain('isIPhone()');
     expect(pwaScript).toContain('isSafari()');
     expect(pwaScript).toContain('installGuideWouldInterrupt()');
     expect(styles).toContain('body:has(#pwa-update-banner:not(.hidden)) .map-top-panel');
+    expect(developerChangelog).toContain('PWA v23');
+    expect(html).not.toContain('DEVELOPER_CHANGELOG');
+    expect(serviceWorker).not.toContain('DEVELOPER_CHANGELOG');
   });
 });
