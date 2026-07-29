@@ -611,6 +611,30 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
 });
 
+test('turns a hanging conditions request into an actionable timeout', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'iphone', 'Conditions timeout UX runs on iPhone.');
+  await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await openRoutePlanner(page);
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await page.evaluate(() => {
+    Config.CONDITIONS_TIMEOUT_MS = 40;
+    const originalFetch = window.fetch;
+    window.fetch = (input, options) => String(input).includes('/conditions')
+      ? new Promise(() => {})
+      : originalFetch(input, options);
+    RouteConditionsMod.refresh();
+  });
+
+  await expect(page.locator('#condition-error')).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('#condition-error')).toContainText('逾時');
+  await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
+  await expect(page.locator('#condition-event-status')).toContainText('目前不是即時資料');
+});
+
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
   test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
   await page.goto('/?worker=http://127.0.0.1:8787');

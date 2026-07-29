@@ -33,6 +33,33 @@
     });
   }
 
+  function requestJsonWithTimeout(url, options, fallbackKey, timeoutMs) {
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var requestOptions = options ? Object.assign({}, options) : {};
+    if (controller) requestOptions.signal = controller.signal;
+    var timeout = Math.max(1000, Number(timeoutMs) || 20000);
+    var timedOut = false;
+    var timeoutError = new Error('\u6cbf\u9014\u72c0\u6cc1\u56de\u61c9\u903e\u6642\uff0c\u8acb\u7a0d\u5f8c\u91cd\u8a66\u3002');
+    timeoutError.code = 'CONDITIONS_TIMEOUT';
+    var timer;
+    var request = requestJson(url, requestOptions, fallbackKey).then(function(payload) {
+      clearTimeout(timer);
+      return payload;
+    }, function(error) {
+      clearTimeout(timer);
+      if (timedOut) throw timeoutError;
+      throw error;
+    });
+    var deadline = new Promise(function(resolve, reject) {
+      timer = setTimeout(function() {
+        timedOut = true;
+        if (controller) controller.abort();
+        reject(timeoutError);
+      }, timeout);
+    });
+    return Promise.race([request, deadline]);
+  }
+
   window.AppServices = {
     loadCams: function() {
       setDataStatus('cams', 'loading');
@@ -144,7 +171,12 @@
     loadRouteConditions: function(routeId, forceRefresh) {
       setDataStatus('conditions', 'loading');
       var suffix = forceRefresh ? '?refresh=1' : '';
-      return requestJson(Config.WORKER_BASE + '/v2/routes/' + encodeURIComponent(routeId) + '/conditions' + suffix, null, 'conditions')
+      return requestJsonWithTimeout(
+        Config.WORKER_BASE + '/v2/routes/' + encodeURIComponent(routeId) + '/conditions' + suffix,
+        null,
+        'conditions',
+        Config.CONDITIONS_TIMEOUT_MS
+      )
         .then(function(payload) {
           var sections = payload.data && Array.isArray(payload.data.sections) ? payload.data.sections : [];
           setDataStatus('conditions', sections.length ? 'ready' : 'empty', payload.updatedAt);
