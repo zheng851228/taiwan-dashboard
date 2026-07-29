@@ -783,28 +783,105 @@ test('keeps all large camera result sets reachable through progressive loading',
   await expect(page.locator('.list-load-more')).toHaveCount(0);
 });
 
-test('shows iPhone Safari install guidance once and keeps a fixed install entry', async ({ page }, testInfo) => {
+test('does not interrupt first load and keeps a fixed iPhone install entry', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'iPhone Safari install guidance verification only.');
-  await page.addInitScript(() => localStorage.removeItem('tw_pwa_install_dismissed_v1'));
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('pwa-test-initialized')) return;
+    localStorage.removeItem('tw_pwa_install_dismissed_v1');
+    localStorage.removeItem('tw_pwa_install_prompted_v2');
+    sessionStorage.setItem('pwa-test-initialized', '1');
+  });
   await page.goto('/?worker=http://127.0.0.1:8787');
 
   const sheet = page.locator('#pwa-install-sheet');
-  await expect(sheet).toBeVisible();
-  await expect(sheet).toContainText('加入主畫面');
-  await page.locator('#pwa-install-done').click();
-  await expect(sheet).toBeHidden();
-  await page.reload();
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(sheet).toBeHidden();
 
   await page.locator('#nav-tools').click();
   await expect(page.locator('#pwa-install-open')).toBeVisible();
+  await page.locator('#pwa-install-open').click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText('加入主畫面');
+  await page.locator('#pwa-install-done').click();
+  await expect(sheet).toBeHidden();
 });
 
-test('keeps the automatic install guide from interrupting tablet use', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'tablet', 'Automatic install guidance is intentionally iPhone-only.');
-  await page.addInitScript(() => localStorage.removeItem('tw_pwa_install_dismissed_v1'));
+test('shows one non-blocking install nudge after the first live safe route', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'iphone', 'iPhone Safari install guidance verification only.');
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('pwa-live-test-initialized')) return;
+    localStorage.removeItem('tw_pwa_install_dismissed_v1');
+    localStorage.removeItem('tw_pwa_install_prompted_v2');
+    sessionStorage.setItem('pwa-live-test-initialized', '1');
+  });
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.waitForTimeout(1400);
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      payload.data = { ...payload.data, dataMode: 'live' };
+      return payload;
+    };
+  });
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+
+  const nudge = page.locator('#pwa-install-nudge');
+  const sheet = page.locator('#pwa-install-sheet');
+  await expect(page.locator('#condition-content')).toBeVisible();
+  await expect(nudge).toBeVisible();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator('#pwa-install-nudge-open')).toBeVisible();
+  await page.locator('#pwa-install-nudge-open').click();
+  await expect(nudge).toBeHidden();
+  await expect(sheet).toBeVisible();
+  await page.locator('#pwa-install-done').click();
+  await page.reload();
+  await expect(nudge).toBeHidden();
+  await expect(sheet).toBeHidden();
+  await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem('tw_pwa_install_prompted_v2')))).toBe(true);
+});
+
+test('does not prompt for fixture conditions', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'iphone', 'iPhone Safari install guidance verification only.');
+  await page.addInitScript(() => {
+    localStorage.removeItem('tw_pwa_install_dismissed_v1');
+    localStorage.removeItem('tw_pwa_install_prompted_v2');
+  });
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#route-toggle').click();
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect(page.locator('#condition-demo-warning')).toBeVisible();
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
+  await expect(page.locator('#pwa-install-sheet')).toBeHidden();
+});
+
+test('does not auto prompt outside iPhone Safari or standalone mode', async ({ page }, testInfo) => {
+  await page.addInitScript((standalone) => {
+    localStorage.removeItem('tw_pwa_install_dismissed_v1');
+    localStorage.removeItem('tw_pwa_install_prompted_v2');
+    if (standalone) {
+      Object.defineProperty(navigator, 'standalone', { configurable: true, value: true });
+    }
+  }, testInfo.project.name === 'iphone');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
+  await expect(page.locator('#pwa-install-sheet')).toBeHidden();
+});
+
+test('keeps install guidance absent on tablet use', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'tablet', 'Automatic install guidance is intentionally iPhone-only.');
+  await page.addInitScript(() => {
+    localStorage.removeItem('tw_pwa_install_dismissed_v1');
+    localStorage.removeItem('tw_pwa_install_prompted_v2');
+  });
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#pwa-install-sheet')).toBeHidden();
 });
 
@@ -858,6 +935,7 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
   await page.reload();
   await expect(page.getByRole('heading', { name: '\u74b0\u5cf6\u8def\u6cc1\u6307\u63ee\u4e2d\u5fc3' })).toBeVisible();
   await expect(page.locator('#pwa-network-banner')).toBeVisible();
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#route-summary')).toContainText('離線快照');
   await expect(page.locator('#js-route-status')).toContainText('即時資料暫停更新');
   await expect.poll(() => page.evaluate(() =>
