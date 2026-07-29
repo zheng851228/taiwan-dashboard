@@ -14,6 +14,8 @@ node --check js/main-ui.js
 node --check js/enhancements.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
+node --check js/maplibre-renderer.js
+node --check js/desktop-dashboard.js
 node --check js/pwa.js
 node --check sw.js
 node --check worker/src/polyline.js
@@ -53,6 +55,10 @@ test -s assets/icons/icon-192.png
 test -s assets/icons/icon-512.png
 test -s assets/icons/maskable-512.png
 test -s assets/vendor/leaflet/leaflet.js
+test -s assets/vendor/maplibre-gl/maplibre-gl.mjs
+test -s assets/vendor/maplibre-gl/maplibre-gl-shared.mjs
+test -s assets/vendor/maplibre-gl/maplibre-gl-worker.mjs
+test -s assets/vendor/maplibre-gl/maplibre-gl.css
 test -s assets/vendor/fontawesome/css/all.min.css
 
 npm test

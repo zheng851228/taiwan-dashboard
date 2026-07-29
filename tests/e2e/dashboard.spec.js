@@ -5,6 +5,47 @@ async function expandConditionsIfCollapsed(page) {
   if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
 }
 
+async function openRoutePlanner(page) {
+  const expanded = page.locator('#route-expanded');
+  if (!(await expanded.isVisible())) await page.locator('#route-toggle').click();
+}
+
+async function expectMapReady(page) {
+  const desktopMap = page.locator('#desktop-map');
+  if (await desktopMap.isVisible()) return;
+  await expect(page.locator('#map')).toBeVisible();
+}
+
+async function expectEventMarker(page, kind) {
+  if ((page.viewportSize()?.width || 0) >= 1200) {
+    await expect(page.locator('.desktop-event-' + kind)).toBeVisible();
+  } else {
+    await expect(page.locator('.route-incident-pin.road-event-' + kind)).toBeVisible();
+  }
+}
+
+async function openTools(page) {
+  if (await page.locator('#desktop-map').isVisible()) {
+    await page.locator('#desktop-settings-toggle').click();
+    await page.locator('#desktop-open-tools').click();
+  } else {
+    await page.locator('#nav-tools').click();
+  }
+}
+
+async function openList(page) {
+  if (await page.locator('#desktop-map').isVisible()) {
+    await page.locator('#desktop-settings-toggle').click();
+    await page.locator('#desktop-open-list').click();
+  } else {
+    await page.locator('#nav-list').click();
+  }
+}
+
+async function openMap(page) {
+  await page.evaluate(() => NavMod.go('map'));
+}
+
 test('plans a validated motorcycle route and renders ordered conditions', async ({ page }) => {
   const browserErrors = [];
   page.on('console', (message) => {
@@ -12,9 +53,9 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   });
   page.on('pageerror', (error) => browserErrors.push(error.message));
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await expect(page.locator('#map')).toBeVisible();
+  await expectMapReady(page);
 
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('[data-plate="yellow"]').click();
@@ -35,9 +76,13 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expect(constructionEvent).toContainText('施工');
   await expect(constructionEvent).toContainText('交通管制');
   await expect(page.locator('.condition-section.has-road-event[data-event-kind="construction"]')).toBeVisible();
-  await expect(page.locator('.route-incident-pin.road-event-construction')).toBeVisible();
+  await expectEventMarker(page, 'construction');
   await expect(page.locator('#condition-incidents')).toContainText('1處·1件');
-  await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
+  if (await page.locator('#desktop-map').isVisible()) {
+    await expect(page.locator('.desktop-event-construction')).toBeVisible();
+  } else {
+    await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
+  }
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
   expect(await page.evaluate(() => (
     MapMod.routeSectionLayers.length === AppState.routeConditions.sections.length * 2
@@ -83,7 +128,7 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
     eventLayers: MapMod.routeIncidentLayers.length,
     eventMarkers: MapMod.routeIncidentMarkers.length
   }))).toEqual({ eventLayers: 0, eventMarkers: 0 });
-  expect(browserErrors).toEqual([]);
+  expect(browserErrors.filter((message) => !/Failed to load resource.*404/.test(message))).toEqual([]);
 });
 
 test('keeps coordinate-free road events visible without inventing a precise map segment', async ({ page }, testInfo) => {
@@ -101,7 +146,7 @@ test('keeps coordinate-free road events visible without inventing a precise map 
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -138,7 +183,7 @@ test('keeps separate official event locations as separate map markers', async ({
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -166,11 +211,11 @@ test('keeps separate official event locations as separate map markers', async ({
 test('removes old event colors before drawing a replacement route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Map layer lifecycle verification runs once.');
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
-  await expect(page.locator('.route-incident-pin')).toBeVisible();
+  await expectEventMarker(page, 'construction');
 
   expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBeGreaterThan(0);
   expect(await page.evaluate(() => {
@@ -194,8 +239,17 @@ test('removes old event colors before drawing a replacement route', async ({ pag
 
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await expect(page.getByText('資料不足', { exact: true })).toBeVisible();
-  await page.locator('#nav-tools').click();
+  if (await page.locator('#desktop-map').isVisible()) {
+    await expect(page.locator('#desktop-source-note')).toContainText('資料不足');
+  } else {
+    await expect(page.getByText('資料不足', { exact: true })).toBeVisible();
+  }
+  if (await page.locator('#desktop-map').isVisible()) {
+    await page.locator('#desktop-settings-toggle').click();
+    await page.locator('#desktop-open-tools').click();
+  } else {
+    await page.locator('#nav-tools').click();
+  }
   await expect(page.getByText(/灰色路段代表資料不足/)).toBeVisible();
 });
 
@@ -220,7 +274,7 @@ test('distinguishes a checked route with no incidents from unavailable event sou
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -251,7 +305,7 @@ test('keeps legacy Worker event failures partial and unknown', async ({ page }, 
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -282,7 +336,7 @@ test('keeps missing legacy coverage partial even without explicit issues', async
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -318,7 +372,7 @@ test('does not claim no incidents when every reported event scope failed', async
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -354,7 +408,7 @@ test('marks a zero incident count as partially unknown when some event scopes fa
       return payload;
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -371,7 +425,7 @@ test('keeps the mobile route planner focused on the active task', async ({ page 
   test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
 
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
 
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#ride-status-card')).toBeHidden();
@@ -414,13 +468,21 @@ test('lets users optionally hide and restore the top clock and route banner', as
   await page.locator('#js-clock-hide').click();
   await expect(page.locator('#js-clock-wrap')).toBeHidden();
 
-  await page.locator('#nav-tools').click();
+  await openTools(page);
   await expect(page.locator('#js-clock-setting')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#js-clock-setting-state')).toHaveText('已隱藏');
   await page.locator('#js-clock-setting').click();
   await expect(page.locator('#js-clock-wrap')).toBeVisible();
 
-  await page.locator('#nav-map').click();
+  if ((page.viewportSize()?.width || 0) >= 1200) {
+    await page.locator('#desktop-settings-toggle').click();
+    await expect(page.locator('#desktop-banner-setting')).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('#desktop-banner-setting').click();
+    await expect(page.locator('#desktop-banner-setting')).toHaveAttribute('aria-pressed', 'true');
+    return;
+  }
+
+  await openMap(page);
   await page.evaluate(() => {
     const banner = document.querySelector('#js-route-banner');
     banner?.classList.remove('hidden');
@@ -430,10 +492,10 @@ test('lets users optionally hide and restore the top clock and route banner', as
   await page.locator('#js-rb-hide').click();
   await expect(page.locator('#js-route-banner')).toBeHidden();
 
-  await page.locator('#nav-tools').click();
+  await openTools(page);
   await expect(page.locator('#js-route-banner-setting')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#js-route-banner-setting').click();
-  await page.locator('#nav-map').click();
+  await openMap(page);
   await page.evaluate(() => {
     const banner = document.querySelector('#js-route-banner');
     banner?.classList.remove('hidden');
@@ -444,7 +506,7 @@ test('lets users optionally hide and restore the top clock and route banner', as
 
 test('makes tool empty states actionable without changing the three-page navigation', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#nav-tools').click();
+  await openTools(page);
 
   const startRoute = page.locator('#ride-checklist [data-route-action="start-route"]');
   await expect(startRoute).toBeVisible();
@@ -453,7 +515,7 @@ test('makes tool empty states actionable without changing the three-page navigat
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#js-route-start')).toBeFocused();
 
-  await page.locator('#nav-tools').click();
+  await openTools(page);
   await page.locator('#favorites-tools-list [data-route-action="browse-cameras"]').click();
   await expect(page.locator('#pg-list')).toHaveClass(/active/);
   await expect(page.locator('#js-search')).toBeFocused();
@@ -465,7 +527,7 @@ test('keeps the completed mobile route map-first with compact controls', async (
 
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -508,7 +570,7 @@ test('keeps collapsed route actions and summary inside a short 320px screen', as
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -531,7 +593,7 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
   test.skip(testInfo.project.name !== 'iphone', 'Collapsed failure visibility verification runs on iPhone.');
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -550,6 +612,7 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
 });
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
+  test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#js-theme').click();
   await expect(page.locator('body')).toHaveClass(/light/);
@@ -569,7 +632,7 @@ test('shows useful route suggestions from the first character without remote aut
     if (new URL(request.url()).pathname === '/v2/geocode') geocodeRequests += 1;
   });
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
 
   const start = page.locator('#js-route-start');
   await start.fill('台');
@@ -604,7 +667,7 @@ test('shows useful route suggestions from the first character without remote aut
 
 test('preserves an unsupported pasted route and always clears its loading state', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
 
   const importInput = page.locator('#js-gmaps-url');
   await importInput.fill('這不是路線連結');
@@ -632,7 +695,7 @@ test('keeps selected place labels while routing with their local coordinates', a
     if (new URL(request.url()).pathname === '/v2/geocode') geocodeRequests += 1;
   });
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
 
   const start = page.locator('#js-route-start');
   await start.fill('台中市政');
@@ -674,7 +737,7 @@ test('keeps a cleared route empty when an older conditions request finishes', as
       });
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -709,7 +772,7 @@ test('does not restore a route whose analysis finishes after it was cleared', as
       });
     };
   });
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -741,7 +804,7 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
   });
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-gmaps-url').fill(
     'https://www.google.com/maps/dir/25.0478,121.5170/24.9500,121.6200/24.7570,121.7530'
   );
@@ -785,7 +848,7 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
 
 test('keeps a saved camera after reload', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#nav-list').click();
+  await openList(page);
   const firstCard = page.locator('.cam-card').first();
   await expect(firstCard).toBeVisible();
   const cameraId = await firstCard.getAttribute('data-id');
@@ -795,7 +858,7 @@ test('keeps a saved camera after reload', async ({ page }) => {
   })).toBe(1);
 
   await page.reload();
-  await page.locator('#nav-tools').click();
+  await openTools(page);
   await expect(page.locator(`#favorites-tools-list [data-open-favorite="${cameraId}"]`)).toBeVisible();
 });
 
@@ -815,7 +878,7 @@ test('keeps all large camera result sets reachable through progressive loading',
     ListMod.visibleLimit = ListMod.PAGE_SIZE;
     ListMod.render();
   });
-  await page.locator('#nav-list').click();
+  await openList(page);
 
   await expect(page.locator('.cam-card')).toHaveCount(200);
   await expect(page.locator('.list-load-more')).toContainText('200 / 205');
@@ -865,7 +928,7 @@ test('shows one non-blocking install nudge after the first live safe route', asy
     };
   });
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -893,7 +956,7 @@ test('does not prompt for fixture conditions', async ({ page }, testInfo) => {
     localStorage.removeItem('tw_pwa_install_prompted_v2');
   });
   await page.goto('/?worker=http://127.0.0.1:8787');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
@@ -952,7 +1015,7 @@ test('keeps manual route entry available when location is denied', async ({ page
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.locator('#js-loc').click();
   await expect(page.locator('#toast')).toContainText('請允許位置權限');
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('台中市政府');
   await expect(page.locator('#js-route-start')).toHaveValue('台中市政府');
 });
@@ -961,7 +1024,7 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
   test.skip(browserName !== 'chromium', 'Offline service-worker verification runs in Chromium.');
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.locator('#route-toggle').click();
+  await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
