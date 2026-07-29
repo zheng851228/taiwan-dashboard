@@ -7,6 +7,21 @@
     #map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
     .glass { background: rgba(15,23,42,0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+
+    /* Dark surfaces need a brighter text ladder so route data stays readable over maps. */
+    body:not(.light) {
+      --ui-text-primary: #f8fafc;
+      --ui-text-secondary: #e5edf5;
+      --ui-text-muted: #b7c5d4;
+      --ui-text-subtle: #a4b4c4;
+      --ui-text-faint: #91a4b8;
+    }
+    body:not(.light) .text-slate-300 { color: var(--ui-text-secondary) !important; }
+    body:not(.light) .text-slate-400 { color: var(--ui-text-muted) !important; }
+    body:not(.light) .text-slate-500 { color: var(--ui-text-subtle) !important; }
+    body:not(.light) .text-slate-600 { color: var(--ui-text-faint) !important; }
+    body:not(.light) .placeholder-slate-500::placeholder { color: var(--ui-text-subtle); opacity: 1; }
+
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(249,115,22,0.5); border-radius: 10px; }
     .nav-it.active { color: var(--primary); }
@@ -1609,6 +1624,31 @@ body.light .route-text-input {
   font-size: 9px;
   line-height: 1.5;
 }
+
+/* Keep secondary route facts readable against the dark timeline cards. */
+body:not(.light) .apple-leg-links,
+body:not(.light) .condition-footnote {
+  color: var(--ui-text-muted);
+}
+body:not(.light) .condition-section-km,
+body:not(.light) .condition-road-event-meta,
+body:not(.light) .condition-metric span,
+body:not(.light) .condition-update-row {
+  color: var(--ui-text-subtle);
+}
+body:not(.light) .condition-data-chip,
+body:not(.light) .condition-road-event-description {
+  color: var(--ui-text-secondary);
+}
+body:not(.light) .condition-data-chip.unknown,
+body:not(.light) .condition-road-event-more {
+  color: var(--ui-text-muted);
+}
+body:not(.light) .condition-kicker,
+body:not(.light) .condition-source-badge,
+body:not(.light) .condition-collapsed-summary {
+  text-shadow: 0 0 1px rgba(255,255,255,0.08);
+}
 .condition-error {
   padding: 18px 16px;
   color: #fbbf24;
@@ -2485,6 +2525,42 @@ body.light .condition-road-event-icon {
   .desktop-cctv-meta > span { min-width: 0; overflow: hidden; color: #cbd5e1; font-size: .62rem; text-overflow: ellipsis; white-space: nowrap; }
   .desktop-cctv-meta button { flex-shrink: 0; color: #86efac; background: transparent; border: 0; font-size: .58rem; font-weight: 800; }
   .desktop-cctv-meta button:disabled { color: #475569; }
+
+  body:not(.light) .desktop-muted,
+  body:not(.light) .desktop-source-note,
+  body:not(.light) .desktop-context-empty,
+  body:not(.light) .desktop-context-label,
+  body:not(.light) .desktop-context-grid span,
+  body:not(.light) .desktop-elevation-heading span:last-child {
+    color: var(--ui-text-subtle);
+  }
+  body:not(.light) .desktop-context-sub,
+  body:not(.light) .desktop-elevation-summary,
+  body:not(.light) .desktop-playback-controls,
+  body:not(.light) .desktop-cctv-media,
+  body:not(.light) .desktop-attention-list > div,
+  body:not(.light) .desktop-panel-heading,
+  body:not(.light) .desktop-mini-metrics span,
+  body:not(.light) .desktop-context-grid strong,
+  body:not(.light) .desktop-cctv-placeholder,
+  body:not(.light) .desktop-cctv-meta > span {
+    color: var(--ui-text-muted);
+  }
+  body:not(.light) .maplibregl-ctrl-attrib { color: var(--ui-text-muted); }
+  body:not(.light) .maplibregl-ctrl-attrib a { color: var(--ui-text-secondary); }
+  body:not(.light) .desktop-chart-empty { fill: var(--ui-text-subtle); }
+  body:not(.light) #desktop-playback-speed { color: var(--ui-text-secondary); }
+  body:not(.light) .desktop-cctv-meta button:disabled { color: var(--ui-text-faint); }
+  body:not(.light) .desktop-header-route-meta,
+  body:not(.light) .desktop-settings-title,
+  body:not(.light) #route-expanded .route-title-kicker,
+  body:not(.light) #history-btn,
+  body:not(.light) #route-toggle-close,
+  body:not(.light) header .ui-clock-wrap .ui-dismiss-btn {
+    color: var(--ui-text-muted);
+  }
+  body:not(.light) .desktop-vehicle-tab { color: var(--ui-text-secondary); }
+  body:not(.light) #route-conditions-panel .condition-kicker { color: var(--ui-text-muted); }
 
   /* Keep the initial desktop task focused on route entry and the map. The
      context rail and timeline only consume space after a route is ready. */

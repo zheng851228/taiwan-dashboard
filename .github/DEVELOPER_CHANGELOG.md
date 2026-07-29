@@ -2,6 +2,24 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-07-30 — Desktop contrast pass
+
+### Changed
+
+- Raised the dark-theme secondary text ladder for route summaries, safety notes, coverage metrics, map attribution, condition timeline metadata, CCTV details and playback controls.
+- Kept light-theme colors, mobile layout, route semantics and color-plus-icon event cues unchanged.
+
+### Verification
+
+- `git diff --check` — passed.
+- `npm run check` — 146/146 passed.
+- Desktop command-center E2E — 4 passed; mobile/tablet MapLibre isolation — 4 passed.
+- Playwright visual check at 1536×1024 — ready state, route panels and timeline remained readable with no layout overflow.
+
+### Scope
+
+- CSS text contrast and developer changelog only; no Worker, API, KV, secret, route rule or endpoint change.
+
 ## 2026-07-30 — CARTO raster URL follow-up
 
 ### Changed
