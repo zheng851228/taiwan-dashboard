@@ -40,6 +40,8 @@
       var next = allowed[nextState] ? nextState : 'empty';
       RouteUiMod.state = next;
       if (document.body) document.body.dataset.routeState = next;
+      var routeToggle = Dom.byId('route-toggle');
+      if (routeToggle) routeToggle.textContent = next === 'ready' ? '\u8abf\u6574' : '\u8f38\u5165\u8d77\u7d42\u9ede';
       Bus.emit('route-ui:state', next);
     },
     getState: function() {
@@ -816,9 +818,6 @@
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(AppState.routeAllPoints);
       RouteMod.updateRouteUi(RouteMod.filteredCams.length);
-      Toast.show(
-        '\u5b89\u5168\u8def\u7dda\u5df2\u5efa\u7acb\uff0c\u6b63\u5728\u8f09\u5165\u6cbf\u9014\u8def\u6cc1\u8207\u5929\u6c23'
-      );
       (function(){
         var startInput = Dom.byId('js-route-start');
         var endInput = Dom.byId('js-route-end');

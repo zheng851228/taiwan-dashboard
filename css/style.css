@@ -1835,6 +1835,42 @@ body.light .condition-road-event-icon {
   #pg-map:has(#route-conditions-panel:not(.hidden):not(.is-collapsed)) #ride-status-card {
     display: none;
   }
+  body[data-route-state="ready"] .map-top-panel {
+    width: min(calc(100vw - 1.3rem), 340px);
+    right: auto;
+  }
+  body[data-route-state="ready"] #route-collapsed {
+    min-height: 44px;
+    gap: 7px;
+    padding: 6px 8px;
+    border-radius: 18px;
+  }
+  body[data-route-state="ready"] #route-collapsed .route-shell-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 12px;
+  }
+  body[data-route-state="ready"] #route-paste-input,
+  body[data-route-state="ready"] #js-route-status,
+  body[data-route-state="ready"] #js-route-banner,
+  body[data-route-state="ready"] #ride-status-card {
+    display: none !important;
+  }
+  body[data-route-state="ready"] #route-summary {
+    display: block !important;
+    margin-top: 0;
+    font-size: 10px;
+    line-height: 1.25;
+  }
+  body[data-route-state="ready"] #route-toggle {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  body[data-route-state="ready"] #js-route-clear-small {
+    min-width: 24px;
+    min-height: 24px;
+  }
   #js-route-status {
     margin-top: 4px;
     padding-inline: 8px;
@@ -2013,6 +2049,29 @@ body.light .condition-road-event-icon {
     width: auto;
     max-height: 55dvh;
     border-radius: 24px;
+  }
+  .route-conditions-panel.is-collapsed {
+    left: auto;
+    width: auto;
+    max-width: calc(100vw - 5rem);
+    max-height: 50px;
+    border-radius: 18px;
+  }
+  .route-conditions-panel.is-collapsed .condition-panel-head {
+    min-height: 48px;
+    gap: 8px;
+    padding: 6px 8px 6px 10px;
+  }
+  .route-conditions-panel.is-collapsed .condition-head-actions {
+    gap: 4px;
+  }
+  .route-conditions-panel.is-collapsed .condition-icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+  }
+  .route-conditions-panel.is-collapsed .condition-collapsed-summary {
+    max-width: min(44vw, 11rem);
   }
   #condition-content {
     max-height: calc(55dvh - 62px);

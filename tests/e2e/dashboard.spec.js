@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+async function expandConditionsIfCollapsed(page) {
+  const toggle = page.locator('#condition-toggle');
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+}
+
 test('plans a validated motorcycle route and renders ordered conditions', async ({ page }) => {
   const browserErrors = [];
   page.on('console', (message) => {
@@ -16,6 +21,7 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await page.locator('#js-route-btn').click();
 
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await expandConditionsIfCollapsed(page);
   await expect(page.locator('#condition-demo-warning')).toBeVisible();
   await expect(page.locator('.condition-section').first()).toBeVisible();
   await expect(page.locator('#condition-validation')).toContainText('安全路線');
@@ -453,7 +459,7 @@ test('makes tool empty states actionable without changing the three-page navigat
   await expect(page.locator('#js-search')).toBeFocused();
 });
 
-test('keeps the mobile ride status compact after collapsing conditions', async ({ page }) => {
+test('keeps the completed mobile route map-first with compact controls', async ({ page }) => {
   const viewport = page.viewportSize();
   test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
 
@@ -464,38 +470,34 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#route-toggle')).toHaveText('調整');
   await page.evaluate(() => {
     document.querySelector('#pwa-update-banner')?.classList.remove('hidden');
   });
-  const expandedConditionsBox = await page.locator('#route-conditions-panel').boundingBox();
-  const expandedUpdateBox = await page.locator('#pwa-update-banner').boundingBox();
-  expect(
-    expandedUpdateBox
-      && expandedConditionsBox
-      && expandedUpdateBox.y + expandedUpdateBox.height <= expandedConditionsBox.y
-  ).toBe(true);
-  await page.locator('#condition-toggle').click();
-  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#condition-collapsed-summary')).toContainText('狀況 1處');
   await expect(page.locator('.condition-road-event')).toBeHidden();
 
   const status = page.locator('#ride-status-card');
-  await expect(status).toBeVisible();
-  const statusBox = await status.boundingBox();
-  const metricBoxes = await page.locator('.ride-metric-card').evaluateAll((cards) =>
-    cards.map((card) => card.getBoundingClientRect().toJSON())
-  );
+  await expect(status).toBeHidden();
+  await expect(page.locator('#js-route-status')).toBeHidden();
+  await expect(page.locator('#js-route-banner')).toBeHidden();
+  const [routeBox, conditionsBox, navBox] = await Promise.all([
+    page.locator('#route-collapsed').boundingBox(),
+    page.locator('#route-conditions-panel').boundingBox(),
+    page.locator('.bottom-navigation').boundingBox()
+  ]);
+  expect(routeBox?.height).toBeLessThanOrEqual(48);
+  expect(conditionsBox?.height).toBeLessThanOrEqual(52);
+  expect(
+    routeBox && conditionsBox && conditionsBox.y - (routeBox.y + routeBox.height)
+  ).toBeGreaterThanOrEqual(350);
+  expect(navBox && conditionsBox && conditionsBox.y + conditionsBox.height <= navBox.y).toBe(true);
 
-  expect(statusBox?.height).toBeLessThanOrEqual(150);
-  expect(new Set(metricBoxes.map((box) => Math.round(box.y))).size).toBe(1);
-
-  const conditionsBox = await page.locator('#route-conditions-panel').boundingBox();
-  expect(conditionsBox?.height).toBeLessThanOrEqual(80);
-  const updateBox = await page.locator('#pwa-update-banner').boundingBox();
-  expect(updateBox && conditionsBox && updateBox.y + updateBox.height <= conditionsBox.y).toBe(true);
   await page.locator('#condition-toggle').click();
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.condition-road-event[data-event-kind="construction"]')).toBeVisible();
+  await expect(status).toBeHidden();
   await page.locator('#condition-clear').click();
   await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
   await expect(status).toBeHidden();
@@ -510,8 +512,8 @@ test('keeps collapsed route actions and summary inside a short 320px screen', as
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
-  await page.locator('#condition-toggle').click();
 
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#condition-collapsed-summary')).toBeVisible();
   await expect(page.locator('#condition-refresh')).toBeHidden();
   const [panelBox, headBox, clearBox, toggleBox] = await Promise.all([
@@ -534,7 +536,6 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
-  await page.locator('#condition-toggle').click();
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
   await page.evaluate(() => {
     AppServices.loadRouteConditions = () => Promise.reject(new Error('測試更新失敗'));
@@ -749,6 +750,7 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
   await expect(page.locator('#js-route-end')).toHaveValue('24.7570,121.7530');
   await expect(page.locator('.wp-input')).toHaveCount(1);
   await expect(page.locator('.wp-input')).toHaveValue('24.9500,121.6200');
+  await expandConditionsIfCollapsed(page);
   await expect(page.locator('.condition-section').first()).toBeVisible();
   expect(routeRequests).toBe(1);
   const route = await page.evaluate(() => AppState.activeRoute);
@@ -870,7 +872,7 @@ test('shows one non-blocking install nudge after the first live safe route', asy
 
   const nudge = page.locator('#pwa-install-nudge');
   const sheet = page.locator('#pwa-install-sheet');
-  await expect(page.locator('#condition-content')).toBeVisible();
+  await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(nudge).toBeVisible();
   await expect(sheet).toBeHidden();
   await expect(page.locator('#pwa-install-nudge-open')).toBeVisible();
@@ -895,6 +897,7 @@ test('does not prompt for fixture conditions', async ({ page }, testInfo) => {
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
+  await expandConditionsIfCollapsed(page);
   await expect(page.locator('#condition-demo-warning')).toBeVisible();
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#pwa-install-sheet')).toBeHidden();
