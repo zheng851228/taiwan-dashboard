@@ -60,7 +60,8 @@
       if (!el) return;
       var list = FavoritesMod.load();
       if (!list.length) {
-        el.innerHTML = '<div class="tool-empty">目前還沒有收藏任何停靠點。</div>';
+        el.innerHTML = '<div class="tool-empty">目前還沒有收藏任何停靠點。'
+          + '<button type="button" class="tool-action" data-route-action="browse-cameras">瀏覽路況影像</button></div>';
         return;
       }
       el.innerHTML = list.map(function(item) {
@@ -148,7 +149,8 @@
       if (!summaryEl || !tagsEl) return;
       if (!report) {
         summaryEl.className = 'tool-empty';
-        summaryEl.textContent = '建立路線後，這裡會彙整天氣、攝影機覆蓋與道路型態提醒。';
+        summaryEl.innerHTML = '建立路線後，這裡會彙整天氣、攝影機覆蓋與道路型態提醒。'
+          + '<button type="button" class="tool-action" data-route-action="start-route">開始規劃</button>';
         tagsEl.innerHTML = '';
         return;
       }
@@ -169,7 +171,8 @@
       var items = [
         {
           title: routeInfo ? '路線已建立' : '先規劃路線',
-          sub: routeInfo ? ('全程約 ' + routeInfo.distance + ' km，預估 ' + routeInfo.duration + ' 分。') : '貼上 Google Maps 或填寫起終點才能得到沿途建議。'
+          sub: routeInfo ? ('全程約 ' + routeInfo.distance + ' km，預估 ' + routeInfo.duration + ' 分。') : '貼上 Google Maps 或填寫起終點才能得到沿途建議。',
+          action: routeInfo ? '' : 'start-route'
         },
         {
           title: isNight ? '目前偏夜騎時段' : '目前屬白天時段',
@@ -191,7 +194,9 @@
         }
       ];
       el.innerHTML = items.map(function(item) {
-        return '<div class="tool-check-item"><div class="tool-check-title">' + escapeHtml(item.title) + '</div><div class="tool-check-sub">' + escapeHtml(item.sub) + '</div></div>';
+        return '<div class="tool-check-item"><div class="tool-check-title">' + escapeHtml(item.title) + '</div><div class="tool-check-sub">' + escapeHtml(item.sub) + '</div>'
+          + (item.action ? '<button type="button" class="tool-action" data-route-action="' + escapeHtml(item.action) + '">開始規劃</button>' : '')
+          + '</div>';
       }).join('');
     },
     buildRouteReport: function() {
@@ -246,6 +251,29 @@
       RideInsightsMod.updateChecklist();
     },
     init: function() {
+      Dom.on(document, 'click', function(event) {
+        var action = event.target.closest ? event.target.closest('[data-route-action]') : null;
+        if (!action) return;
+        event.preventDefault();
+        if (action.dataset.routeAction === 'browse-cameras') {
+          NavMod.go('list');
+          setTimeout(function() {
+            var search = Dom.byId('js-search');
+            if (search) search.focus();
+          }, 80);
+          return;
+        }
+        NavMod.go('map');
+        setTimeout(function() {
+          var expanded = Dom.byId('route-expanded');
+          if (expanded && expanded.classList.contains('hidden')) {
+            var toggle = Dom.byId('route-toggle');
+            if (toggle) toggle.click();
+          }
+          var start = Dom.byId('js-route-start');
+          if (start) start.focus();
+        }, 80);
+      });
       Bus.on('route:updated', RideInsightsMod.buildRouteReport);
       Bus.on('route:cleared', RideInsightsMod.buildRouteReport);
       Bus.on('conditions:updated', RideInsightsMod.buildRouteReport);

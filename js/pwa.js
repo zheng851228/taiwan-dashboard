@@ -227,6 +227,7 @@
     AppState.routeConditions = null;
 
     RouteMod.active = true;
+    if (window.RouteUiMod) RouteUiMod.setState('ready');
     RouteMod.mode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
     RouteMod.routeCoords = mapCoordinates;
     RouteMod.filteredCams = [];

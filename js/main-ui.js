@@ -4,7 +4,7 @@
   'use strict';
 
   var THEME_KEY = 'tw_theme';
-  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u9a57\u8b49\u5b89\u5168\u8def\u7dda\u8207\u6cbf\u9014\u72c0\u6cc1';
+  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u5efa\u7acb\u5b89\u5168\u8def\u7dda';
   var REGION_LABELS = {
     north: '\u5317\u90e8',
     central: '\u4e2d\u90e8',
@@ -28,6 +28,21 @@
     el.classList.toggle('hidden', !isVisible);
     el.classList.toggle('flex', !!isVisible);
   }
+
+  var RouteUiMod = {
+    state: 'empty',
+    setState: function(nextState) {
+      var allowed = { empty: true, analyzing: true, ready: true };
+      var next = allowed[nextState] ? nextState : 'empty';
+      RouteUiMod.state = next;
+      if (document.body) document.body.dataset.routeState = next;
+      Bus.emit('route-ui:state', next);
+    },
+    getState: function() {
+      return RouteUiMod.state;
+    }
+  };
+  window.RouteUiMod = RouteUiMod;
 
   var ThemeMod = {
     dark: Storage.get(THEME_KEY, 'dark') !== 'light',
@@ -530,7 +545,7 @@
       if (!btn) return;
       btn.disabled = !!isBusy;
       btn.classList.toggle('loading', !!isBusy);
-      btn.textContent = isBusy ? '\u89e3\u6790\u4e2d...' : ROUTE_BTN_IDLE_TEXT;
+      btn.textContent = isBusy ? '\u5206\u6790\u4e2d\u2026' : ROUTE_BTN_IDLE_TEXT;
     },
     updateRouteUi: function(cameraCount) {
       var count = cameraCount || 0;
@@ -610,9 +625,10 @@
       var endVal   = endEl   ? endEl.value.trim()   : '';
       if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
       var thisAnalysisVersion = ++RouteMod.analysisVersion;
+      RouteUiMod.setState('analyzing');
       RouteMod.setAnalyzeBusy(true);
       var status = Dom.byId('js-route-status');
-      if (status) status.textContent = '\u6b63\u5728\u53d6\u5f97\u5730\u9ede\u5ea7\u6a19...';
+      if (status) status.textContent = '\u89e3\u6790\u5730\u9ede\u2026';
       var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
       var displayAddrs = [startVal]
         .concat(uiWaypoints.map(function(wp) { return String(wp || '').trim(); }))
@@ -636,8 +652,8 @@
               : (failedIndex === results.length - 1 ? '\u7d42\u9ede' : ('\u7b2c ' + failedIndex + ' \u500b\u505c\u9760\u9ede'));
             throw new Error(label + '\u7121\u6cd5\u89e3\u6790\uff0c\u8acb\u6539\u7528\u66f4\u5b8c\u6574\u5730\u540d\u6216\u5ea7\u6a19');
           }
-          Toast.show('\u6b63\u5728\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168...');
-          if (status) status.textContent = '\u6b63\u5728\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168...';
+          Toast.show('\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168\u2026');
+          if (status) status.textContent = '\u9a57\u8b49\u724c\u7167\u9650\u5236\u2026';
           var finalPoints = results;
           AppState.routeAllPoints = finalPoints;
           AppState.routeInputValues = displayAddrs.slice();
@@ -675,12 +691,14 @@
           if (col) col.classList.remove('hidden');
           var clearMini = Dom.byId('js-route-clear-small');
           if (clearMini) clearMini.classList.remove('hidden');
-          if (status) status.textContent = '\u5b89\u5168\u8def\u7dda\u5b8c\u6210\uff0c\u6b63\u5728\u6574\u7406\u6cbf\u9014\u8def\u6cc1...';
+          RouteUiMod.setState('ready');
+          if (status) status.textContent = '\u6574\u7406\u6cbf\u9014\u8def\u6cc1\u2026';
           if (window.RouteConditionsMod) RouteConditionsMod.load(route, false);
           RouteMod._doFilter(coords);
         })
         .catch(function(err) {
           if (thisAnalysisVersion !== RouteMod.analysisVersion) return;
+          RouteUiMod.setState('empty');
           RouteMod.setAnalyzeBusy(false);
           var message = err && err.message ? err.message : '\u8def\u7dda\u67e5\u8a62\u5931\u6557\uff0c\u8acb\u91cd\u8a66';
           var validation = err && err.payload && err.payload.data && err.payload.data.validation;
@@ -776,6 +794,7 @@
     },
     clear: function() {
       RouteMod.analysisVersion += 1;
+      RouteUiMod.setState('empty');
       RouteMod.setAnalyzeBusy(false);
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
       if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
