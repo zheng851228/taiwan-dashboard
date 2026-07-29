@@ -591,6 +591,22 @@
       btn.classList.toggle('loading', !!isBusy);
       btn.textContent = isBusy ? '\u5206\u6790\u4e2d\u2026' : ROUTE_BTN_IDLE_TEXT;
     },
+    setVehicle: function(mode, plate) {
+      RouteMod.mode = mode === 'car' ? 'car' : 'motorcycle';
+      if (RouteMod.mode === 'motorcycle') RouteMod.plate = plate || 'white';
+      Dom.queryAll('.route-mode-btn').forEach(function(button) {
+        var active = button.dataset.mode === RouteMod.mode
+          && (RouteMod.mode === 'car' || button.dataset.plate === RouteMod.plate);
+        button.classList.toggle('active', active);
+      });
+      Dom.queryAll('.desktop-vehicle-tab').forEach(function(button) {
+        var active = button.dataset.desktopMode === RouteMod.mode
+          && (RouteMod.mode === 'car' || button.dataset.desktopPlate === RouteMod.plate);
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      Bus.emit('vehicle:changed', { mode: RouteMod.mode, plate: RouteMod.plate });
+    },
     updateRouteUi: function(cameraCount) {
       var count = cameraCount || 0;
       var st = Dom.byId('js-route-status');
@@ -648,10 +664,7 @@
     },
     init: function() {
       Dom.onAll('.route-mode-btn', 'click', function(btn) {
-          Dom.queryAll('.route-mode-btn').forEach(function(b) { b.classList.remove('active'); });
-          btn.classList.add('active');
-          RouteMod.mode = btn.dataset.mode;
-          if (btn.dataset.plate) RouteMod.plate = btn.dataset.plate;
+          RouteMod.setVehicle(btn.dataset.mode, btn.dataset.plate || RouteMod.plate);
       });
       Dom.onId('js-route-btn', 'click', function() { RouteMod.analyze(); });
       Dom.onId('js-rb-clear', 'click', function() { RouteMod.clear(); });

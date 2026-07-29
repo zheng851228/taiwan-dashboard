@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v23";
+const CACHE_VERSION = "v25";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -23,7 +23,7 @@ const SHELL_URLS = [
   "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
   "./css/tailwind.generated.css",
-  "./css/style.css?v=23",
+  "./css/style.css?v=25",
   "./js/core.js",
   "./js/services.js",
   "./js/data.js",
@@ -31,6 +31,8 @@ const SHELL_URLS = [
   "./js/enhancements.js",
   "./js/route-conditions.js",
   "./js/ride-tools.js",
+  "./js/maplibre-renderer.js",
+  "./js/desktop-dashboard.js",
   "./js/pwa.js"
 ];
 

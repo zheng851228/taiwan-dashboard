@@ -2,6 +2,26 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-07-30 — PWA v25
+
+### Changed
+
+- Added the desktop command-center layout at 1200px and above while preserving the mobile and tablet navigation flow.
+- Added local MapLibre GL JS rendering with a 2D/3D terrain switch, Mapterhorn DEM and an automatic Leaflet fallback when WebGL or terrain is unavailable.
+- Split traffic, construction, accident, control, weather and unknown-data semantics into distinct map layers and context panels.
+- Added client-only terrain elevation sampling, approximate slope summary, route playback controls, and a clearly labelled simulated cursor.
+- Kept all route, conditions, navigation handoff, Worker endpoints, API schemas and secrets unchanged.
+
+### Verification
+
+- Pending final browser visual comparison at 1536×1024, 1440×900 and 1280×800.
+- Pending final mobile regression and public GitHub Pages smoke after the two focused PRs are reviewed.
+
+### Scope
+
+- Frontend, vendored map assets, PWA shell and developer-only documentation.
+- No Worker deployment, production routing, API schema or credential change.
+
 ## 2026-07-29 — PWA v23
 
 ### Changed

@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=23" />
+  <link rel="stylesheet" href="css/style.css?v=25" />
 </head>
 <body class="text-slate-100" data-route-state="empty">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -85,6 +85,18 @@
         </div>
         <h1 class="text-sm font-black tracking-tighter leading-none">環島路況指揮中心</h1>
       </div>
+      <div id="desktop-header-route" class="desktop-only-header" aria-live="polite">
+        <div class="desktop-header-route-copy">
+          <span class="desktop-header-route-label" id="desktop-route-label">尚未規劃路線</span>
+          <span class="desktop-header-route-meta" id="desktop-route-meta">建立路線後顯示距離與預估時間</span>
+        </div>
+        <div id="desktop-vehicle-tabs" class="desktop-vehicle-tabs" role="group" aria-label="車種牌照">
+          <button type="button" class="desktop-vehicle-tab active" data-desktop-mode="motorcycle" data-desktop-plate="white">白牌機車</button>
+          <button type="button" class="desktop-vehicle-tab" data-desktop-mode="motorcycle" data-desktop-plate="yellow">黃牌機車</button>
+          <button type="button" class="desktop-vehicle-tab" data-desktop-mode="motorcycle" data-desktop-plate="red">紅牌機車</button>
+          <button type="button" class="desktop-vehicle-tab" data-desktop-mode="car">汽車</button>
+        </div>
+      </div>
       <div class="flex items-center gap-2">
         <div id="js-clock-wrap" class="ui-clock-wrap">
           <button id="js-clock-hide" type="button" class="ui-dismiss-btn" aria-label="隱藏頂端時間" title="隱藏頂端時間">
@@ -92,8 +104,28 @@
             <i class="fa-solid fa-xmark" aria-hidden="true"></i>
           </button>
         </div>
+        <button id="desktop-settings-toggle" class="desktop-header-action" type="button" aria-expanded="false">
+          <i class="fa-solid fa-gear"></i><span>設定</span>
+        </button>
+        <button id="desktop-favorites-toggle" class="desktop-header-action" type="button">
+          <i class="fa-regular fa-bookmark"></i><span>收藏</span>
+        </button>
         <button id="js-theme" class="w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base">&#127769;</button>
       </div>
+    </div>
+    <div id="desktop-settings-popover" class="desktop-settings-popover hidden" role="dialog" aria-label="桌面顯示設定">
+      <div class="desktop-settings-title">桌面顯示</div>
+      <button id="desktop-clock-setting" type="button" class="desktop-settings-row">
+        <span>頂端時間</span><span id="desktop-clock-setting-state">顯示中</span>
+      </button>
+      <button id="desktop-banner-setting" type="button" class="desktop-settings-row">
+        <span>路線完成提示</span><span id="desktop-banner-setting-state">顯示中</span>
+      </button>
+      <button id="desktop-map-mode-setting" type="button" class="desktop-settings-row">
+        <span>桌面地圖</span><span id="desktop-map-mode-state">3D 地形</span>
+      </button>
+      <button id="desktop-open-list" type="button" class="desktop-settings-link">開啟路況列表 <i class="fa-solid fa-arrow-right"></i></button>
+      <button id="desktop-open-tools" type="button" class="desktop-settings-link">開啟完整工具頁 <i class="fa-solid fa-arrow-right"></i></button>
     </div>
   </header>
 
@@ -101,6 +133,7 @@
 
 <section id="pg-map" class="pg active" style="position:absolute;inset:0;">
   <div id="map"></div>
+  <div id="desktop-map" aria-label="桌面 3D 地形路況地圖"></div>
 
   <div class="map-top-panel absolute top-[calc(var(--safe-top)+3rem)] left-4 right-4 z-[500] max-w-lg">
     <div id="route-collapsed" class="route-shell route-shell-collapsed glass px-3 py-2.5 rounded-[24px] shadow-xl flex items-center gap-3">
@@ -221,6 +254,18 @@
       </div>
       <div id="ride-risk-inline" class="ride-inline-note mt-3">尚未建立路線，先貼上 Google Maps 或手動輸入起終點。</div>
     </section>
+    <section id="desktop-left-insights" class="desktop-only-panel">
+      <div class="desktop-panel-heading"><span>2</span><h2>沿途資料摘要</h2></div>
+      <div id="desktop-validation-summary" class="desktop-validation-summary">尚未建立路線</div>
+      <div id="desktop-attention-list" class="desktop-attention-list"><span class="desktop-muted">建立路線後顯示施工、壅塞、降雨與資料不足。</span></div>
+      <div class="desktop-mini-metrics">
+        <div><span>路段</span><strong id="desktop-section-count">--</strong></div>
+        <div><span>影像</span><strong id="desktop-camera-count">--</strong></div>
+        <div><span>交通覆蓋</span><strong id="desktop-traffic-coverage">--</strong></div>
+        <div><span>天氣覆蓋</span><strong id="desktop-weather-coverage">--</strong></div>
+      </div>
+      <div class="desktop-source-note" id="desktop-source-note">資料來源：TDX、THB、CWA、各縣市 CCTV。灰色資料不足，不代表順暢。</div>
+    </section>
   </div>
 
   <section id="route-conditions-panel" class="route-conditions-panel glass hidden">
@@ -274,6 +319,22 @@
       </div>
       <div id="apple-leg-links" class="apple-leg-links hidden"></div>
       <div id="condition-timeline" class="condition-timeline"></div>
+      <section id="desktop-elevation-panel" class="desktop-only-panel hidden" aria-live="polite">
+        <div class="desktop-elevation-heading"><span>海拔與坡度</span><span>地形估算，僅供參考</span></div>
+        <svg id="desktop-elevation-chart" viewBox="0 0 800 150" role="img" aria-label="沿途估算海拔曲線"></svg>
+        <div id="desktop-elevation-summary" class="desktop-elevation-summary">等待地形資料</div>
+        <div id="desktop-playback-controls" class="desktop-playback-controls">
+          <button id="desktop-playback-toggle" type="button" aria-label="播放模擬路線"><i class="fa-solid fa-play"></i></button>
+          <span>模擬進度</span>
+          <input id="desktop-playback-range" type="range" min="0" max="1000" value="0" step="1" aria-label="模擬路線進度" />
+          <span id="desktop-playback-distance">0 km</span>
+          <select id="desktop-playback-speed" aria-label="模擬播放速度">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+      </section>
       <div class="condition-footnote">綠／黃／紅／灰實線代表交通速度；施工橘、事故紅、管制紫、天候藍的短色條只標示官方事件點在路線上的位置，不代表官方公布的完整影響範圍。「位置未提供」不會畫成精確路段，預告事件使用虛線，也不等於正在發生。<span id="condition-event-coverage">事件來源範圍會在路線分析後顯示。</span>灰色代表資料不足，不代表順暢。監視器僅供現場畫面佐證，未使用 AI 自動判讀。</div>
     </div>
     <div id="condition-error" class="condition-error hidden">
@@ -282,6 +343,38 @@
       <button id="condition-retry">重試</button>
     </div>
   </section>
+
+  <aside id="desktop-route-context" class="desktop-only-panel" aria-live="polite">
+    <div class="desktop-panel-heading"><span>3</span><h2>路線播放 <em>模擬</em></h2></div>
+    <div id="desktop-context-empty" class="desktop-context-empty">完成安全路線後，這裡會顯示目前選取路段。</div>
+    <div id="desktop-context-content" class="hidden">
+      <div class="desktop-context-label">目前選取路段</div>
+      <div id="desktop-context-road" class="desktop-context-road">--</div>
+      <div id="desktop-context-distance" class="desktop-context-sub">--</div>
+      <div class="desktop-context-divider"></div>
+      <div class="desktop-context-grid">
+        <div><span>交通</span><strong id="desktop-context-traffic">--</strong></div>
+        <div><span>天氣</span><strong id="desktop-context-weather">--</strong></div>
+        <div><span>路段事件</span><strong id="desktop-context-events">--</strong></div>
+        <div><span>附近 CCTV</span><strong id="desktop-context-cameras">--</strong></div>
+      </div>
+      <div id="desktop-context-alerts" class="desktop-context-alerts"></div>
+      <button id="desktop-context-open-list" type="button" class="desktop-context-link">查看路況影像 <i class="fa-solid fa-arrow-right"></i></button>
+    </div>
+  </aside>
+
+  <div id="desktop-map-tools" class="desktop-map-tools" role="group" aria-label="地圖檢視模式">
+    <button id="desktop-map-2d" type="button">2D 地圖</button>
+    <button id="desktop-map-3d" type="button" class="active">3D 地形</button>
+    <button id="desktop-map-legacy" type="button" title="切換至傳統地圖">傳統地圖</button>
+  </div>
+
+  <aside id="desktop-cctv-card" class="desktop-only-panel" aria-live="polite">
+    <div class="desktop-cctv-heading"><span>沿途 CCTV 影像</span><span id="desktop-cctv-status">等待路線</span></div>
+    <div id="desktop-cctv-media" class="desktop-cctv-media"><i class="fa-solid fa-camera"></i><span>建立路線後顯示沿線影像</span></div>
+    <div class="desktop-cctv-meta"><span id="desktop-cctv-name">--</span><button id="desktop-cctv-open" type="button" disabled>查看全部</button></div>
+  </aside>
+
 
   <div class="map-control-stack absolute bottom-[8rem] left-4 z-[500] flex flex-col gap-3">
     <button id="js-fullscreen"
@@ -648,6 +741,8 @@
 <script src="js/enhancements.js"></script>
 <script src="js/route-conditions.js"></script>
 <script src="js/ride-tools.js"></script>
+<script src="js/maplibre-renderer.js"></script>
+<script src="js/desktop-dashboard.js"></script>
 <script src="js/pwa.js"></script>
 
 </body>
