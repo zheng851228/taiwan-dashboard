@@ -1,4 +1,16 @@
-    :root { --primary: #f97316; --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom); }
+    :root {
+      --primary: #f97316;
+      --safe-top: env(safe-area-inset-top);
+      --safe-bottom: env(safe-area-inset-bottom);
+      --ui-bg: #07111b;
+      --ui-surface: rgba(10,19,30,0.94);
+      --ui-surface-elevated: #101d2c;
+      --ui-control: #122235;
+      --ui-border: rgba(148,163,184,0.24);
+      --ui-accent: #52b788;
+      --ui-accent-strong: #86efac;
+      --ui-alert: #fbbf24;
+    }
     body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC', 'Segoe UI', sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden; background: #060d1f; }
     input, textarea, select { font-size: 16px !important; }  /* 防 iOS Safari 自動縮放 */
     .pg { display: none; animation: fadeIn 0.3s ease-out; }
@@ -9,12 +21,20 @@
     .glass { background: rgba(15,23,42,0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
 
     /* Dark surfaces need a brighter text ladder so route data stays readable over maps. */
-    body:not(.light) {
+  body:not(.light) {
       --ui-text-primary: #f8fafc;
       --ui-text-secondary: #f1f5f9;
       --ui-text-muted: #d5deea;
       --ui-text-subtle: #c0cedc;
       --ui-text-faint: #aec0d2;
+      --ui-bg: #07111b;
+      --ui-surface: rgba(10,19,30,0.94);
+      --ui-surface-elevated: #101d2c;
+      --ui-control: #122235;
+      --ui-border: rgba(148,163,184,0.24);
+      --ui-accent: #52b788;
+      --ui-accent-strong: #86efac;
+      --ui-alert: #fbbf24;
       color: var(--ui-text-secondary);
     }
     body:not(.light) .text-slate-300 { color: var(--ui-text-secondary) !important; }
@@ -2388,6 +2408,11 @@ body.light .condition-road-event-icon {
   #route-expanded .route-point-row { margin-top: .5rem; }
   #route-expanded .route-text-input { padding-block: .62rem; }
   #route-expanded .route-vehicle-shell { padding: .7rem; }
+  /* The header is the single desktop vehicle selector. Keep the route form
+     focused on locations and the primary action instead of rendering a
+     second, competing motorcycle selector. */
+  #route-expanded > .route-vehicle-shell { display: none !important; }
+  #route-expanded > #js-route-btn { margin-top: .35rem; }
   #route-expanded .route-action-btn { min-height: 2.65rem; border-radius: .35rem; background: #2b9b65; box-shadow: none; }
   #route-expanded .route-action-btn:hover { background: #35b879; }
   #history-btn,
@@ -2686,4 +2711,68 @@ body:not(.light) #nearby-radius-row,
 body:not(.light) #nearby-radius-row .text-slate-600,
 body:not(.light) #history-count {
   color: var(--ui-text-faint) !important;
+}
+
+/* Keep desktop and mobile surfaces/actions on the same dark command-center
+   palette. Orange remains the brand/alert accent; green is reserved for the
+   verified route action and active vehicle state. */
+body:not(.light) header,
+body:not(.light) #pg-map.active,
+body:not(.light) .map-top-panel,
+body:not(.light) #desktop-left-insights,
+body:not(.light) #desktop-route-context,
+body:not(.light) #desktop-cctv-card,
+body:not(.light) #route-conditions-panel {
+  background-color: var(--ui-bg);
+  border-color: var(--ui-border);
+}
+
+body:not(.light) .route-shell.route-shell-collapsed,
+body:not(.light) .route-shell.route-shell-expanded,
+body:not(.light) .ride-status-shell,
+body:not(.light) .desktop-settings-popover,
+body:not(.light) .route-input-card,
+body:not(.light) .route-vehicle-shell {
+  background-color: var(--ui-surface);
+  border-color: var(--ui-border);
+}
+
+body:not(.light) .desktop-vehicle-tabs,
+body:not(.light) .route-text-input,
+body:not(.light) .route-mode-btn,
+body:not(.light) .ride-metric-card,
+body:not(.light) .condition-metric,
+body:not(.light) .condition-section {
+  background-color: var(--ui-control);
+  border-color: var(--ui-border);
+}
+
+body:not(.light) .desktop-vehicle-tab,
+body:not(.light) .route-mode-btn,
+body:not(.light) .desktop-header-action,
+body:not(.light) .desktop-map-tools button {
+  color: var(--ui-text-secondary) !important;
+}
+
+body:not(.light) .desktop-vehicle-tab.active,
+body:not(.light) .route-mode-btn.active,
+body:not(.light) .route-action-btn,
+body:not(.light) #js-route-btn {
+  background: var(--ui-accent) !important;
+  border-color: var(--ui-accent) !important;
+  color: #07111b !important;
+  box-shadow: inset 0 -2px 0 rgba(7,17,27,0.22), 0 10px 22px rgba(82,183,136,0.18);
+}
+
+body:not(.light) .desktop-vehicle-tab.active,
+body:not(.light) .route-mode-btn.active {
+  color: #ecfdf5 !important;
+}
+
+body:not(.light) .desktop-vehicle-tab:hover,
+body:not(.light) .desktop-vehicle-tab:focus-visible,
+body:not(.light) .route-mode-btn:hover,
+body:not(.light) .route-mode-btn:focus-visible {
+  background: rgba(82,183,136,0.18) !important;
+  color: var(--ui-accent-strong) !important;
 }

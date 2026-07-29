@@ -24,6 +24,9 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-map')).toBeVisible();
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#desktop-left-insights')).toBeVisible();
+  await expect(page.locator('#desktop-vehicle-tabs')).toBeVisible();
+  await expect(page.locator('#route-expanded > .route-vehicle-shell')).toBeHidden();
+  await expect(page.locator('.desktop-vehicle-tab')).toHaveText(['白牌', '黃牌', '紅牌', '汽車']);
   await expect(page.locator('#desktop-route-context')).toBeHidden();
   await expect(page.locator('#desktop-cctv-card')).toBeHidden();
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
