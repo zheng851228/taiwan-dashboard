@@ -13,6 +13,17 @@ This repository-only log records user-facing changes, verification evidence, and
 
 - Frontend cache and text contrast only; no Worker, API, KV, secret, route rule, or endpoint change.
 
+## 2026-07-30 — Desktop vehicle selector and palette cleanup
+
+### Changed
+
+- Desktop now has one vehicle selector in the header; the duplicate route-form motorcycle selector is hidden only at desktop widths and remains available on mobile.
+- Shortened desktop labels to 白牌／黃牌／紅牌／汽車 and aligned dark surfaces, controls, borders, active states, and primary route actions to one navy/green palette.
+
+### Scope
+
+- Frontend layout, copy, and CSS only; route selection still calls the existing `RouteMod.setVehicle()` path and Worker/API contracts are unchanged.
+
 ## 2026-07-30 — Conditions timeout fallback
 
 ### Changed
