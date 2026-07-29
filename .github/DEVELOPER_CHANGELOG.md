@@ -18,7 +18,8 @@ This repository-only log records user-facing changes, verification evidence, and
 - Passed: `npm run check` — 146/146 tests.
 - Passed: `npm run test:e2e` — 77 passed, 59 skipped.
 - Passed: 360×778 Chrome mobile visual check — no horizontal overflow; completed-route chip 44px; collapsed conditions chip 50px.
-- Pending: hosted GitHub Pages smoke
+- Passed: GitHub Pages run `30468414085`; public PWA cache is `twdash-shell-v23` and the App shell reloads offline.
+- Passed: public 390×844 representative route smoke — `validation=safe`, `dataMode=live`, matching route IDs, 9 condition sections, 0px horizontal overflow, and conservative `未回報` event semantics.
 
 ### Scope
 
