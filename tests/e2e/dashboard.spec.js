@@ -378,6 +378,42 @@ test('keeps the mobile route planner focused on the active task', async ({ page 
   expect(navBox?.height).toBeLessThanOrEqual(70);
 });
 
+test('keeps the fresh mobile screen focused on route planning', async ({ page }) => {
+  const viewport = page.viewportSize();
+  test.skip(!viewport || viewport.width > 640, 'Mobile first-screen verification only.');
+
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
+  await expect(page.locator('#route-collapsed')).toBeVisible();
+  await expect(page.locator('#ride-status-card')).toBeHidden();
+  await expect(page.locator('#route-conditions-panel')).toBeHidden();
+  await expect(page.locator('#route-camera-strip')).toBeHidden();
+  await expect(page.locator('#route-toggle')).toHaveText('輸入起終點');
+  await expect(page.locator('#js-gmaps-parse')).toHaveText('解析路線');
+  await expect(page.locator('#js-route-btn')).toContainText('建立安全路線');
+  await expect(page.locator('.bottom-navigation .nav-it').nth(0)).toContainText('規劃');
+  await expect(page.locator('.bottom-navigation .nav-it').nth(1)).toContainText('路況');
+  await expect(page.locator('.bottom-navigation .nav-it').nth(2)).toContainText('工具');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('makes tool empty states actionable without changing the three-page navigation', async ({ page }) => {
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.locator('#nav-tools').click();
+
+  const startRoute = page.locator('#ride-checklist [data-route-action="start-route"]');
+  await expect(startRoute).toBeVisible();
+  await startRoute.click();
+  await expect(page.locator('#pg-map')).toHaveClass(/active/);
+  await expect(page.locator('#route-expanded')).toBeVisible();
+  await expect(page.locator('#js-route-start')).toBeFocused();
+
+  await page.locator('#nav-tools').click();
+  await page.locator('#favorites-tools-list [data-route-action="browse-cameras"]').click();
+  await expect(page.locator('#pg-list')).toHaveClass(/active/);
+  await expect(page.locator('#js-search')).toBeFocused();
+});
+
 test('keeps the mobile ride status compact after collapsing conditions', async ({ page }) => {
   const viewport = page.viewportSize();
   test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
@@ -421,6 +457,9 @@ test('keeps the mobile ride status compact after collapsing conditions', async (
   await page.locator('#condition-toggle').click();
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.condition-road-event[data-event-kind="construction"]')).toBeVisible();
+  await page.locator('#condition-clear').click();
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
+  await expect(status).toBeHidden();
 });
 
 test('keeps collapsed route actions and summary inside a short 320px screen', async ({ page }, testInfo) => {
