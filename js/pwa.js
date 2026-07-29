@@ -4,11 +4,13 @@
   'use strict';
 
   var INSTALL_DISMISSED_KEY = 'tw_pwa_install_dismissed_v1';
+  var INSTALL_PROMPTED_KEY = 'tw_pwa_install_prompted_v2';
   var ROUTE_SNAPSHOT_KEY = 'tw_last_route_snapshot_v1';
   var SNAPSHOT_VERSION = 1;
   var MAX_OFFLINE_COORDINATES = 2000;
   var updateRegistration = null;
   var reloadForUpdate = false;
+  var latestLiveConditions = null;
 
   function isStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -68,6 +70,7 @@
   }
 
   function openInstallSheet() {
+    closeInstallNudge(false);
     var note = Dom.byId('pwa-install-note');
     if (note) {
       note.textContent = isIOS() && !isSafari()
@@ -87,13 +90,52 @@
   }
 
   function installGuideWouldInterrupt() {
-    var routePlanner = Dom.byId('route-expanded');
-    var conditions = Dom.byId('route-conditions-panel');
+    var updateBanner = Dom.byId('pwa-update-banner');
+    var networkBanner = Dom.byId('pwa-network-banner');
+    var installSheet = Dom.byId('pwa-install-sheet');
     return Boolean(
-      (window.AppState && AppState.activeRoute)
-      || (routePlanner && !routePlanner.classList.contains('hidden'))
-      || (conditions && !conditions.classList.contains('hidden'))
+      (updateBanner && !updateBanner.classList.contains('hidden'))
+      || (networkBanner && !networkBanner.classList.contains('hidden'))
+      || (installSheet && !installSheet.classList.contains('hidden'))
     );
+  }
+
+  function closeInstallNudge(remember) {
+    setVisible('pwa-install-nudge', false);
+    if (remember) Storage.set(INSTALL_DISMISSED_KEY, String(Date.now()));
+  }
+
+  function installPromptEligible(data) {
+    var route = window.AppState && AppState.activeRoute;
+    var validation = route && route.validation;
+    var dataMode = data && data.dataMode;
+    return Boolean(
+      isIPhone()
+      && isSafari()
+      && !isStandalone()
+      && navigator.onLine
+      && !Storage.get(INSTALL_DISMISSED_KEY, '')
+      && !Storage.get(INSTALL_PROMPTED_KEY, '')
+      && route
+      && validation
+      && validation.status === 'safe'
+      && data
+      && dataMode
+      && dataMode !== 'fixture'
+      && (!data.routeId || data.routeId === route.routeId)
+      && !installGuideWouldInterrupt()
+    );
+  }
+
+  function showInstallNudge(data) {
+    if (!installPromptEligible(data)) return;
+    setVisible('pwa-install-nudge', true);
+    Storage.set(INSTALL_PROMPTED_KEY, String(Date.now()));
+  }
+
+  function maybeShowInstallNudge(data) {
+    if (data && data.dataMode && data.dataMode !== 'fixture') latestLiveConditions = data;
+    showInstallNudge(data || latestLiveConditions);
   }
 
   function initInstallGuidance() {
@@ -102,16 +144,19 @@
     Dom.onId('pwa-install-close', 'click', function() { closeInstallSheet(true); });
     Dom.onId('pwa-install-done', 'click', function() { closeInstallSheet(true); });
     Dom.onId('pwa-install-backdrop', 'click', function() { closeInstallSheet(true); });
-
-    if (isIPhone() && isSafari() && !isStandalone() && !Storage.get(INSTALL_DISMISSED_KEY, '')) {
-      window.setTimeout(function() {
-        if (!installGuideWouldInterrupt()) openInstallSheet();
-      }, 1200);
-    }
+    Dom.onId('pwa-install-nudge-open', 'click', function() {
+      closeInstallNudge(false);
+      openInstallSheet();
+    });
+    Dom.onId('pwa-install-nudge-close', 'click', function() {
+      closeInstallNudge(true);
+    });
+    Bus.on('conditions:updated', maybeShowInstallNudge);
   }
 
   function showUpdate(registration) {
     updateRegistration = registration;
+    closeInstallNudge(false);
     setVisible('pwa-update-banner', true);
   }
 
@@ -155,9 +200,11 @@
     var offline = !navigator.onLine;
     setVisible('pwa-network-banner', offline);
     document.body.classList.toggle('is-offline', offline);
+    if (offline) closeInstallNudge(false);
     if (!offline) {
       var message = Dom.byId('pwa-network-message');
       if (message) message.textContent = '目前離線，只顯示已保存內容；即時路況、天氣與影像暫停更新。';
+      maybeShowInstallNudge(latestLiveConditions);
     }
   }
 
