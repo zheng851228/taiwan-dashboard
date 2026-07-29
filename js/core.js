@@ -15,6 +15,7 @@
     MAP_ZOOM: 7,
     ROUTE_FILTER_KM: 20.0,
     SIMPLIFY_STEP: 2,
+    CONDITIONS_TIMEOUT_MS: 20000,
     WORKER_BASE: workerOverride.replace(/\/$/, '') || 'https://taiwan-dashboard-api-production.lucky851228.workers.dev',
     TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',

@@ -2,6 +2,18 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-07-30 — Conditions timeout fallback
+
+### Changed
+
+- Added a 20-second client timeout for route conditions requests.
+- A stalled upstream now exits loading state with a clear retryable error and does not present stale conditions as current data.
+
+### Verification
+
+- Added an iPhone E2E covering the hanging-request timeout path.
+- Worker endpoint, route schema, cache, secrets and production routing unchanged.
+
 ## 2026-07-30 — Desktop contrast pass
 
 ### Changed
