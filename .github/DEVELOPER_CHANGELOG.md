@@ -157,3 +157,8 @@ This repository-only log records user-facing changes, verification evidence, and
 - 修正從傳統地圖切回 2D／3D 時未重新建立桌面 MapLibre renderer 的問題；2D／3D 控制會恢復對應地圖模式，MapLibre 失敗仍保留傳統地圖 fallback。
 - 桌面 ready 狀態收斂下方時間軸高度，將可用垂直空間還給中央地圖；手機版、Worker、路線 API 與條件 schema 不變。
 - UI／Service Worker cache version 升至 PWA v31；開發紀錄不會載入或顯示在 App 介面。
+
+## 2026-07-30 — PWA v32 desktop disclaimer space
+- 桌面警示話語改為不佔版面的固定小提示，主畫面高度直接交給地圖與沿途時間軸；手機版維持原有行為。
+- 保留「僅供參考、非導航用途」安全提醒，但不再建立下方固定 footer 空間；Worker、路線 API 與 conditions schema 不變。
+- UI／Service Worker cache version 升至 PWA v32；開發紀錄不會載入或顯示在 App 介面。

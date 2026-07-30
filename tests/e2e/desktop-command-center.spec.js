@@ -114,6 +114,33 @@ test('tall desktop ready layout starts the map directly below the header', async
   expect(gap).toBeLessThanOrEqual(12);
 });
 
+test('desktop disclaimer no longer reserves a bottom layout row', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop density verification only.');
+  await page.setViewportSize({ width: 2048, height: 978 });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+
+  const metrics = await page.evaluate(() => {
+    const main = document.querySelector('main');
+    const timeline = document.querySelector('#route-conditions-panel');
+    const disclaimer = document.querySelector('#desktop-disclaimer');
+    const read = (element) => element ? element.getBoundingClientRect() : null;
+    const mainRect = read(main);
+    const disclaimerRect = read(disclaimer);
+    return {
+      mainBottomGap: mainRect ? Math.abs(window.innerHeight - mainRect.bottom) : Infinity,
+      timelineBottomGap: mainRect && read(timeline) ? Math.abs(mainRect.bottom - read(timeline).bottom) : Infinity,
+      disclaimerHeight: disclaimerRect ? disclaimerRect.height : Infinity,
+      disclaimerPosition: disclaimer ? getComputedStyle(disclaimer).position : ''
+    };
+  });
+
+  expect(metrics.mainBottomGap).toBeLessThanOrEqual(1);
+  expect(metrics.timelineBottomGap).toBeLessThanOrEqual(5);
+  expect(metrics.disclaimerPosition).toBe('fixed');
+  expect(metrics.disclaimerHeight).toBeLessThan(28);
+});
+
 test('dark command-center labels use the refreshed readable text ladder', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Dark-theme contrast verification runs once.');
   await page.setViewportSize({ width: 1536, height: 1024 });
