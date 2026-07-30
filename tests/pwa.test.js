@@ -46,8 +46,8 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v27"');
-    expect(serviceWorker).toContain('./css/style.css?v=27');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v28"');
+    expect(serviceWorker).toContain('./css/style.css?v=28');
     expect(serviceWorker).toContain('./js/maplibre-renderer.js');
     expect(serviceWorker).toContain('./js/desktop-dashboard.js');
     expect(serviceWorker).not.toContain('twdash-shell-v24');
@@ -57,7 +57,7 @@ describe('PWA install and offline assets', () => {
     expect(pwaScript).toContain('isSafari()');
     expect(pwaScript).toContain('installGuideWouldInterrupt()');
     expect(styles).toContain('body:has(#pwa-update-banner:not(.hidden)) .map-top-panel');
-    expect(developerChangelog).toContain('PWA v27');
+    expect(developerChangelog).toContain('PWA v28');
     expect(maplibreRenderer).toContain('var TERRAIN_BOUNDS = [117.5, 20.5, 123.4, 26.7]');
     expect(maplibreRenderer).toContain('bounds: TERRAIN_BOUNDS');
     expect(html).not.toContain('DEVELOPER_CHANGELOG');

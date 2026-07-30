@@ -84,6 +84,7 @@
     text('desktop-source-note', data && data.dataMode === 'fixture'
       ? '示範資料僅供介面測試，不代表即時路況。'
       : '資料來源：TDX、THB、CWA、各縣市 CCTV。灰色資料不足，不代表順暢。');
+    text('desktop-support-updated', data && data.updatedAt ? formatUpdatedAt(data.updatedAt) : '--:--:--');
   }
 
   function eventLabel(incident) {

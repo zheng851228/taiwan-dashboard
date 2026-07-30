@@ -30,11 +30,15 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-route-context')).toBeHidden();
   await expect(page.locator('#desktop-cctv-card')).toBeHidden();
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
+  await expect(page.locator('#desktop-support-panel')).toBeHidden();
   await expect(page.locator('.bottom-navigation')).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 
   await buildFixtureRoute(page);
   await expect(page.locator('body')).toHaveAttribute('data-route-state', 'ready');
+  await expect(page.locator('#route-expanded')).toBeVisible();
+  await expect(page.locator('#route-collapsed')).toBeHidden();
+  await expect(page.locator('#desktop-support-panel')).toBeVisible();
   await expect(page.locator('#desktop-route-context')).toBeVisible();
   await expect(page.locator('#desktop-cctv-card')).toBeVisible();
   await expect(page.locator('#desktop-elevation-panel')).toBeVisible({ timeout: 8000 }).catch(() => {});
@@ -51,6 +55,27 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
   await expect(page.locator('#desktop-route-context')).toBeHidden();
   await expect(page.locator('#desktop-cctv-card')).toBeHidden();
+  await expect(page.locator('#desktop-support-panel')).toBeHidden();
+});
+
+test('1280px ready command center keeps the map dominant without horizontal overflow', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop command-center verification only.');
+  await page.setViewportSize({ width: 1280, height: 854 });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  await expect(page.locator('#desktop-support-panel')).toBeVisible();
+  const metrics = await page.evaluate(() => {
+    const map = document.querySelector('#desktop-map');
+    const support = document.querySelector('#desktop-support-panel');
+    return {
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      mapWidth: map ? map.getBoundingClientRect().width : 0,
+      supportHeight: support ? support.getBoundingClientRect().height : 0
+    };
+  });
+  expect(metrics.overflow).toBeLessThanOrEqual(1);
+  expect(metrics.mapWidth).toBeGreaterThan(700);
+  expect(metrics.supportHeight).toBeGreaterThan(200);
 });
 
 test('dark command-center labels use the refreshed readable text ladder', async ({ page }, testInfo) => {
