@@ -152,3 +152,8 @@ This repository-only log records user-facing changes, verification evidence, and
 - 提高亮色主題的正文、次要標籤、輸入提示、桌面指揮台面板、地圖工具與繁中地名標籤對比，讓文字與背景保持清楚分級。
 - 不修改 Worker、路線 API、地圖資料、事件語意或公開 schema；深色主題維持原有視覺。
 - UI／Service Worker cache version 升至 PWA v30；開發紀錄不會載入或顯示在 App 介面。
+
+## 2026-07-30 — PWA v31 desktop map controls and density
+- 修正從傳統地圖切回 2D／3D 時未重新建立桌面 MapLibre renderer 的問題；2D／3D 控制會恢復對應地圖模式，MapLibre 失敗仍保留傳統地圖 fallback。
+- 桌面 ready 狀態收斂下方時間軸高度，將可用垂直空間還給中央地圖；手機版、Worker、路線 API 與條件 schema 不變。
+- UI／Service Worker cache version 升至 PWA v31；開發紀錄不會載入或顯示在 App 介面。

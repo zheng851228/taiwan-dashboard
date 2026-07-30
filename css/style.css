@@ -3234,3 +3234,14 @@ body.light .map-control-stack > button#js-loc { color: #c2410c !important; }
 body.light .pwa-action-banner span,
 body.light .pwa-install-nudge-copy span { color: var(--ui-text-muted); }
 body.light #pwa-install-nudge-close { color: var(--ui-text-secondary); background: #e2e8f0; }
+
+/* v31 desktop density pass: keep the command center focused on the map at
+   normal desktop heights. Short viewports retain the existing compact rule. */
+@media (min-width: 1200px) and (min-height: 821px) {
+  main { min-height: 0; }
+  #pg-map.active { min-height: 0; grid-template-rows: minmax(0, 1fr) 15.5rem; }
+}
+
+@media (min-width: 1400px) and (min-height: 821px) {
+  :root { --desktop-header-height: 4rem; }
+}
