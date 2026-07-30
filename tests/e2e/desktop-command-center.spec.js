@@ -98,6 +98,42 @@ test('dark command-center labels use the refreshed readable text ladder', async 
   expect(colors.conditionMeta).toBe('rgb(192, 206, 220)');
 });
 
+test('light command-center surfaces keep a readable ink hierarchy', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Light-theme contrast verification runs once.');
+  await page.setViewportSize({ width: 1280, height: 854 });
+  await page.goto(WORKER);
+  await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
+  await page.evaluate(() => {
+    document.body.classList.add('light');
+    localStorage.setItem('tw_theme', 'light');
+  });
+  await expect.poll(
+    () => page.locator('.desktop-vehicle-tab:not(.active)').first().evaluate((element) => getComputedStyle(element).color),
+    { timeout: 5000 }
+  ).toBe('rgb(30, 41, 59)');
+
+  const colors = await page.evaluate(() => {
+    const read = (selector) => getComputedStyle(document.querySelector(selector)).color;
+    return {
+      headerClock: read('#js-clk'),
+      routeTitle: read('#route-expanded .route-title-text'),
+      routeInput: read('#js-route-start'),
+      panelHeading: read('#desktop-left-insights .desktop-panel-heading'),
+      vehicleTab: read('.desktop-vehicle-tab:not(.active)'),
+      placeLabel: read('#desktop-map .local-map-place-label'),
+      disclaimer: read('.desktop-disclaimer')
+    };
+  });
+
+  expect(colors.headerClock).toBe('rgb(30, 41, 59)');
+  expect(colors.routeTitle).toBe('rgb(30, 41, 59)');
+  expect(colors.routeInput).toBe('rgb(15, 23, 42)');
+  expect(colors.panelHeading).toBe('rgb(15, 23, 42)');
+  expect(colors.vehicleTab).toBe('rgb(30, 41, 59)');
+  expect(colors.placeLabel).toBe('rgb(18, 53, 42)');
+  expect(colors.disclaimer).toBe('rgb(71, 85, 105)');
+});
+
 test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'desktop-chromium', 'Mobile and tablet request verification only.');
   const mapLibreRequests = [];
