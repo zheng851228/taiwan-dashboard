@@ -79,6 +79,41 @@ test('1280px ready command center keeps the map dominant without horizontal over
   expect(metrics.supportHeight).toBeGreaterThan(200);
 });
 
+test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop map renderer verification only.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.addInitScript(() => localStorage.removeItem('tw_desktop_map_renderer_v1'));
+  await page.goto(WORKER);
+  await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
+
+  await page.locator('#desktop-map-legacy').click();
+  await expect(page.locator('body')).toHaveClass(/desktop-legacy-map/);
+  await expect(page.locator('#map')).toBeVisible();
+
+  await page.locator('#desktop-map-2d').click();
+  await expect(page.locator('body')).not.toHaveClass(/desktop-legacy-map/, { timeout: 12000 });
+  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+  await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
+
+  await page.locator('#desktop-map-3d').click();
+  await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+  await expect(page.locator('#desktop-map-2d')).not.toHaveClass(/active/);
+});
+
+test('tall desktop ready layout starts the map directly below the header', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop density verification only.');
+  await page.setViewportSize({ width: 2048, height: 978 });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  const gap = await page.evaluate(() => {
+    const header = document.querySelector('header');
+    const map = document.querySelector('#desktop-map');
+    if (!header || !map) return Infinity;
+    return map.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+  });
+  expect(gap).toBeLessThanOrEqual(12);
+});
+
 test('dark command-center labels use the refreshed readable text ladder', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Dark-theme contrast verification runs once.');
   await page.setViewportSize({ width: 1536, height: 1024 });

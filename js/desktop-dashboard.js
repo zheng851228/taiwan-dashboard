@@ -14,7 +14,8 @@
     selectedOrder: null,
     resizeTimer: null,
     playback: { playing: false, distance: 0, lastTime: 0, raf: null, speed: 1 },
-    elevation: null
+    elevation: null,
+    pendingTerrainMode: null
   };
 
   var TRAFFIC_LABELS = {
@@ -201,7 +202,8 @@
       container: 'desktop-map',
       onReady: function(instance) {
         state.renderer = instance;
-        state.renderer.setTerrainMode('3d');
+        state.renderer.setTerrainMode(state.pendingTerrainMode || '3d');
+        state.pendingTerrainMode = null;
         var route = routeCoordinates();
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
         updateDesktopView(AppState.routeConditions);
@@ -297,14 +299,28 @@
       }
     });
     Dom.onId('desktop-map-2d', 'click', function() {
-      if (state.renderer) state.renderer.setTerrainMode('2d');
+      state.pendingTerrainMode = '2d';
+      if (!state.renderer) {
+        Storage.set(MAP_PREF_KEY, 'auto');
+        enableRenderer();
+      } else {
+        state.renderer.setTerrainMode('2d');
+        state.pendingTerrainMode = null;
+      }
       Dom.byId('desktop-map-2d').classList.add('active');
       Dom.byId('desktop-map-3d').classList.remove('active');
       text('desktop-map-mode-state', '2D 地圖');
       if (window.DesktopElevationMod) DesktopElevationMod.refresh();
     });
     Dom.onId('desktop-map-3d', 'click', function() {
-      if (state.renderer) state.renderer.setTerrainMode('3d');
+      state.pendingTerrainMode = '3d';
+      if (!state.renderer) {
+        Storage.set(MAP_PREF_KEY, 'auto');
+        enableRenderer();
+      } else {
+        state.renderer.setTerrainMode('3d');
+        state.pendingTerrainMode = null;
+      }
       Dom.byId('desktop-map-3d').classList.add('active');
       Dom.byId('desktop-map-2d').classList.remove('active');
       text('desktop-map-mode-state', '3D 地形');
