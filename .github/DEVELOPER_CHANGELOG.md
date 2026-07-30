@@ -2,6 +2,12 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-07-30 — PWA v27 terrain tile bounds
+
+- 限制 Mapterhorn DEM／hillshade source 到台灣、金門、馬祖與澎湖涵蓋範圍，避免向周邊海域與日本圖磚發出已知不存在的請求。
+- 保留 terrain unavailable 時的 2D fallback；不修改 Worker、路線 API 或海拔估算契約。
+- UI／Service Worker cache version 升至 PWA v27；更新不會出現在 App 內容中。
+
 ## 2026-07-30 — PWA v26 contrast refresh
 
 ### Changed

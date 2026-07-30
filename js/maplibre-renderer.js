@@ -20,6 +20,11 @@
     hazard: '#fb923c',
     other: '#64748b'
   };
+  // Mapterhorn publishes a broad TileJSON envelope, but terrain tiles are
+  // only available around Taiwan. Limiting the DEM sources to this coverage
+  // keeps MapLibre from requesting surrounding sea/Japan tiles that return
+  // 404, while still covering Taiwan, Kinmen, Matsu, and Penghu routes.
+  var TERRAIN_BOUNDS = [117.5, 20.5, 123.4, 26.7];
   var maplibreModule = null;
   var maplibrePromise = null;
 
@@ -170,13 +175,15 @@
                   type: 'raster-dem',
                   url: 'https://tiles.mapterhorn.com/tilejson.json',
                   tileSize: 512,
-                  encoding: 'terrarium'
+                  encoding: 'terrarium',
+                  bounds: TERRAIN_BOUNDS
                 },
                 hillshadeSource: {
                   type: 'raster-dem',
                   url: 'https://tiles.mapterhorn.com/tilejson.json',
                   tileSize: 512,
-                  encoding: 'terrarium'
+                  encoding: 'terrarium',
+                  bounds: TERRAIN_BOUNDS
                 }
               },
               layers: [
