@@ -17,9 +17,23 @@
     SIMPLIFY_STEP: 2,
     CONDITIONS_TIMEOUT_MS: 20000,
     WORKER_BASE: workerOverride.replace(/\/$/, '') || 'https://taiwan-dashboard-api-production.lucky851228.workers.dev',
-    TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    // CARTO supplies the road/land base without baked-in English labels;
+    // localized labels are rendered by the app so desktop and mobile stay
+    // consistently in Traditional Chinese.
+    TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+    TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
     TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
+    MAP_LABELS: [
+      ['台北', 25.0330, 121.5654], ['基隆', 25.1283, 121.7419],
+      ['桃園', 24.9937, 121.3010], ['新竹', 24.8138, 120.9675],
+      ['苗栗', 24.5600, 120.8200], ['台中', 24.1477, 120.6736],
+      ['彰化', 23.9916, 120.6158], ['南投', 23.9609, 120.9718],
+      ['雲林', 23.7092, 120.4313], ['嘉義', 23.4801, 120.4491],
+      ['台南', 22.9999, 120.2270], ['高雄', 22.6273, 120.3014],
+      ['屏東', 22.5519, 120.5487], ['宜蘭', 24.6941, 121.7378],
+      ['花蓮', 23.9871, 121.6015], ['台東', 22.7972, 121.0713],
+      ['澎湖', 23.5711, 119.5793], ['金門', 24.4493, 118.3765]
+    ],
     REGIONS: {
       north:   ['台北市','新北市','基隆市','桃園市','新竹市','新竹縣','宜蘭縣'],
       central: ['苗栗縣','台中市','彰化縣','南投縣','雲林縣'],

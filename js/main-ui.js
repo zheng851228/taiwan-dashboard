@@ -224,7 +224,7 @@
   }
 
   var MapMod = {
-    map: null, tileLayer: null, markers: [], routeLayer: null,
+    map: null, tileLayer: null, markers: [], placeLabelMarkers: [], routeLayer: null,
     routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [], routeIncidentLayers: [],
     startEndMarkers: [], _canvas: null, _camData: [], _markerSignature: '',
     init: function() {
@@ -235,6 +235,27 @@
       });
       MapMod._canvas = L.canvas({ padding: 0.5 });
       MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
+      MapMod.addPlaceLabels();
+    },
+    addPlaceLabels: function() {
+      if (!MapMod.map || !Array.isArray(Config.MAP_LABELS)) return;
+      var pane = MapMod.map.getPane('place-labels') || MapMod.map.createPane('place-labels');
+      pane.style.zIndex = 350;
+      MapMod.placeLabelMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
+      MapMod.placeLabelMarkers = Config.MAP_LABELS.map(function(item) {
+        var icon = L.divIcon({
+          className: 'local-map-place-label',
+          html: '<span>' + escapeHtml(item[0]) + '</span>',
+          iconSize: [48, 24],
+          iconAnchor: [24, 12]
+        });
+        return L.marker([item[1], item[2]], {
+          icon: icon,
+          pane: 'place-labels',
+          interactive: false,
+          keyboard: false
+        }).addTo(MapMod.map);
+      });
     },
     setTile: function(url) { if (MapMod.tileLayer) MapMod.tileLayer.setUrl(url); },
     clearMarkers: function() {
