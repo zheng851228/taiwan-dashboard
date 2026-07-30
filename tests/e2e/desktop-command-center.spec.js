@@ -22,6 +22,7 @@ test('desktop command center keeps the initial map focused and expands on a read
   await page.goto(WORKER);
 
   await expect(page.locator('#desktop-map')).toBeVisible();
+  await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#desktop-left-insights')).toBeVisible();
   await expect(page.locator('#desktop-vehicle-tabs')).toBeVisible();
@@ -107,5 +108,6 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
   await page.waitForTimeout(700);
   expect(mapLibreRequests).toEqual([]);
   await expect(page.locator('#map')).toBeVisible();
+  await expect(page.locator('#map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible();
   await expect(page.locator('#desktop-map')).toBeHidden();
 });

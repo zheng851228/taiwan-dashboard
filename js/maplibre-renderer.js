@@ -138,6 +138,7 @@
       map: null,
       module: null,
       markers: [],
+      placeMarkers: [],
       terrainTimer: null,
       mode: '3d',
       onReady: options.onReady || function() {},
@@ -162,10 +163,10 @@
                 base: {
                   type: 'raster',
                   tiles: [
-                    'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                    'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                    'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                    'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+                    'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+                    'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+                    'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+                    'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'
                   ],
                   tileSize: 256,
                   attribution: '&copy; OpenStreetMap &copy; CARTO',
@@ -207,6 +208,7 @@
           self.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
           self.map.on('load', function() {
             self._addDataLayers();
+            self._addPlaceLabels();
             self.terrainTimer = window.setTimeout(function() {
               if (self.mode === '3d' && self.map && !self.map.isSourceLoaded('terrainSource')) {
                 self.setTerrainMode('2d');
@@ -257,6 +259,20 @@
         ['desktop-section-core', 'desktop-cameras'].forEach(function(layer) {
           map.on('mouseenter', layer, function() { map.getCanvas().style.cursor = 'pointer'; });
           map.on('mouseleave', layer, function() { map.getCanvas().style.cursor = ''; });
+        });
+      },
+      _addPlaceLabels: function() {
+        if (!this.module || !this.map || !Array.isArray(Config.MAP_LABELS)) return;
+        var self = this;
+        this.placeMarkers.forEach(function(marker) { marker.remove(); });
+        this.placeMarkers = Config.MAP_LABELS.map(function(item) {
+          var element = document.createElement('div');
+          element.className = 'local-map-place-label desktop-map-place-label';
+          element.textContent = item[0];
+          element.setAttribute('aria-label', item[0]);
+          return new self.module.Marker({ element: element, anchor: 'center', offset: [0, -4] })
+            .setLngLat([Number(item[2]), Number(item[1])])
+            .addTo(self.map);
         });
       },
       _setSourceData: function(id, data) {
@@ -387,6 +403,8 @@
         if (this.terrainTimer) window.clearTimeout(this.terrainTimer);
         this.markers.forEach(function(marker) { marker.remove(); });
         this.markers = [];
+        this.placeMarkers.forEach(function(marker) { marker.remove(); });
+        this.placeMarkers = [];
         if (this.cursorMarker) this.cursorMarker.remove();
         this.cursorMarker = null;
         if (this.map) this.map.remove();

@@ -648,12 +648,12 @@ test('keeps the light theme and map tiles consistent after reload', async ({ pag
   await page.locator('#js-theme').click();
   await expect(page.locator('body')).toHaveClass(/light/);
   await expect.poll(() => page.evaluate(() => MapMod.tileLayer && MapMod.tileLayer._url)).toBe(
-    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
   );
   await page.reload();
   await expect(page.locator('body')).toHaveClass(/light/);
   await expect.poll(() => page.evaluate(() => MapMod.tileLayer && MapMod.tileLayer._url)).toBe(
-    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
   );
 });
 
