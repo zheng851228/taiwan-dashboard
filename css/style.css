@@ -2153,6 +2153,7 @@ body.light .condition-road-event-icon {
 /* === Desktop command center (>=1200px) === */
 .desktop-only-header,
 .desktop-only-panel,
+.desktop-disclaimer,
 #desktop-map,
 #desktop-map-tools {
   display: none;
@@ -2166,6 +2167,7 @@ body.light .condition-road-event-icon {
 @media (min-width: 1200px) {
   :root {
     --desktop-header-height: 4.55rem;
+    --desktop-footer-height: 2.75rem;
     --desktop-left-rail: 18.5rem;
     --desktop-right-rail: 15rem;
     --desktop-gap: 0.55rem;
@@ -2339,9 +2341,26 @@ body.light .condition-road-event-icon {
 
   main {
     margin-top: var(--desktop-header-height) !important;
-    height: calc(100dvh - var(--desktop-header-height));
+    height: calc(100dvh - var(--desktop-header-height) - var(--desktop-footer-height));
+    flex: none;
     overflow: hidden;
   }
+
+  .desktop-disclaimer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    min-height: var(--desktop-footer-height);
+    padding: .4rem 1rem;
+    color: var(--ui-text-subtle);
+    background: var(--ui-bg);
+    border-top: 1px solid var(--ui-border);
+    font-size: .58rem;
+    line-height: 1.35;
+    text-align: center;
+  }
+  .desktop-disclaimer i { flex: 0 0 auto; color: #facc15; }
 
   #pg-map.active {
     display: grid !important;
@@ -2381,7 +2400,7 @@ body.light .condition-road-event-icon {
 
   .map-top-panel {
     grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-row: 1;
     position: relative !important;
     inset: auto !important;
     z-index: 5;
@@ -2396,6 +2415,48 @@ body.light .condition-road-event-icon {
     background: rgba(10,19,30,0.94);
   }
 
+  .desktop-route-panel-heading {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .15rem .2rem .55rem;
+    color: #e2e8f0;
+  }
+  .desktop-route-panel-heading > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    color: #0b1722;
+    background: #e2e8f0;
+    font-size: .62rem;
+    font-weight: 900;
+  }
+  .desktop-route-panel-heading h2 { margin: 0; font-size: .75rem; font-weight: 900; }
+  .desktop-route-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: 0 .2rem .35rem;
+    overflow: hidden;
+    border: 1px solid rgba(148,163,184,0.16);
+    border-radius: .3rem;
+    background: rgba(15,23,42,0.55);
+  }
+  .desktop-route-tabs span {
+    min-height: 1.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-text-muted);
+    border-right: 1px solid rgba(148,163,184,0.12);
+    font-size: .61rem;
+    font-weight: 800;
+  }
+  .desktop-route-tabs span:last-child { border-right: 0; }
+  .desktop-route-tabs span.active { color: #f8fafc; background: rgba(82,183,136,0.18); box-shadow: inset 0 -2px 0 #52b788; }
+
   #route-collapsed { display: none !important; }
   #route-expanded { display: block !important; margin-top: 0 !important; padding: 0.7rem !important; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   #route-expanded .route-expanded-head { padding: 0 0 0.65rem; border-bottom: 1px solid rgba(148,163,184,0.15); }
@@ -2404,6 +2465,7 @@ body.light .condition-road-event-icon {
   #route-expanded .route-input-card,
   #route-expanded .route-text-input,
   #route-expanded .route-vehicle-shell { border-color: rgba(148,163,184,0.2); background: rgba(15,23,42,0.72); border-radius: .35rem; }
+  #route-expanded .route-input-card input { min-width: 0; }
   #route-expanded .route-input-card { margin-top: .7rem; }
   #route-expanded .route-point-row { margin-top: .5rem; }
   #route-expanded .route-text-input { padding-block: .62rem; }
@@ -2417,6 +2479,7 @@ body.light .condition-road-event-icon {
   #route-expanded .route-action-btn:hover { background: #35b879; }
   #history-btn,
   #route-toggle-close { color: #94a3b8; }
+  #route-expanded .route-head-actions { display: none !important; }
   .ride-status-shell { margin-top: .6rem !important; padding: .65rem !important; border-radius: .45rem !important; background: rgba(15,23,42,0.55); box-shadow: none; }
   .ride-status-kicker { color: #94a3b8; }
   .ride-status-title { font-size: .8rem; }
@@ -2427,22 +2490,17 @@ body.light .condition-road-event-icon {
   .ride-inline-note { min-height: 0; margin-top: .45rem !important; padding: .45rem .55rem; font-size: .64rem; border-radius: .35rem; }
   #js-route-status { padding: .35rem .5rem; font-size: .68rem; }
 
-  /* Ready routes use the compact summary so the safety rail and map retain
-     the visual priority shown in the desktop command-center concept. */
-  body[data-route-state="ready"] #route-expanded { display: none !important; }
-  body[data-route-state="ready"] #route-collapsed {
-    display: flex !important;
-    min-height: 3.2rem;
-    margin: .55rem 0 0;
-    padding: .55rem .65rem;
-    border: 1px solid rgba(148,163,184,0.2);
-    border-radius: .45rem;
-    background: rgba(15,23,42,0.72);
-  }
-  body[data-route-state="ready"] #route-collapsed .route-shell-icon { width: 1.65rem; height: 1.65rem; }
-  body[data-route-state="ready"] #route-collapsed #route-toggle { min-height: 1.9rem; padding: .3rem .5rem; font-size: .62rem; }
-  body[data-route-state="ready"] #route-collapsed #route-paste-input { display: none; }
-  body[data-route-state="ready"] #route-collapsed #route-summary { display: block !important; font-size: .68rem; }
+  /* Keep the full route entry and the safety summary visible in ready state,
+     matching the command-center reference where the left rail remains the
+     operator's primary control surface. */
+  body[data-route-state="ready"] #route-expanded { display: block !important; }
+  body[data-route-state="ready"] #route-collapsed { display: none !important; }
+  body[data-route-state="ready"] #route-expanded .route-expanded-head,
+  body[data-route-state="ready"] #route-expanded .route-point-row,
+  body[data-route-state="ready"] #route-expanded #waypoints-container { display: none !important; }
+  body[data-route-state="ready"] #route-expanded { padding: .45rem !important; }
+  body[data-route-state="ready"] #route-expanded .route-input-card { margin-top: 0; min-height: 0; padding: .45rem .55rem; }
+  body[data-route-state="ready"] #js-route-status { padding: .15rem .35rem; font-size: .6rem; }
   body[data-route-state="ready"] #ride-status-card { display: none !important; }
 
   #desktop-left-insights,
@@ -2472,6 +2530,43 @@ body.light .condition-road-event-icon {
   .desktop-mini-metrics span { color: #64748b; font-size: .56rem; }
   .desktop-mini-metrics strong { color: #f8fafc; font-size: .72rem; }
   .desktop-source-note { margin-top: .55rem; color: #64748b; font-size: .58rem; line-height: 1.45; }
+  body[data-route-state="ready"] #desktop-source-note { display: none; }
+  body[data-route-state="ready"] .desktop-attention-list > div { font-size: .58rem; line-height: 1.2; }
+  body[data-route-state="ready"] .desktop-validation-summary { padding: .45rem; }
+
+  #desktop-support-panel {
+    display: block !important;
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    border: 1px solid var(--desktop-border);
+    border-radius: .45rem;
+    background: var(--desktop-surface);
+  }
+  .desktop-support-section { padding: .65rem .7rem; }
+  .desktop-support-section + .desktop-support-section { border-top: 1px solid rgba(148,163,184,0.14); }
+  .desktop-legend-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .38rem .55rem; margin-top: .55rem; }
+  .desktop-legend-grid > div { display: flex; align-items: center; gap: .38rem; min-width: 0; color: var(--ui-text-muted); font-size: .58rem; line-height: 1.25; }
+  .desktop-legend-line { display: inline-block; width: 1.35rem; height: .24rem; flex: 0 0 auto; border-radius: .2rem; }
+  .desktop-legend-line.is-clear { background: #52b788; }
+  .desktop-legend-line.is-slow { background: #facc15; }
+  .desktop-legend-line.is-congested { background: #ef4444; }
+  .desktop-legend-line.is-unknown { background: #94a3b8; }
+  .desktop-legend-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.05rem; flex: 0 0 auto; font-size: .7rem; }
+  .desktop-legend-icon.is-weather { color: #38bdf8; }
+  .desktop-legend-icon.is-construction { color: #fb923c; }
+  .desktop-legend-icon.is-incident { color: #f87171; }
+  .desktop-legend-icon.is-camera { color: #e2e8f0; }
+  .desktop-source-list { display: grid; gap: .35rem; margin-top: .55rem; }
+  .desktop-source-list > div { display: flex; align-items: baseline; gap: .35rem; min-width: 0; color: var(--ui-text-muted); font-size: .57rem; line-height: 1.25; }
+  .desktop-source-list > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .desktop-source-list > div b { margin-left: auto; color: var(--ui-text-subtle); font-size: .53rem; font-weight: 700; white-space: nowrap; }
+  .desktop-source-dot { width: .42rem; height: .42rem; flex: 0 0 auto; border-radius: 50%; background: #52b788; box-shadow: 0 0 0 .12rem rgba(82,183,136,0.12); }
+  .desktop-source-dot.is-muted { background: #facc15; box-shadow: 0 0 0 .12rem rgba(250,204,21,0.12); }
+  .desktop-support-update { display: flex; align-items: center; gap: .35rem; margin-top: .55rem; padding-top: .45rem; color: var(--ui-text-subtle); border-top: 1px solid rgba(148,163,184,0.12); font-size: .53rem; }
+  .desktop-support-update i { margin-left: auto; color: var(--ui-text-faint); }
 
   #route-conditions-panel {
     grid-column: 2;
@@ -2600,7 +2695,9 @@ body.light .condition-road-event-icon {
   body[data-route-state="analyzing"] #desktop-route-context,
   body[data-route-state="analyzing"] #desktop-cctv-card,
   body[data-route-state="empty"] #route-conditions-panel,
-  body[data-route-state="analyzing"] #route-conditions-panel {
+  body[data-route-state="analyzing"] #route-conditions-panel,
+  body[data-route-state="empty"] #desktop-support-panel,
+  body[data-route-state="analyzing"] #desktop-support-panel {
     display: none !important;
   }
   body[data-route-state="empty"] #desktop-map,
@@ -2646,6 +2743,7 @@ body.light .condition-road-event-icon {
   body.light header { background: rgba(241,245,249,0.96) !important; }
   body.light .desktop-settings-popover,
   body.light #desktop-left-insights,
+  body.light #desktop-support-panel,
   body.light #desktop-route-context,
   body.light #desktop-cctv-card,
   body.light #route-conditions-panel { background: rgba(248,250,252,0.96); }
@@ -2663,6 +2761,50 @@ body.light .condition-road-event-icon {
   #nearby-panel { bottom: 14.7rem !important; }
   .desktop-cctv-media { height: 6.6rem; }
   #route-conditions-panel .condition-timeline { max-height: 5rem; }
+}
+
+/* The photo reference is a 1280px command-center viewport. Tighten the
+   rails and header only in that range so the map keeps the dominant visual
+   area without introducing horizontal scrolling. */
+@media (min-width: 1200px) and (max-width: 1399px) {
+  :root {
+    --desktop-header-height: 3.8rem;
+    --desktop-footer-height: 2.75rem;
+    --desktop-left-rail: 15rem;
+    --desktop-right-rail: 12.2rem;
+    --desktop-gap: .45rem;
+  }
+  header { padding-inline: .7rem !important; }
+  header > div:first-child { gap: .8rem; }
+  header > div:first-child > div:first-child { padding-right: .8rem; }
+  header h1 { font-size: .82rem !important; }
+  header .w-7.h-7 { width: 1.95rem; height: 1.95rem; }
+  .desktop-only-header { gap: .8rem; }
+  .desktop-header-route-copy { min-width: 8rem; max-width: 13rem; }
+  .desktop-header-route-label { font-size: .88rem; }
+  .desktop-header-route-meta { font-size: .6rem; }
+  .desktop-vehicle-tab { min-height: 2rem; padding-inline: .68rem; font-size: .64rem; }
+  .desktop-header-action { min-height: 1.95rem; padding-inline: .45rem; font-size: .68rem; }
+  #desktop-settings-toggle,
+  #desktop-favorites-toggle { padding-left: .7rem; }
+  #pg-map.active { grid-template-rows: minmax(0, 1fr) 18rem; }
+  .map-control-stack,
+  #nearby-panel { bottom: 18.7rem !important; }
+  .desktop-cctv-media { height: 12.6rem; }
+  #route-expanded { padding: .55rem !important; }
+  #route-expanded .route-expanded-head { padding-bottom: .45rem; }
+  #route-expanded .route-input-card { margin-top: .45rem; }
+  #route-expanded .route-point-row { margin-top: .35rem; }
+  #route-expanded .route-text-input { padding-block: .52rem; }
+  #route-expanded > #js-route-btn { min-height: 2.35rem; }
+  #desktop-left-insights { margin-top: .45rem; padding: .55rem; }
+  .desktop-validation-summary { margin-top: .45rem; padding: .5rem; }
+  .desktop-attention-list { margin-top: .4rem; gap: .25rem; }
+  .desktop-mini-metrics { margin-top: .45rem; }
+  .desktop-source-note { margin-top: .4rem; }
+  .desktop-support-section { padding: .55rem .6rem; }
+  .desktop-legend-grid { gap: .3rem .4rem; margin-top: .4rem; }
+  .desktop-source-list { gap: .28rem; margin-top: .4rem; }
 }
 
 /* v26 contrast refresh: keep small labels legible on dark map/surface layers.
@@ -2720,6 +2862,7 @@ body:not(.light) header,
 body:not(.light) #pg-map.active,
 body:not(.light) .map-top-panel,
 body:not(.light) #desktop-left-insights,
+body:not(.light) #desktop-support-panel,
 body:not(.light) #desktop-route-context,
 body:not(.light) #desktop-cctv-card,
 body:not(.light) #route-conditions-panel {

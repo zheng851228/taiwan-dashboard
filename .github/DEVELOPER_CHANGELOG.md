@@ -139,3 +139,7 @@ This repository-only log records user-facing changes, verification evidence, and
 - Focused the first mobile screen on route planning and map visibility.
 - Added actionable empty states in Tools.
 - PR: [#8](https://github.com/zheng851228/taiwan-dashboard/pull/8)
+## 2026-07-30 — PWA v28 desktop command-center fidelity
+- 以最新桌面指揮台參考圖整理 ready 狀態：左側固定呈現路線輸入、安全驗證、圖例與資料來源，中央保留 3D 地圖，右側與下方呈現路段、CCTV、時間軸及海拔資訊。
+- 1280px 桌面視窗縮窄左右資訊 rail 與頂端 header，維持地圖主視覺與無橫向溢出；手機版、Worker、路線 API 與條件 schema 不變。
+- UI／Service Worker cache version 升至 PWA v28；開發紀錄不會載入或顯示在 App 介面。
