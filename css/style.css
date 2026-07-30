@@ -2949,3 +2949,288 @@ body:not(.light) .route-mode-btn:focus-visible {
   background: rgba(82,183,136,0.18) !important;
   color: var(--ui-accent-strong) !important;
 }
+
+/* v30 light-theme contrast pass: use a deliberate ink hierarchy instead of
+   inheriting the dark command-center palette.  The map can remain dark while
+   every light surface, control and supporting label keeps a clear text edge. */
+body.light {
+  --ui-text-primary: #0f172a;
+  --ui-text-secondary: #1e293b;
+  --ui-text-muted: #475569;
+  --ui-text-subtle: #334155;
+  --ui-text-faint: #64748b;
+  --ui-bg: #f1f5f9;
+  --ui-surface: #ffffff;
+  --ui-surface-elevated: #ffffff;
+  --ui-control: #f8fafc;
+  --ui-border: rgba(15,23,42,0.18);
+  --ui-accent: #178a58;
+  --ui-accent-strong: #166534;
+  --ui-alert: #b45309;
+  color: var(--ui-text-primary);
+  background: var(--ui-bg);
+}
+
+body.light .text-slate-100 { color: var(--ui-text-primary) !important; }
+body.light .text-slate-200 { color: var(--ui-text-secondary) !important; }
+body.light .text-slate-300 { color: var(--ui-text-secondary) !important; }
+body.light .text-slate-400 { color: var(--ui-text-muted) !important; }
+body.light .text-slate-500 { color: var(--ui-text-faint) !important; }
+body.light .text-slate-600 { color: var(--ui-text-muted) !important; }
+body.light .placeholder-slate-500::placeholder {
+  color: var(--ui-text-faint) !important;
+  opacity: 1;
+}
+body.light input,
+body.light textarea,
+body.light select { color: var(--ui-text-primary); }
+
+body.light header {
+  color: var(--ui-text-primary);
+  background: rgba(255,255,255,0.97) !important;
+  border-bottom-color: rgba(15,23,42,0.14) !important;
+}
+body.light header .ui-dismiss-btn,
+body.light header .ui-dismiss-btn span,
+body.light .desktop-header-action {
+  color: var(--ui-text-secondary) !important;
+}
+body.light header .ui-dismiss-btn:hover,
+body.light header .ui-dismiss-btn:focus-visible,
+body.light .desktop-header-action:hover,
+body.light .desktop-header-action:focus-visible {
+  color: var(--ui-accent-strong) !important;
+}
+
+body.light .map-top-panel {
+  color: var(--ui-text-primary);
+  background: rgba(255,255,255,0.96) !important;
+  border: 1px solid rgba(15,23,42,0.16);
+  box-shadow: 0 18px 36px rgba(71,85,105,0.18);
+}
+body.light .desktop-route-panel-heading,
+body.light .desktop-panel-heading {
+  color: var(--ui-text-primary) !important;
+}
+body.light .desktop-route-panel-heading > span,
+body.light .desktop-panel-heading > span {
+  color: #fff;
+  background: #0f172a;
+}
+body.light .desktop-route-tabs {
+  background: #e2e8f0;
+  border-color: rgba(15,23,42,0.16);
+}
+body.light .desktop-route-tabs span {
+  color: var(--ui-text-muted) !important;
+}
+body.light .desktop-route-tabs span.active {
+  color: var(--ui-accent-strong) !important;
+  background: #dcfce7;
+  box-shadow: inset 0 -2px 0 var(--ui-accent);
+}
+
+body.light #route-expanded .route-title-text,
+body.light .route-option-head,
+body.light .route-option-head span:last-child,
+body.light #history-btn,
+body.light #route-toggle-close,
+body.light .route-advanced,
+body.light .route-collapse-btn,
+body.light .route-mini-btn {
+  color: var(--ui-text-secondary) !important;
+}
+body.light #route-expanded .route-title-kicker { color: #c2410c !important; }
+body.light #route-expanded .route-input-card,
+body.light #route-expanded .route-text-input,
+body.light #route-expanded .route-vehicle-shell,
+body.light .route-input-card,
+body.light .route-text-input,
+body.light .route-vehicle-shell,
+body.light #history-dropdown,
+body.light .suggest-box {
+  color: var(--ui-text-primary) !important;
+  background: #fff !important;
+  border-color: rgba(15,23,42,0.18) !important;
+}
+body.light #route-expanded input::placeholder,
+body.light .route-text-input::placeholder,
+body.light .route-input-card input::placeholder {
+  color: var(--ui-text-faint) !important;
+  opacity: 1;
+}
+body.light .route-action-btn,
+body.light #js-route-btn {
+  background: #178a58 !important;
+  border-color: #178a58 !important;
+  color: #fff !important;
+}
+body.light .route-action-btn:hover,
+body.light #js-route-btn:hover { background: #166534 !important; }
+body.light .route-mode-btn {
+  color: var(--ui-text-secondary) !important;
+  background: #f1f5f9;
+  border-color: rgba(15,23,42,0.16);
+}
+body.light .route-mode-btn.active {
+  color: #fff !important;
+  background: #178a58 !important;
+  border-color: #178a58 !important;
+}
+
+body.light #desktop-left-insights,
+body.light #desktop-support-panel,
+body.light #desktop-route-context,
+body.light #desktop-cctv-card,
+body.light #route-conditions-panel {
+  color: var(--ui-text-primary);
+  background: rgba(255,255,255,0.98) !important;
+  border-color: rgba(15,23,42,0.16) !important;
+}
+body.light .desktop-validation-summary {
+  color: #166534 !important;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+body.light .desktop-attention-list > div,
+body.light .desktop-legend-grid > div,
+body.light .desktop-source-list > div {
+  color: var(--ui-text-secondary) !important;
+}
+body.light .desktop-muted,
+body.light .desktop-source-note,
+body.light .desktop-mini-metrics span,
+body.light .desktop-source-list > div b,
+body.light .desktop-support-update,
+body.light .desktop-context-empty,
+body.light .desktop-context-label,
+body.light .desktop-context-sub,
+body.light .desktop-context-grid span,
+body.light .desktop-elevation-heading span:last-child,
+body.light .desktop-elevation-summary,
+body.light .desktop-playback-controls {
+  color: var(--ui-text-muted) !important;
+}
+body.light .desktop-mini-metrics strong,
+body.light .desktop-context-road,
+body.light .desktop-context-grid strong {
+  color: var(--ui-text-primary) !important;
+}
+body.light .desktop-support-section + .desktop-support-section,
+body.light .desktop-context-divider,
+body.light .desktop-support-update,
+body.light #desktop-elevation-panel:not(.hidden) {
+  border-color: rgba(15,23,42,0.14) !important;
+}
+
+body.light .desktop-vehicle-tabs,
+body.light .desktop-map-tools {
+  background: rgba(255,255,255,0.96);
+  border-color: rgba(15,23,42,0.18);
+}
+body.light .desktop-vehicle-tab,
+body.light .desktop-map-tools button {
+  color: var(--ui-text-secondary) !important;
+}
+body.light .desktop-vehicle-tab:hover,
+body.light .desktop-vehicle-tab:focus-visible,
+body.light .desktop-map-tools button:hover {
+  color: var(--ui-accent-strong) !important;
+  background: #dcfce7;
+}
+body.light .desktop-vehicle-tab.active,
+body.light .desktop-map-tools button.active {
+  color: #fff !important;
+  background: #166534;
+}
+body.light .desktop-settings-popover {
+  color: var(--ui-text-primary);
+  background: #fff !important;
+  border-color: rgba(15,23,42,0.18);
+}
+body.light .desktop-settings-title { color: var(--ui-text-muted) !important; }
+body.light .desktop-settings-row,
+body.light .desktop-settings-link { color: var(--ui-text-secondary) !important; }
+body.light .desktop-settings-row span:last-child,
+body.light .desktop-settings-link { color: var(--ui-accent-strong) !important; }
+
+body.light #route-conditions-panel .condition-panel-head {
+  border-bottom-color: rgba(15,23,42,0.14);
+}
+body.light #route-conditions-panel .condition-kicker { color: #0369a1 !important; }
+body.light #route-conditions-panel .condition-title-row h2,
+body.light #route-conditions-panel .condition-section-title,
+body.light #route-conditions-panel .condition-metric strong {
+  color: var(--ui-text-primary) !important;
+}
+body.light #route-conditions-panel .condition-metric,
+body.light #route-conditions-panel .condition-section {
+  background: #f8fafc !important;
+  border-color: rgba(15,23,42,0.16) !important;
+}
+body.light #route-conditions-panel .condition-metric span,
+body.light #route-conditions-panel .condition-section-km,
+body.light #route-conditions-panel .condition-road-event-meta,
+body.light #route-conditions-panel .condition-update-row,
+body.light #route-conditions-panel .condition-footnote {
+  color: var(--ui-text-muted) !important;
+}
+body.light #route-conditions-panel .condition-data-chip,
+body.light #route-conditions-panel .condition-road-event-description {
+  color: var(--ui-text-secondary) !important;
+}
+body.light #desktop-playback-speed {
+  color: var(--ui-text-secondary) !important;
+  background: #f8fafc;
+  border-color: rgba(15,23,42,0.18);
+}
+
+body.light .desktop-cctv-heading,
+body.light .desktop-cctv-meta > span,
+body.light .desktop-cctv-media {
+  color: var(--ui-text-secondary) !important;
+}
+body.light .desktop-cctv-heading span:last-child,
+body.light .desktop-cctv-meta button { color: var(--ui-accent-strong) !important; }
+body.light .desktop-cctv-media {
+  background: #e2e8f0;
+  border-color: rgba(15,23,42,0.16);
+}
+body.light .desktop-cctv-placeholder {
+  color: #fff !important;
+  background: rgba(15,23,42,0.82);
+}
+body.light .desktop-disclaimer {
+  color: var(--ui-text-muted);
+  background: #f8fafc;
+  border-top-color: rgba(15,23,42,0.14);
+}
+body.light .desktop-disclaimer i { color: #b45309; }
+
+body.light .maplibregl-ctrl-group {
+  background: rgba(255,255,255,0.96);
+  border-color: rgba(15,23,42,0.18);
+}
+body.light .maplibregl-ctrl-group button { filter: none; color: #334155; }
+body.light .maplibregl-ctrl-attrib {
+  color: #475569;
+  background: rgba(255,255,255,0.86) !important;
+}
+body.light .maplibregl-ctrl-attrib a { color: #334155; }
+
+body.light .local-map-place-label {
+  color: #12352a !important;
+  background: rgba(255,255,255,0.96) !important;
+  border-color: rgba(22,101,52,0.48) !important;
+  box-shadow: 0 2px 9px rgba(15,23,42,0.32), 0 0 0 1px rgba(255,255,255,0.7);
+}
+body.light .map-control-stack > button {
+  color: var(--ui-text-secondary) !important;
+  background: rgba(255,255,255,0.92) !important;
+  border-color: rgba(15,23,42,0.18) !important;
+}
+body.light .map-control-stack > button#js-loc { color: #c2410c !important; }
+
+body.light .pwa-action-banner span,
+body.light .pwa-install-nudge-copy span { color: var(--ui-text-muted); }
+body.light #pwa-install-nudge-close { color: var(--ui-text-secondary); background: #e2e8f0; }

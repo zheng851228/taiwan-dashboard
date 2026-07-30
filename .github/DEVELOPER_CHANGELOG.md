@@ -147,3 +147,8 @@ This repository-only log records user-facing changes, verification evidence, and
 - 改用 CARTO `dark_nolabels`／`light_nolabels` 底圖，避免把英文地名烘焙在圖磚中。
 - 由前端以共用繁中地名資料渲染 Leaflet 與 MapLibre 標籤，桌面 3D、桌面 2D、手機與傳統地圖維持一致；不修改 Worker、路線 API 或事件語意。
 - UI／Service Worker cache version 升至 PWA v29；開發紀錄不會載入或顯示在 App 介面。
+
+## 2026-07-30 — PWA v30 light-theme contrast
+- 提高亮色主題的正文、次要標籤、輸入提示、桌面指揮台面板、地圖工具與繁中地名標籤對比，讓文字與背景保持清楚分級。
+- 不修改 Worker、路線 API、地圖資料、事件語意或公開 schema；深色主題維持原有視覺。
+- UI／Service Worker cache version 升至 PWA v30；開發紀錄不會載入或顯示在 App 介面。
