@@ -31,13 +31,14 @@ describe('PWA install and offline assets', () => {
   });
 
   it('keeps the complete app shell local and cacheable', async () => {
-    const [html, pwaScript, styles, serviceWorker, developerChangelog, maplibreRenderer] = await Promise.all([
+    const [html, pwaScript, styles, serviceWorker, developerChangelog, maplibreRenderer, desktopBootstrap] = await Promise.all([
       readFile(path.join(root, 'index.html'), 'utf8'),
       readFile(path.join(root, 'js/pwa.js'), 'utf8'),
       readFile(path.join(root, 'css/style.css'), 'utf8'),
       readFile(path.join(root, 'sw.js'), 'utf8'),
       readFile(path.join(root, '.github/DEVELOPER_CHANGELOG.md'), 'utf8'),
-      readFile(path.join(root, 'js/maplibre-renderer.js'), 'utf8')
+      readFile(path.join(root, 'js/maplibre-renderer.js'), 'utf8'),
+      readFile(path.join(root, 'js/desktop-bootstrap.js'), 'utf8')
     ]);
     expect(html).not.toMatch(/(?:unpkg|cdnjs|fonts\.googleapis)\.com/);
     expect(html).toContain('js/pwa.js');
@@ -46,10 +47,12 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v34"');
-    expect(serviceWorker).toContain('./css/style.css?v=34');
-    expect(serviceWorker).toContain('./js/maplibre-renderer.js');
-    expect(serviceWorker).toContain('./js/desktop-dashboard.js');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v35"');
+    expect(serviceWorker).toContain('./css/style.css?v=35');
+    expect(html).toContain('js/desktop-bootstrap.js');
+    expect(serviceWorker).toContain('./js/desktop-bootstrap.js');
+    expect(serviceWorker).not.toContain('./js/maplibre-renderer.js');
+    expect(serviceWorker).not.toContain('./js/desktop-dashboard.js');
     expect(serviceWorker).not.toContain('twdash-shell-v24');
     expect(pwaScript).toContain('tw_pwa_install_prompted_v2');
     expect(pwaScript).toContain('conditions:updated');
@@ -64,6 +67,16 @@ describe('PWA install and offline assets', () => {
     expect(maplibreRenderer).toContain('_addPlaceLabels');
     expect(maplibreRenderer).toContain('setCameraPreset');
     expect(maplibreRenderer).toContain('setWorkerUrl');
+    expect(html).toContain("script-src 'self'");
+    expect(html).toContain("worker-src 'self'");
+    expect(html).toContain("object-src 'none'");
+    expect(html).toContain("base-uri 'self'");
+    expect(html).not.toContain('onclick=');
+    const mainUi = await readFile(path.join(root, 'js/main-ui.js'), 'utf8');
+    expect(mainUi).toContain('youtube-nocookie.com');
+    expect(mainUi).toContain('allow-scripts allow-same-origin allow-presentation');
+    expect(desktopBootstrap).toContain('DESKTOP_QUERY');
+    expect(desktopBootstrap).toContain('maplibre-renderer.js');
     expect(html).not.toContain('DEVELOPER_CHANGELOG');
     expect(serviceWorker).not.toContain('DEVELOPER_CHANGELOG');
   });

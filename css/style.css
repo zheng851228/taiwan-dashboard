@@ -2620,7 +2620,9 @@ body.light .condition-road-event-icon {
     width: auto !important;
     max-width: none !important;
     max-height: none !important;
-    height: 100%;
+    /* The disclaimer is a fixed overlay; let the timeline use the bottom
+       padding that previously belonged to the removed footer row. */
+    height: calc(100% + var(--desktop-gap));
     overflow: hidden;
     border-radius: .45rem;
     background: rgba(10,19,30,0.96);

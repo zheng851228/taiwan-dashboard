@@ -46,6 +46,14 @@ async function openMap(page) {
   await page.evaluate(() => NavMod.go('map'));
 }
 
+test('ignores an arbitrary Worker override and keeps the production origin', async ({ page }) => {
+  await page.goto('/?worker=https://evil.example/collect');
+  await expect.poll(() => page.evaluate(() => Config.WORKER_BASE)).toBe(
+    'https://taiwan-dashboard-api-production.lucky851228.workers.dev'
+  );
+  await expect(page.locator('#route-collapsed:visible, #route-expanded:visible')).toBeVisible();
+});
+
 test('plans a validated motorcycle route and renders ordered conditions', async ({ page }) => {
   const browserErrors = [];
   page.on('console', (message) => {
@@ -526,6 +534,23 @@ test('makes tool empty states actionable without changing the three-page navigat
   await page.locator('#favorites-tools-list [data-route-action="browse-cameras"]').click();
   await expect(page.locator('#pg-list')).toHaveClass(/active/);
   await expect(page.locator('#js-search')).toBeFocused();
+});
+
+test('mobile logo returns from tools without clearing the active route', async ({ page }) => {
+  const viewport = page.viewportSize();
+  test.skip(!viewport || viewport.width > 640, 'Mobile logo verification only.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await openRoutePlanner(page);
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  const routeId = await page.evaluate(() => AppState.activeRoute.routeId);
+  await openTools(page);
+  await page.locator('#brand-home').click();
+  await expect(page.locator('#pg-map')).toHaveClass(/active/);
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'ready');
+  await expect.poll(() => page.evaluate(() => AppState.activeRoute.routeId)).toBe(routeId);
 });
 
 test('keeps the completed mobile route map-first with compact controls', async ({ page }) => {
