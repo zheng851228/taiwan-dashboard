@@ -15,7 +15,7 @@
     return {
       left: narrow ? 240 : 296,
       right: narrow ? 195 : 240,
-      bottom: narrow ? 320 : (window.innerHeight <= 820 ? 256 : 296)
+      bottom: window.innerHeight <= 820 ? 272 : 312
     };
   }
   var state = {
@@ -256,6 +256,69 @@
       ? '示範資料僅供介面測試，不代表即時路況。'
       : '資料來源：TDX、THB、CWA、各縣市 CCTV。灰色資料不足，不代表順暢。');
     text('desktop-support-updated', data && data.updatedAt ? formatUpdatedAt(data.updatedAt) : '--:--:--');
+    syncDesktopNavigation();
+  }
+
+  function syncDesktopNavigation() {
+    [['desktop-nav-google', 'nav-google'], ['desktop-nav-apple', 'nav-apple']].forEach(function(pair) {
+      var button = Dom.byId(pair[0]);
+      var link = Dom.byId(pair[1]);
+      if (!button || !link) return;
+      button.disabled = link.getAttribute('aria-disabled') === 'true';
+    });
+  }
+
+  function openDesktopNavigation(linkId) {
+    syncDesktopNavigation();
+    var link = Dom.byId(linkId);
+    if (!link || link.getAttribute('aria-disabled') === 'true') return;
+    link.click();
+  }
+
+  function timelineSections(sections, limit) {
+    var source = Array.isArray(sections) ? sections : [];
+    var maximum = Math.max(2, Number(limit) || 6);
+    if (source.length <= maximum) return source.slice();
+    var selected = [];
+    for (var index = 0; index < maximum; index += 1) {
+      var sourceIndex = Math.round((index / (maximum - 1)) * (source.length - 1));
+      if (selected.indexOf(source[sourceIndex]) === -1) selected.push(source[sourceIndex]);
+    }
+    return selected;
+  }
+
+  function timelinePlaceLabel(value, fallback) {
+    var label = String(value || '').trim();
+    if (!label || /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(label)) return fallback;
+    return label.length > 9 ? label.slice(0, 9) + '…' : label;
+  }
+
+  function timelineStopLabel(section, index, total) {
+    var inputs = AppState.routeInputValues || [];
+    var route = AppState.activeRoute;
+    if (index === 0) return timelinePlaceLabel(inputs[0], route && route.dataMode === 'fixture' ? '示範起點' : '起點');
+    if (index === total - 1) return timelinePlaceLabel(inputs[inputs.length - 1], route && route.dataMode === 'fixture' ? '示範終點' : '終點');
+    return section.roadRef || section.roadName || ('路段 ' + (index + 1));
+  }
+
+  function timelineClock(minutesFromNow) {
+    var time = new Date(Date.now() + Math.max(0, Number(minutesFromNow) || 0) * 60000);
+    return String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
+  }
+
+  function weatherPresentation(weather) {
+    var value = weather || {};
+    var condition = String(value.condition || '未知');
+    var temperature = Number(value.temperatureC !== undefined ? value.temperatureC : value.temp);
+    var rainChance = Number(value.rainChance);
+    var rainy = /雨|雷|陣雨/.test(condition) || (Number.isFinite(rainChance) && rainChance >= 40);
+    var sunny = /晴/.test(condition) && !rainy;
+    var icon = rainy ? 'fa-cloud-rain' : (sunny ? 'fa-sun' : 'fa-cloud');
+    var className = rainy ? 'is-rainy' : (sunny ? 'is-sunny' : 'is-cloudy');
+    var label = Number.isFinite(temperature) ? Math.round(temperature) + '°C' : condition;
+    if (rainy && Number.isFinite(rainChance)) label += ' · ' + Math.round(rainChance) + '%';
+    var title = condition + (Number.isFinite(rainChance) ? ' · 降雨 ' + Math.round(rainChance) + '%' : '');
+    return { icon: icon, className: className, label: label, title: title };
   }
 
   function renderRouteIntelligence(data) {
@@ -271,14 +334,26 @@
       return;
     }
     panel.classList.remove('hidden');
-    var visible = sections.slice(0, 6);
+    var visible = timelineSections(sections, 6);
+    var totalKm = sections.reduce(function(maximum, section) {
+      return Math.max(maximum, Number(section.toKm) || 0);
+    }, 0);
+    var totalMinutes = Number(AppState.lastRouteInfo && AppState.lastRouteInfo.duration)
+      || Number(AppState.activeRoute && AppState.activeRoute.durationMinutes)
+      || 0;
+    stops.style.setProperty('--desktop-stop-count', String(Math.max(1, visible.length)));
+    weatherTrack.style.setProperty('--desktop-stop-count', String(Math.max(1, visible.length)));
     stops.innerHTML = visible.map(function(section, index) {
-      var road = section.roadRef || section.roadName || ('路段 ' + (index + 1));
-      var distance = Number.isFinite(Number(section.toKm)) ? Math.round(Number(section.toKm)) + ' km' : '--';
+      var road = timelineStopLabel(section, index, visible.length);
+      var sectionKm = index === 0 ? 0 : Number(section.toKm);
+      var distance = Number.isFinite(sectionKm) ? Math.round(sectionKm) + ' km' : '--';
+      var ratio = totalKm > 0 && Number.isFinite(sectionKm) ? sectionKm / totalKm : 0;
       var active = Number(section.order) === Number(state.selectedOrder) ? ' active' : '';
-      return '<button type="button" class="desktop-route-stop' + active + '" data-section-order="' + Number(section.order) + '"><strong>' + escapeHtml(road) + '</strong><span>' + escapeHtml(distance) + '</span></button>';
+      return '<button type="button" class="desktop-route-stop' + active + '" data-section-order="' + Number(section.order) + '"><strong>'
+        + escapeHtml(road) + '</strong><span class="desktop-stop-time">' + escapeHtml(timelineClock(totalMinutes * ratio))
+        + '</span><span class="desktop-stop-distance">' + escapeHtml(distance) + '</span></button>';
     }).join('');
-    band.innerHTML = visible.map(function(section) {
+    band.innerHTML = sections.map(function(section) {
       var level = section.traffic && section.traffic.level || 'unknown';
       var from = Number(section.fromKm);
       var to = Number(section.toKm);
@@ -286,10 +361,9 @@
       return '<span class="desktop-traffic-segment is-' + escapeHtml(level) + '" style="flex:' + width.toFixed(2) + '" title="' + escapeHtml(TRAFFIC_LABELS[level] || '資料不足') + '"></span>';
     }).join('');
     weatherTrack.innerHTML = visible.map(function(section) {
-      var weather = section.weather || {};
-      var condition = weather.condition || '未知';
-      var rain = Number.isFinite(Number(weather.rainChance)) ? ' · ' + Number(weather.rainChance) + '%' : '';
-      return '<span><i class="fa-solid fa-cloud-rain"></i>' + escapeHtml(condition + rain) + '</span>';
+      var weather = weatherPresentation(section.weather);
+      return '<span class="' + weather.className + '" title="' + escapeHtml(weather.title) + '"><i class="fa-solid '
+        + weather.icon + '"></i>' + escapeHtml(weather.label) + '</span>';
     }).join('');
     Dom.queryAll('.desktop-route-stop').forEach(function(button) {
       button.addEventListener('click', function() { state.selectedOrder = Number(button.dataset.sectionOrder); renderContext(); renderRouteIntelligence(data); });
@@ -629,9 +703,16 @@
       var popover = Dom.byId('desktop-condition-info-popover');
       if (!popover) return;
       var open = popover.classList.contains('hidden');
+      if (open) syncDesktopNavigation();
       popover.classList.toggle('hidden', !open);
+      if (!open) {
+        var appleLegs = Dom.byId('apple-leg-links');
+        if (appleLegs) appleLegs.classList.add('hidden');
+      }
       button.setAttribute('aria-expanded', String(open));
     });
+    Dom.onId('desktop-nav-google', 'click', function() { openDesktopNavigation('nav-google'); });
+    Dom.onId('desktop-nav-apple', 'click', function() { openDesktopNavigation('nav-apple'); });
     Dom.onId('desktop-clock-setting', 'click', function() {
       UiPrefsMod.setHidden('clockHidden', !UiPrefsMod.isHidden('clockHidden'));
       syncSettings();
@@ -766,7 +847,7 @@
 
   function goHome() {
     if (window.NavMod) NavMod.go('map');
-    ['desktop-settings-popover', 'favorites-panel', 'info-panel', 'modal', 'nearby-panel', 'route-camera-strip', 'desktop-camera-popover'].forEach(function(id) {
+    ['desktop-settings-popover', 'desktop-condition-info-popover', 'favorites-panel', 'info-panel', 'modal', 'nearby-panel', 'route-camera-strip', 'desktop-camera-popover'].forEach(function(id) {
       var element = Dom.byId(id);
       if (element) {
         element.classList.add('hidden');
@@ -775,8 +856,10 @@
     });
     var settingsButton = Dom.byId('desktop-settings-toggle');
     var cameraButton = Dom.byId('desktop-camera-toggle');
+    var conditionInfoButton = Dom.byId('desktop-condition-info-toggle');
     if (settingsButton) settingsButton.setAttribute('aria-expanded', 'false');
     if (cameraButton) cameraButton.setAttribute('aria-expanded', 'false');
+    if (conditionInfoButton) conditionInfoButton.setAttribute('aria-expanded', 'false');
     if (state.renderer) {
       if (AppState.activeRoute) state.renderer.focusRoute();
       else state.renderer.resetView();
@@ -865,6 +948,12 @@
     var max = Math.max.apply(null, valid.map(function(sample) { return sample.elevation; }));
     var range = Math.max(1, max - min);
     var total = samples[samples.length - 1].distance || 1;
+    var chartLeft = 60;
+    var chartRight = 790;
+    var chartTop = 18;
+    var chartBottom = 136;
+    var chartWidth = chartRight - chartLeft;
+    var chartHeight = chartBottom - chartTop;
     var polylines = [];
     var current = [];
     samples.forEach(function(sample) {
@@ -873,14 +962,35 @@
         current = [];
         return;
       }
-      current.push((sample.distance / total * 780 + 10).toFixed(1) + ',' + (138 - ((sample.elevation - min) / range * 112)).toFixed(1));
+      current.push((sample.distance / total * chartWidth + chartLeft).toFixed(1) + ','
+        + (chartBottom - ((sample.elevation - min) / range * chartHeight)).toFixed(1));
     });
     if (current.length > 1) polylines.push(current);
-    var markup = '<defs><linearGradient id="desktop-elevation-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f59e0b" stop-opacity=".36"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></linearGradient></defs>'
-      + '<line x1="10" y1="138" x2="790" y2="138" class="desktop-chart-axis" />';
+    var markup = '<defs>'
+      + '<linearGradient id="desktop-elevation-stroke" x1="0" x2="1" y1="0" y2="0">'
+      + '<stop offset="0" stop-color="#52b788"/><stop offset=".34" stop-color="#facc15"/>'
+      + '<stop offset=".58" stop-color="#ef5350"/><stop offset=".78" stop-color="#f59e0b"/>'
+      + '<stop offset="1" stop-color="#52b788"/></linearGradient>'
+      + '<linearGradient id="desktop-elevation-fill" x1="0" x2="0" y1="0" y2="1">'
+      + '<stop offset="0" stop-color="#f97316" stop-opacity=".28"/><stop offset="1" stop-color="#f97316" stop-opacity="0"/>'
+      + '</linearGradient></defs>';
+    [0, .33, .66, 1].forEach(function(position) {
+      var y = chartTop + chartHeight * position;
+      var value = max - range * position;
+      markup += '<line x1="' + chartLeft + '" y1="' + y.toFixed(1) + '" x2="' + chartRight + '" y2="' + y.toFixed(1) + '" class="desktop-chart-axis" />'
+        + '<text x="52" y="' + (y + 3).toFixed(1) + '" text-anchor="end" class="desktop-chart-label">' + Math.round(value).toLocaleString() + '</text>';
+    });
     polylines.forEach(function(line, index) {
+      var firstX = line[0].split(',')[0];
+      var lastX = line[line.length - 1].split(',')[0];
+      markup += '<polygon points="' + firstX + ',' + chartBottom + ' ' + line.join(' ') + ' ' + lastX + ',' + chartBottom + '" class="desktop-elevation-area"' + (index === 0 ? '' : ' opacity=".7"') + ' />';
       markup += '<polyline points="' + line.join(' ') + '" class="desktop-elevation-line"' + (index === 0 ? '' : ' opacity=".78"') + ' />';
     });
+    var peak = valid.reduce(function(best, sample) { return sample.elevation > best.elevation ? sample : best; }, valid[0]);
+    var peakX = peak.distance / total * chartWidth + chartLeft;
+    var peakY = chartBottom - ((peak.elevation - min) / range * chartHeight);
+    markup += '<circle cx="' + peakX.toFixed(1) + '" cy="' + peakY.toFixed(1) + '" r="4" class="desktop-chart-peak" />'
+      + '<text x="' + peakX.toFixed(1) + '" y="' + Math.max(11, peakY - 8).toFixed(1) + '" text-anchor="middle" class="desktop-chart-peak-label">' + Math.round(peak.elevation).toLocaleString() + ' m</text>';
     chart.innerHTML = markup;
     var maxSlope = 0;
     var windowKm = 1;

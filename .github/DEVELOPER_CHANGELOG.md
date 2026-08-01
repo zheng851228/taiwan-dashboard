@@ -6,6 +6,7 @@ This repository-only log records user-facing changes, verification evidence, and
 
 - 桌面主畫面新增左欄、右欄與下方資訊區的滑鼠拖曳分隔線；支援鍵盤方向鍵、Home／End、雙擊重置與安全範圍限制。
 - 版面偏好保存於本機 `tw_desktop_layout_v1`，設定選單提供「版面配置」重置；手機與平板不顯示或載入桌面調整控制。
+- 地圖正下方改為核准目標的單一資訊帶：路線節點與 ETA、交通色帶、沿途天氣、海拔曲線及模擬進度依序排列；桌面事件卡片不再占用此區，完整事件仍由左右欄、地圖標記與資料說明提供。
 - Service Worker 清除 v38 shell；不改 Worker endpoint、路線 schema、路況語意或正式 Worker。
 
 ## 2026-08-02 — PWA v38 desktop fidelity draft

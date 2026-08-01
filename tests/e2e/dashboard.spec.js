@@ -78,8 +78,15 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
 
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
   await expandConditionsIfCollapsed(page);
-  await expect(page.locator('#condition-demo-warning')).toBeVisible();
-  await expect(page.locator('.condition-section').first()).toBeVisible();
+  const desktopMode = await page.locator('#desktop-map').isVisible();
+  if (desktopMode) {
+    await expect(page.locator('#condition-demo-warning')).toBeHidden();
+    await expect(page.locator('.condition-section').first()).toBeHidden();
+    await expect(page.locator('#desktop-route-intelligence')).toBeVisible();
+  } else {
+    await expect(page.locator('#condition-demo-warning')).toBeVisible();
+    await expect(page.locator('.condition-section').first()).toBeVisible();
+  }
   await expect(page.locator('#condition-validation')).toContainText('安全路線');
   await expect(page.locator('#condition-coverage')).not.toHaveText('--');
   await expect(page.locator('#condition-loading')).toBeHidden();
@@ -87,10 +94,12 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   const constructionEvent = page.locator(
     '.condition-road-event[data-event-kind="construction"][data-event-impact="controlled"]'
   );
-  await expect(constructionEvent).toBeVisible();
+  if (desktopMode) await expect(constructionEvent).toBeHidden();
+  else await expect(constructionEvent).toBeVisible();
   await expect(constructionEvent).toContainText('施工');
   await expect(constructionEvent).toContainText('交通管制');
-  await expect(page.locator('.condition-section.has-road-event[data-event-kind="construction"]')).toBeVisible();
+  if (desktopMode) await expect(page.locator('.condition-section.has-road-event[data-event-kind="construction"]')).toBeHidden();
+  else await expect(page.locator('.condition-section.has-road-event[data-event-kind="construction"]')).toBeVisible();
   await expectEventMarker(page, 'construction');
   await expect(page.locator('#condition-incidents')).toContainText('1處·1件');
   if (await page.locator('#desktop-map').isVisible()) {
@@ -167,9 +176,12 @@ test('keeps coordinate-free road events visible without inventing a precise map 
   await page.locator('#js-route-btn').click();
 
   const event = page.locator('.condition-road-event[data-event-location="approximate"]');
-  await expect(event).toBeVisible();
+  await expect(event).toBeHidden();
   await expect(event).toContainText('位置未提供');
   await expect(page.locator('.condition-alert[data-event-location="approximate"]')).toContainText('位置未提供');
+  const eventSectionOrder = await event.locator('xpath=ancestor::article[contains(@class,"condition-section")]').getAttribute('data-order');
+  await page.locator(`.desktop-route-stop[data-section-order="${eventSectionOrder}"]`).click();
+  await expect(page.locator('#desktop-context-alerts')).toContainText('位置未提供');
   await expect(page.locator('#condition-incidents')).toContainText('未定位·1件');
   await expect(page.locator('.condition-section.has-road-event')).toHaveCount(0);
   await expect(page.locator('.route-incident-pin')).toHaveCount(0);
@@ -870,7 +882,12 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
   await expect(page.locator('.wp-input')).toHaveCount(1);
   await expect(page.locator('.wp-input')).toHaveValue('24.9500,121.6200');
   await expandConditionsIfCollapsed(page);
-  await expect(page.locator('.condition-section').first()).toBeVisible();
+  if (await page.locator('#desktop-map').isVisible()) {
+    await expect(page.locator('.condition-section').first()).toBeHidden();
+    await expect(page.locator('#desktop-route-intelligence')).toBeVisible();
+  } else {
+    await expect(page.locator('.condition-section').first()).toBeVisible();
+  }
   expect(routeRequests).toBe(1);
   const route = await page.evaluate(() => AppState.activeRoute);
   expect(route.locations).toHaveLength(3);
@@ -894,7 +911,12 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
     'href',
     /saddr=25\.047800%2C121\.517000&daddr=24\.950000%2C121\.620000/
   );
-  await appleLink.click();
+  if (await page.locator('#desktop-map').isVisible()) {
+    await page.locator('#desktop-condition-info-toggle').click();
+    await page.locator('#desktop-nav-apple').click();
+  } else {
+    await appleLink.click();
+  }
   await expect(page.locator('.apple-leg-button')).toHaveCount(2);
   await expect(page.locator('.apple-leg-button').first()).toHaveAttribute(
     'href',

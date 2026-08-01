@@ -166,8 +166,8 @@ test('desktop workspace splitters resize and persist the three command-center re
   await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getLayout())).toEqual(initial.layout);
 });
 
-test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
+test('v39 lower intelligence rail matches the approved timeline anatomy', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v39 verification only.');
   let mapTilerRequestCount = 0;
   let satelliteMapRequestCount = 0;
   page.on('request', request => {
@@ -180,11 +180,37 @@ test('v38 keeps satellite optional and exposes the compact route intelligence co
   await page.addInitScript(() => {
     localStorage.removeItem('tw_desktop_basemap_v1');
     localStorage.removeItem('tw_desktop_map_renderer_v1');
+    localStorage.removeItem('tw_desktop_layout_v1');
   });
   await page.goto(WORKER);
   await buildFixtureRoute(page);
   await expect(page.locator('#desktop-route-intelligence')).toBeVisible();
   await expect(page.locator('.desktop-route-stop').first()).toBeVisible();
+  await expect(page.locator('#desktop-elevation-panel')).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#condition-demo-warning')).toBeHidden();
+  await expect(page.locator('#condition-timeline')).toBeHidden();
+  await expect(page.locator('.desktop-timeline-row')).toHaveCount(3);
+  await expect(page.locator('.desktop-route-stop .desktop-stop-time').first()).toHaveText(/^\d{2}:\d{2}$/);
+  await expect(page.locator('.desktop-route-stop .desktop-stop-distance').first()).toHaveText('0 km');
+  await expect(page.locator('.desktop-weather-track i')).toHaveCount(5);
+  await expect(page.locator('#desktop-playback-controls')).toBeVisible();
+  const lowerRail = await page.evaluate(() => {
+    const content = document.querySelector('#condition-content');
+    return {
+      scrollOverflow: content.scrollHeight - content.clientHeight,
+      trafficSegments: document.querySelectorAll('#desktop-traffic-band .desktop-traffic-segment').length,
+      stopCount: document.querySelectorAll('#desktop-route-stops .desktop-route-stop').length,
+      heading: document.querySelector('#route-conditions-panel h2')?.textContent.trim(),
+      elevationHeading: document.querySelector('.desktop-elevation-heading')?.textContent.replace(/\s+/g, ' ').trim()
+    };
+  });
+  expect(lowerRail.scrollOverflow).toBeLessThanOrEqual(2);
+  expect(lowerRail.trafficSegments).toBe(5);
+  expect(lowerRail.stopCount).toBe(5);
+  expect(lowerRail.heading).toBe('沿途狀況時間軸');
+  expect(lowerRail.elevationHeading).toContain('海拔高度（m）');
+  await page.locator('#desktop-condition-info-toggle').click();
+  await expect(page.locator('#desktop-condition-info-popover')).toBeVisible();
   await expect(page.locator('#desktop-map-basemap')).toHaveText('底圖');
   await page.locator('#desktop-map-basemap').click();
   await expect(page.locator('#desktop-basemap-setting-state')).toHaveText('深色地圖');

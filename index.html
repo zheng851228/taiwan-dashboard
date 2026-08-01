@@ -321,6 +321,9 @@
         </div>
       </div>
       <div class="condition-head-actions">
+        <button id="desktop-condition-info-toggle" class="condition-icon-btn desktop-condition-info-toggle" type="button" aria-label="查看資料說明" title="查看資料說明" aria-expanded="false">
+          <i class="fa-solid fa-circle-info"></i>
+        </button>
         <button id="condition-clear" class="condition-icon-btn" aria-label="清除目前路線" title="清除目前路線">
           <i class="fa-solid fa-xmark"></i>
         </button>
@@ -333,8 +336,12 @@
       </div>
     </div>
       <div id="condition-event-status" class="condition-sr-status" role="status" aria-live="polite"></div>
-    <div id="desktop-condition-info-popover" class="desktop-condition-info-popover hidden" role="note">
-      綠／黃／紅／灰代表交通資料；施工、事故、管制與天候只在官方提供定位時標示於地圖。灰色資料不足，不代表順暢；CCTV 僅供現場畫面佐證。
+    <div id="desktop-condition-info-popover" class="desktop-condition-info-popover hidden" role="dialog" aria-label="資料說明與外部導航">
+      <div>綠／黃／紅／灰代表交通資料；施工、事故、管制與天候只在官方提供定位時標示於地圖。灰色資料不足，不代表順暢；CCTV 僅供現場畫面佐證。</div>
+      <div class="desktop-condition-nav" aria-label="外部導航">
+        <button id="desktop-nav-google" type="button"><i class="fa-brands fa-google"></i> Google Maps</button>
+        <button id="desktop-nav-apple" type="button"><i class="fa-brands fa-apple"></i> Apple Maps</button>
+      </div>
     </div>
     <div id="condition-demo-warning" class="condition-demo-warning hidden">
       <i class="fa-solid fa-flask"></i>
@@ -347,12 +354,18 @@
     </div>
       <div id="condition-content" class="hidden">
       <section id="desktop-route-intelligence" class="desktop-only-panel hidden" aria-label="桌面沿途狀況時間軸">
-        <div class="desktop-route-intelligence-head">
-          <button id="desktop-condition-info-toggle" type="button" aria-expanded="false">資料說明</button>
+        <div class="desktop-timeline-row desktop-timeline-stops-row">
+          <span class="desktop-timeline-label">路線</span>
+          <div id="desktop-route-stops" class="desktop-route-stops"></div>
         </div>
-        <div id="desktop-route-stops" class="desktop-route-stops"></div>
-        <div id="desktop-traffic-band" class="desktop-traffic-band" aria-label="沿途交通狀態"></div>
-        <div id="desktop-weather-track" class="desktop-weather-track" aria-label="沿途天氣摘要"></div>
+        <div class="desktop-timeline-row">
+          <span class="desktop-timeline-label">路況</span>
+          <div id="desktop-traffic-band" class="desktop-traffic-band" aria-label="沿途交通狀態"></div>
+        </div>
+        <div class="desktop-timeline-row">
+          <span class="desktop-timeline-label">天氣</span>
+          <div id="desktop-weather-track" class="desktop-weather-track" aria-label="沿途天氣摘要"></div>
+        </div>
       </section>
       <div class="condition-overview-grid">
         <div class="condition-metric"><span>預估</span><strong id="condition-duration">--</strong></div>
@@ -373,12 +386,12 @@
       <div id="apple-leg-links" class="apple-leg-links hidden"></div>
       <div id="condition-timeline" class="condition-timeline"></div>
       <section id="desktop-elevation-panel" class="desktop-only-panel hidden" aria-live="polite">
-        <div class="desktop-elevation-heading"><span>海拔與坡度</span><span>地形估算，僅供參考</span></div>
+        <div class="desktop-elevation-heading"><span>海拔高度（m）</span><span>地形估算，僅供參考</span></div>
         <svg id="desktop-elevation-chart" viewBox="0 0 800 150" role="img" aria-label="沿途估算海拔曲線"></svg>
         <div id="desktop-elevation-summary" class="desktop-elevation-summary">等待地形資料</div>
         <div id="desktop-playback-controls" class="desktop-playback-controls">
           <button id="desktop-playback-toggle" type="button" aria-label="播放模擬路線"><i class="fa-solid fa-play"></i></button>
-          <span>模擬進度</span>
+          <span class="desktop-playback-label">模擬進度</span>
           <input id="desktop-playback-range" type="range" min="0" max="1000" value="0" step="1" aria-label="模擬路線進度" />
           <span id="desktop-playback-distance">0 km</span>
           <select id="desktop-playback-speed" aria-label="模擬播放速度">
