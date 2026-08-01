@@ -2,6 +2,12 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-01 — PWA v33 security boundaries
+
+- Worker 加入 allowlisted CORS、rate limiting、32 KiB JSON body cap、UUID 與 HTTPS 地圖網址驗證。
+- GitHub Pages 加入 page-level CSP，MapLibre 使用同源 vendored worker；外部影像與 YouTube embed 使用 no-referrer／sandbox。
+- UI／Service Worker cache version 升至 PWA v33；開發紀錄不會載入或顯示在 App 介面。
+
 ## 2026-07-30 — PWA v27 terrain tile bounds
 
 - 限制 Mapterhorn DEM／hillshade source 到台灣、金門、馬祖與澎湖涵蓋範圍，避免向周邊海域與日本圖磚發出已知不存在的請求。

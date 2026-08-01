@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildReferenceSpeedByLink,
+  expandMapUrl,
   geocodePlace,
   loadTdxRoadEvents,
   mergeTdxDetectors,
@@ -112,6 +113,18 @@ describe('Taiwan place geocoding', () => {
       lat: 24.1620975,
       lng: 120.6492346
     });
+  });
+});
+
+describe('map URL boundary validation', () => {
+  it('rejects non-HTTPS, credentials, and unapproved redirect hosts', async () => {
+    await expect(expandMapUrl('http://maps.google.com/?q=24,121')).rejects.toMatchObject({ status: 400 });
+    await expect(expandMapUrl('https://user:pass@maps.google.com/?q=24,121')).rejects.toMatchObject({ status: 400 });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, {
+      status: 302,
+      headers: { location: 'https://example.com/redirect' }
+    })));
+    await expect(expandMapUrl('https://maps.google.com/?q=24,121')).rejects.toMatchObject({ status: 400 });
   });
 });
 

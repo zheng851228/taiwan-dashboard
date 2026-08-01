@@ -12,6 +12,45 @@ afterEach(() => {
 });
 
 describe('Worker v2 fixture API', () => {
+  it('reflects only allowlisted CORS origins and keeps CLI responses originless', async () => {
+    const allowed = await worker.fetch(new Request('https://worker.test/v2/weather', {
+      headers: { Origin: 'http://127.0.0.1:4173' }
+    }), env);
+    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('http://127.0.0.1:4173');
+    const rejected = await worker.fetch(new Request('https://worker.test/v2/weather', {
+      headers: { Origin: 'https://evil.example' }
+    }), env);
+    expect(rejected.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    const cli = await worker.fetch(new Request('https://worker.test/v2/weather'), env);
+    expect(cli.status).toBe(200);
+    expect(cli.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('rejects oversized JSON bodies before route processing', async () => {
+    const response = await worker.fetch(new Request('https://worker.test/v2/routes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locations: [{ lat: 25, lng: 121 }, { lat: 24, lng: 121 }], padding: 'x'.repeat(33000) })
+    }), env);
+    expect(response.status).toBe(413);
+  });
+
+  it('returns 429 and Retry-After when an expensive endpoint exceeds its limit', async () => {
+    const limiter = { limit: vi.fn(async () => ({ success: false })) };
+    const response = await worker.fetch(new Request('https://worker.test/v2/geocode?q=台北'), {
+      ...env,
+      LOOKUP_RATE_LIMITER: limiter
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    expect(limiter.limit).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects non-UUID route identifiers', async () => {
+    const response = await worker.fetch(new Request('https://worker.test/v2/routes/not-a-uuid/conditions'), env);
+    expect(response.status).toBe(400);
+  });
+
   it('creates one validated multi-stop route and loads ordered conditions', async () => {
     const createRequest = new Request('https://worker.test/v2/routes', {
       method: 'POST',

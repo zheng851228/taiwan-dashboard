@@ -11,6 +11,18 @@
   "observability": {
     "enabled": true
   },
+  "ratelimits": [
+    {
+      "name": "ROUTE_RATE_LIMITER",
+      "namespace_id": "85122832",
+      "simple": { "limit": 12, "period": 60 }
+    },
+    {
+      "name": "LOOKUP_RATE_LIMITER",
+      "namespace_id": "85122833",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ],
   "env": {
     "staging": {
       "workers_dev": true,

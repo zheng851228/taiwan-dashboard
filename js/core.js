@@ -6,9 +6,24 @@
   'use strict';
 
   var workerOverride = '';
+  var DEFAULT_WORKER_ORIGIN = 'https://taiwan-dashboard-api-production.lucky851228.workers.dev';
+  var ALLOWED_WORKER_ORIGINS = new Set([
+    DEFAULT_WORKER_ORIGIN,
+    'https://taiwan-dashboard-api-staging.lucky851228.workers.dev',
+    'http://localhost:8787',
+    'http://127.0.0.1:8787'
+  ]);
   try {
-    workerOverride = new URLSearchParams(window.location.search).get('worker') || '';
-  } catch (err) {}
+    var candidate = new URLSearchParams(window.location.search).get('worker') || '';
+    if (candidate) {
+      var parsed = new URL(candidate);
+      var origin = parsed.origin;
+      var isCleanOrigin = parsed.pathname === '/' && !parsed.search && !parsed.hash && ALLOWED_WORKER_ORIGINS.has(origin);
+      if (isCleanOrigin) workerOverride = origin;
+    }
+  } catch (err) {
+    workerOverride = '';
+  }
 
   window.Config = {
     MAP_CENTER: [23.9, 121.0],
@@ -16,7 +31,7 @@
     ROUTE_FILTER_KM: 20.0,
     SIMPLIFY_STEP: 2,
     CONDITIONS_TIMEOUT_MS: 20000,
-    WORKER_BASE: workerOverride.replace(/\/$/, '') || 'https://taiwan-dashboard-api-production.lucky851228.workers.dev',
+    WORKER_BASE: workerOverride || DEFAULT_WORKER_ORIGIN,
     // CARTO supplies the road/land base without baked-in English labels;
     // localized labels are rendered by the app so desktop and mobile stay
     // consistently in Traditional Chinese.

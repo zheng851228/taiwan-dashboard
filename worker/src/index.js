@@ -22,14 +22,28 @@ import {
 import { buildAvoidLocations, validateRouteEdges } from './rules.js';
 
 const ROUTE_TTL_SECONDS = 6 * 60 * 60;
+const MAX_JSON_BODY_BYTES = 32 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const memoryCache = new Map();
+
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://zheng851228.github.io',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173'
+]);
 
 export default {
   async fetch(request, env) {
-    if (request.method === 'OPTIONS') return withCors(new Response(null, { status: 204 }));
+    if (request.method === 'OPTIONS') {
+      const origin = request.headers.get('Origin');
+      if (origin && !ALLOWED_CORS_ORIGINS.has(origin)) {
+        return withCors(jsonResponse({ status: 'error', message: '不允許的來源' }, 403), request);
+      }
+      return withCors(new Response(null, { status: 204 }), request);
+    }
     try {
       const response = await routeRequest(request, env);
-      return withCors(response);
+      return withCors(response, request);
     } catch (error) {
       const status = error.status || 500;
       if (status >= 500) {
@@ -46,7 +60,7 @@ export default {
         updatedAt: new Date().toISOString(),
         data: error.data || null,
         message: publicMessage
-      }, status));
+      }, status), request);
     }
   }
 };
@@ -55,6 +69,8 @@ async function routeRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
 
+  await enforceRateLimit(request, env, path, url);
+
   if (path === '/v2/routes' && request.method === 'POST') {
     const record = await createRouteRecord(await readJson(request), env);
     return jsonResponse(envelope('ok', publicRoute(record), routeMessage(record)));
@@ -62,6 +78,7 @@ async function routeRequest(request, env) {
 
   const conditionsMatch = path.match(/^\/v2\/routes\/([^/]+)\/conditions$/);
   if (conditionsMatch && request.method === 'GET') {
+    if (!UUID_PATTERN.test(conditionsMatch[1])) throw new HttpError(400, '路線識別碼格式錯誤');
     return handleConditions(conditionsMatch[1], env, url.searchParams.get('refresh') === '1');
   }
 
@@ -151,8 +168,13 @@ async function routeRequest(request, env) {
 }
 
 async function createRouteRecord(body, env) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new HttpError(400, '請提供有效的路線內容');
+  }
   const locations = validateLocations(body.locations);
   const vehicle = validateVehicle(body.vehicle || {});
+  const strategy = body.preferences?.strategy || 'balanced';
+  if (strategy !== 'balanced') throw new HttpError(400, '不支援的路線策略');
   const costing = vehicle.type === 'car'
     ? 'auto'
     : (vehicle.plate === 'white' ? 'motor_scooter' : 'motorcycle');
@@ -186,7 +208,7 @@ async function createRouteRecord(body, env) {
     routeId,
     locations,
     vehicle,
-    preferences: { strategy: body.preferences?.strategy || 'balanced' },
+    preferences: { strategy },
     geometry: route.geometry,
     encodedShape: route.encodedShape,
     distanceKm: route.distanceKm,
@@ -401,9 +423,34 @@ function legacyCamera(camera) {
 }
 
 async function readJson(request) {
+  const contentLength = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
+    throw new HttpError(413, '請求內容過大');
+  }
   try {
-    return await request.json();
+    if (!request.body) return JSON.parse(await request.text());
+    const reader = request.body.getReader();
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      size += result.value.byteLength;
+      if (size > MAX_JSON_BODY_BYTES) {
+        await reader.cancel();
+        throw new HttpError(413, '請求內容過大');
+      }
+      chunks.push(result.value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    chunks.forEach((chunk) => {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    });
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch (error) {
+    if (error instanceof HttpError) throw error;
     throw new HttpError(400, 'JSON 格式錯誤');
   }
 }
@@ -426,13 +473,49 @@ function jsonTextResponse(value, status = 200) {
   });
 }
 
-function withCors(response) {
+function withCors(response, request) {
   const headers = new Headers(response.headers);
-  headers.set('Access-Control-Allow-Origin', '*');
+  const origin = request && request.headers.get('Origin');
+  if (origin && ALLOWED_CORS_ORIGINS.has(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+  }
   headers.set('Access-Control-Allow-Headers', 'Content-Type');
   headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  headers.set('Vary', 'Origin');
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Cache-Control', 'no-store');
+  if (response.status === 429) headers.set('Retry-After', '60');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function rateLimitDescriptor(path, method, url) {
+  if (method === 'POST' && (path === '/v2/routes' || path === '/route')) {
+    return { binding: 'ROUTE_RATE_LIMITER', group: 'route-create', limit: 12 };
+  }
+  if (method === 'GET' && /^\/v2\/routes\/[^/]+\/conditions$/.test(path) && url.searchParams.get('refresh') === '1') {
+    return { binding: 'ROUTE_RATE_LIMITER', group: 'conditions-refresh', limit: 12 };
+  }
+  if (method === 'GET' && (path === '/v2/geocode')) {
+    return { binding: 'LOOKUP_RATE_LIMITER', group: 'geocode', limit: 60 };
+  }
+  if (method === 'GET' && (path === '/v2/expand' || (path === '/' && url.searchParams.has('url')))) {
+    return { binding: 'LOOKUP_RATE_LIMITER', group: 'map-expand', limit: 60 };
+  }
+  return null;
+}
+
+async function enforceRateLimit(request, env, path, url) {
+  const descriptor = rateLimitDescriptor(path, request.method, url);
+  if (!descriptor) return;
+  const limiter = env[descriptor.binding];
+  if (!limiter || typeof limiter.limit !== 'function') return;
+  const ip = request.headers.get('CF-Connecting-IP') || 'anonymous';
+  const result = await limiter.limit({ key: descriptor.group + ':' + ip });
+  if (!result.success) {
+    console.warn('rate-limit', { group: descriptor.group, result: 'blocked' });
+    throw new HttpError(429, '請求過於頻繁，請稍後再試');
+  }
 }
 
 async function cachePut(env, key, value, ttlSeconds) {

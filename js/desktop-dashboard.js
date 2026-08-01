@@ -142,7 +142,10 @@
       if (safeUrl) {
         media.innerHTML = '<img alt="' + escapeHtml(camera.name || '沿途 CCTV') + '" src="' + escapeHtml(safeUrl + (safeUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now() / 60000)) + '"><span class="desktop-cctv-placeholder">載入影像中</span>';
         var image = media.querySelector('img');
-        if (image) image.addEventListener('error', function() { media.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>影像暫時無法載入</span>'; });
+        if (image) {
+          image.referrerPolicy = 'no-referrer';
+          image.addEventListener('error', function() { media.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>影像暫時無法載入</span>'; });
+        }
       } else {
         media.innerHTML = '<i class="fa-solid fa-camera"></i><span>此攝影機沒有影像來源</span>';
       }

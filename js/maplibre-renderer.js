@@ -40,6 +40,9 @@
     }
     var url = new URL('./assets/vendor/maplibre-gl/maplibre-gl.mjs', document.baseURI).href;
     maplibrePromise = import(url).then(function(module) {
+      if (typeof module.setWorkerUrl === 'function') {
+        module.setWorkerUrl(new URL('./assets/vendor/maplibre-gl/maplibre-gl-worker.mjs', document.baseURI).href);
+      }
       maplibreModule = module;
       return module;
     });
@@ -156,6 +159,10 @@
             pitch: 58,
             bearing: -12,
             maxPitch: 85,
+            bearingSnap: 7,
+            touchPitch: true,
+            touchZoomRotate: true,
+            pitchWithRotate: true,
             attributionControl: true,
             style: {
               version: 8,

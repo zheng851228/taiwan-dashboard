@@ -14,10 +14,11 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#f97316" />
   <meta name="apple-mobile-web-app-title" content="路況指揮" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://taiwan-dashboard-api-production.lucky851228.workers.dev https://taiwan-dashboard-api-staging.lucky851228.workers.dev http://localhost:8787 http://127.0.0.1:8787 https://*.basemaps.cartocdn.com https://tiles.mapterhorn.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com; object-src 'none'; base-uri 'self'; form-action 'self';" />
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=32" />
+  <link rel="stylesheet" href="css/style.css?v=33" />
 </head>
 <body class="text-slate-100" data-route-state="empty">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -72,7 +73,7 @@
   <!-- 診斷狀態面板（點擊時鐘3次開啟）-->
 
   <div id="diag-panel">
-    <button class="diag-close" onclick="document.getElementById('diag-panel').classList.remove('visible')">&times;</button>
+    <button id="diag-close" class="diag-close" type="button">&times;</button>
     <div style="color:#10b981;font-weight:bold;margin-bottom:4px;">🔧 診斷日誌</div>
     <div id="diag-log"></div>
   </div>
@@ -712,7 +713,7 @@
         <span style="font-size:12px;font-weight:900;">沿途影像</span>
         <span id="strip-count" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
       </div>
-      <button onclick="RouteStripMod.hide()" style="width:22px;height:22px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
+      <button id="route-strip-close" type="button" style="width:22px;height:22px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
         <i class="fa-solid fa-xmark" style="font-size:10px;"></i>
       </button>
     </div>

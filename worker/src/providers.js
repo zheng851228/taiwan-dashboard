@@ -1553,16 +1553,40 @@ const MAP_HOSTS = new Set([
 ]);
 
 export async function expandMapUrl(rawUrl) {
-  let current = new URL(rawUrl);
+  if (typeof rawUrl !== 'string' || rawUrl.length === 0 || rawUrl.length > 2048) {
+    throw invalidMapUrl('地圖網址格式錯誤或過長');
+  }
+  let current;
+  try {
+    current = new URL(rawUrl);
+  } catch {
+    throw invalidMapUrl('地圖網址格式錯誤');
+  }
   for (let redirectCount = 0; redirectCount < 5; redirectCount += 1) {
-    if (!MAP_HOSTS.has(current.hostname)) throw new Error('Unsupported map URL host');
+    validateMapUrl(current);
     const response = await fetch(current.toString(), { redirect: 'manual' });
     if (response.status < 300 || response.status >= 400) return current.toString();
     const location = response.headers.get('location');
     if (!location) return current.toString();
-    current = new URL(location, current);
+    try {
+      current = new URL(location, current);
+    } catch {
+      throw invalidMapUrl('地圖重新導向網址格式錯誤');
+    }
   }
-  throw new Error('Too many redirects');
+  throw invalidMapUrl('地圖網址重新導向次數過多');
+}
+
+function validateMapUrl(url) {
+  if (url.protocol !== 'https:') throw invalidMapUrl('僅支援 HTTPS 地圖網址');
+  if (url.username || url.password || url.port) throw invalidMapUrl('地圖網址不可包含帳密或自訂 port');
+  if (!MAP_HOSTS.has(url.hostname.toLowerCase())) throw invalidMapUrl('不支援的地圖網址來源');
+}
+
+function invalidMapUrl(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
 }
 
 function arrayFromPayload(payload, keys) {
