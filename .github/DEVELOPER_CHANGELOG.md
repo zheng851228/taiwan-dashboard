@@ -2,6 +2,11 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-01 — PWA v35 mobile shell boundary
+
+- Mobile Safari／Android 不再載入 MapLibre renderer 或桌面指揮台模組；只有 ≥1200px 桌面視窗才動態請求，失敗時回退 Leaflet 傳統地圖。
+- Service Worker 清除 v34 shell，保留桌面首次使用後的動態快取；不改 Worker endpoint、路線 schema 或 production routing。
+
 ## 2026-08-01 — PWA v34 3D camera and home navigation
 
 - 桌面 3D 地圖新增鳥瞰、立體、沿路、重置視角，保留原生羅盤、縮放與自由旋轉；DEM／WebGL fallback 時自動停用視角選單。
