@@ -47,8 +47,8 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v36"');
-    expect(serviceWorker).toContain('./css/style.css?v=36');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v37"');
+    expect(serviceWorker).toContain('./css/style.css?v=37');
     expect(html).toContain('js/desktop-bootstrap.js');
     expect(serviceWorker).toContain('./js/desktop-bootstrap.js');
     expect(serviceWorker).not.toContain('./js/maplibre-renderer.js');
