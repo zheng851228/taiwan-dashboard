@@ -118,7 +118,8 @@
         var h = String(n.getHours()).padStart(2,'0');
         var m = String(n.getMinutes()).padStart(2,'0');
         var s = String(n.getSeconds()).padStart(2,'0');
-        if (clk) clk.textContent = h+':'+m+':'+s;
+        var desktopClock = window.matchMedia && window.matchMedia('(min-width: 1200px)').matches;
+        if (clk) clk.textContent = desktopClock ? h+':'+m : h+':'+m+':'+s;
       }
       tick(); setInterval(tick, 1000);
     }

@@ -80,6 +80,28 @@ test('1280px ready command center keeps the map dominant without horizontal over
   expect(metrics.supportHeight).toBeGreaterThan(200);
 });
 
+test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
+  const mapTilerRequests = [];
+  page.on('request', request => { if (request.url().includes('api.maptiler.com')) mapTilerRequests.push(request.url()); });
+  await page.setViewportSize({ width: 1280, height: 853 });
+  await page.addInitScript(() => {
+    localStorage.removeItem('tw_desktop_basemap_v1');
+    localStorage.removeItem('tw_desktop_map_renderer_v1');
+  });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  await expect(page.locator('#desktop-route-intelligence')).toBeVisible();
+  await expect(page.locator('.desktop-route-stop').first()).toBeVisible();
+  await expect(page.locator('#desktop-map-basemap')).toHaveText('底圖');
+  await page.locator('#desktop-map-basemap').click();
+  await expect(page.locator('#desktop-basemap-setting-state')).toHaveText('深色地圖');
+  await page.locator('#desktop-playback-toggle').click();
+  await expect.poll(() => page.locator('#desktop-playback-distance').textContent()).not.toBe('0 km');
+  await page.locator('#desktop-playback-toggle').click();
+  expect(mapTilerRequests).toEqual([]);
+});
+
 test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop map renderer verification only.');
   await page.setViewportSize({ width: 1536, height: 1024 });
@@ -87,7 +109,8 @@ test('2D and 3D controls can recover from the traditional map fallback', async (
   await page.goto(WORKER);
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
 
-  await page.locator('#desktop-map-legacy').click();
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-map-mode-setting').click();
   await expect(page.locator('body')).toHaveClass(/desktop-legacy-map/);
   await expect(page.locator('#map')).toBeVisible();
 

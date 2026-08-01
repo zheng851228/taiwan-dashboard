@@ -2,6 +2,12 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-02 — PWA v38 desktop fidelity draft
+
+- 桌面 MapLibre 支援受限 MapTiler `satellite-v4` 公開 Key；未設定、403、逾時或離線時維持 CARTO 深色 3D，不阻塞路線分析。
+- 補上衛星／深色偏好、MapTiler attribution、路線深色 casing、最多六個定位事件 callout、緊湊沿途時間軸、CCTV 輪播與 geometry-only 模擬播放。
+- 海拔資料不足時保留面板並明確標示未知，不補成零；手機不載入桌面 MapLibre／MapTiler。MapTiler Key 尚未建立，v38 保持 draft，不合併或部署。
+
 ## 2026-08-02 — PWA v37 desktop bottom alignment
 
 - 桌面指揮台移除底列多餘留白，讓圖例、沿途時間軸與 CCTV 面板共享同一底線。

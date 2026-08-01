@@ -5,6 +5,7 @@
 
   var DESKTOP_BREAKPOINT = '(min-width: 1200px)';
   var MAP_PREF_KEY = 'tw_desktop_map_renderer_v1';
+  var BASEMAP_PREF_KEY = 'tw_desktop_basemap_v1';
   var CAMERA_PREF_KEY = 'tw_desktop_camera_preset_v1';
   var ELEVATION_CACHE_KEY = 'tw_route_elevation_cache_v1';
   var ELEVATION_SOURCE_VERSION = 'mapterhorn-v1';
@@ -17,7 +18,9 @@
     playback: { playing: false, distance: 0, lastTime: 0, raf: null, speed: 1 },
     elevation: null,
     pendingTerrainMode: null,
-    cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid')
+    cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid'),
+    basemap: Storage.get(BASEMAP_PREF_KEY, 'satellite') === 'satellite' ? 'satellite' : 'dark',
+    cctvIndex: 0
   };
 
   var TRAFFIC_LABELS = {
@@ -50,7 +53,13 @@
 
   function routeLabel() {
     var values = AppState.routeInputValues || [];
-    if (values.length >= 2) return values[0] + ' → ' + values[values.length - 1];
+    var route = AppState.activeRoute;
+    if (route && route.dataMode === 'fixture') return '示範路線';
+    if (values.length >= 2) {
+      var coordinateOnly = values.slice(0, 2).every(function(value) { return /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(String(value)); });
+      return coordinateOnly ? '座標路線' : values[0] + ' → ' + values[values.length - 1];
+    }
+    if (route && route.geometry && Array.isArray(route.geometry.coordinates)) return '座標路線';
     return '尚未規劃路線';
   }
 
@@ -90,6 +99,44 @@
     text('desktop-support-updated', data && data.updatedAt ? formatUpdatedAt(data.updatedAt) : '--:--:--');
   }
 
+  function renderRouteIntelligence(data) {
+    var panel = Dom.byId('desktop-route-intelligence');
+    var stops = Dom.byId('desktop-route-stops');
+    var band = Dom.byId('desktop-traffic-band');
+    var weatherTrack = Dom.byId('desktop-weather-track');
+    var sections = data && data.sections || [];
+    if (!panel || !stops || !band || !weatherTrack) return;
+    if (!sections.length) {
+      panel.classList.add('hidden');
+      stops.innerHTML = band.innerHTML = weatherTrack.innerHTML = '';
+      return;
+    }
+    panel.classList.remove('hidden');
+    var visible = sections.slice(0, 6);
+    stops.innerHTML = visible.map(function(section, index) {
+      var road = section.roadRef || section.roadName || ('路段 ' + (index + 1));
+      var distance = Number.isFinite(Number(section.toKm)) ? Math.round(Number(section.toKm)) + ' km' : '--';
+      var active = Number(section.order) === Number(state.selectedOrder) ? ' active' : '';
+      return '<button type="button" class="desktop-route-stop' + active + '" data-section-order="' + Number(section.order) + '"><strong>' + escapeHtml(road) + '</strong><span>' + escapeHtml(distance) + '</span></button>';
+    }).join('');
+    band.innerHTML = visible.map(function(section) {
+      var level = section.traffic && section.traffic.level || 'unknown';
+      var from = Number(section.fromKm);
+      var to = Number(section.toKm);
+      var width = Number.isFinite(from) && Number.isFinite(to) && to > from ? Math.max(4, to - from) : 1;
+      return '<span class="desktop-traffic-segment is-' + escapeHtml(level) + '" style="flex:' + width.toFixed(2) + '" title="' + escapeHtml(TRAFFIC_LABELS[level] || '資料不足') + '"></span>';
+    }).join('');
+    weatherTrack.innerHTML = visible.map(function(section) {
+      var weather = section.weather || {};
+      var condition = weather.condition || '未知';
+      var rain = Number.isFinite(Number(weather.rainChance)) ? ' · ' + Number(weather.rainChance) + '%' : '';
+      return '<span><i class="fa-solid fa-cloud-rain"></i>' + escapeHtml(condition + rain) + '</span>';
+    }).join('');
+    Dom.queryAll('.desktop-route-stop').forEach(function(button) {
+      button.addEventListener('click', function() { state.selectedOrder = Number(button.dataset.sectionOrder); renderContext(); renderRouteIntelligence(data); });
+    });
+  }
+
   function eventLabel(incident) {
     return incident && (incident.title || incident.kind || '道路狀況') || '道路狀況';
   }
@@ -124,19 +171,31 @@
           + escapeHtml(eventLabel(incident)) + (approximate ? ' · 位置未提供' : '') + '</span></div>';
       }).join('') || '<div class="desktop-context-ok"><i class="fa-solid fa-circle-info"></i><span>目前選取路段沒有可定位道路事件</span></div>';
     }
+    state.cctvIndex = 0;
     if (state.renderer) state.renderer.focusSection(Number(section.order));
+    renderCctv();
   }
 
   function renderCctv() {
-    var cameras = (window.RouteMod && RouteMod.filteredCams || []).slice();
-    var camera = cameras[0];
+    var allCameras = (window.RouteMod && RouteMod.filteredCams || []).slice();
+    var selected = state.sections.find(function(item) { return Number(item.order) === Number(state.selectedOrder); });
+    var preferred = selected && selected.cameras || [];
+    var cameras = preferred.concat(allCameras).filter(function(camera, index, list) {
+      return camera && list.findIndex(function(item) { return item.id === camera.id; }) === index;
+    });
+    if (state.cctvIndex >= cameras.length) state.cctvIndex = 0;
+    var camera = cameras[state.cctvIndex];
     var media = Dom.byId('desktop-cctv-media');
     var open = Dom.byId('desktop-cctv-open');
+    var prev = Dom.byId('desktop-cctv-prev');
+    var next = Dom.byId('desktop-cctv-next');
     if (!camera) {
       if (media) media.innerHTML = '<i class="fa-solid fa-camera"></i><span>目前沒有可用的沿線影像</span>';
       text('desktop-cctv-status', '未知');
       text('desktop-cctv-name', '--');
       if (open) open.disabled = true;
+      if (prev) prev.disabled = true;
+      if (next) next.disabled = true;
       return;
     }
     var safeUrl = safeHttpUrl(camera.url);
@@ -153,8 +212,10 @@
       }
     }
     text('desktop-cctv-status', camera.status === 'offline' ? '離線' : '沿線影像');
-    text('desktop-cctv-name', camera.name || '沿途攝影機');
+    text('desktop-cctv-name', (camera.name || '沿途攝影機') + ' · ' + (state.cctvIndex + 1) + '/' + cameras.length);
     if (open) open.disabled = false;
+    if (prev) prev.disabled = cameras.length < 2;
+    if (next) next.disabled = cameras.length < 2;
   }
 
   function updateDesktopView(data) {
@@ -163,6 +224,7 @@
       state.sections = data.sections || [];
       if (state.selectedOrder === null && state.sections.length) state.selectedOrder = state.sections[0].order;
       reportConditions(data);
+      renderRouteIntelligence(data);
       renderContext();
       renderCctv();
       if (state.renderer) {
@@ -259,12 +321,15 @@
     showLegacyMap(false);
     var renderer = MapRenderer.create({
       container: 'desktop-map',
+      basemap: state.basemap,
       onReady: function(instance) {
         state.renderer = instance;
         state.renderer.setTerrainMode(state.pendingTerrainMode || '3d');
         state.pendingTerrainMode = null;
         var route = routeCoordinates();
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
+        state.basemap = state.renderer.getBasemap();
+        Storage.set(BASEMAP_PREF_KEY, state.basemap);
         updateDesktopView(AppState.routeConditions);
         DesktopElevationMod.refresh();
         syncCameraControls();
@@ -277,6 +342,12 @@
           var modeState = Dom.byId('desktop-map-mode-state');
           if (modeState) modeState.textContent = '2D 地圖';
           syncCameraControls();
+        }
+        if (status === 'basemap-unavailable') {
+          state.basemap = 'dark';
+          Storage.set(BASEMAP_PREF_KEY, 'dark');
+          syncSettings();
+          Toast.show('衛星底圖暫時無法載入，已切回深色地圖', 3000);
         }
       },
       onFallback: function() {
@@ -333,6 +404,22 @@
     if (clockButton) clockButton.setAttribute('aria-pressed', String(Boolean(clockHidden)));
     if (bannerButton) bannerButton.setAttribute('aria-pressed', String(Boolean(bannerHidden)));
     text('desktop-map-mode-state', Storage.get(MAP_PREF_KEY, 'auto') === 'legacy' ? '傳統地圖' : '3D 地形');
+    text('desktop-basemap-setting-state', state.basemap === 'satellite' ? '衛星底圖' : '深色地圖');
+  }
+
+  function toggleBasemap() {
+    var next = state.basemap === 'satellite' ? 'dark' : 'satellite';
+    state.basemap = next;
+    Storage.set(BASEMAP_PREF_KEY, next);
+    if (state.renderer) {
+      var actual = state.renderer.setBasemap(next);
+      if (actual !== next) {
+        state.basemap = actual;
+        Storage.set(BASEMAP_PREF_KEY, actual);
+        Toast.show('衛星底圖目前不可用，已使用深色地圖', 3000);
+      }
+    }
+    syncSettings();
   }
 
   function bindControls() {
@@ -355,6 +442,25 @@
       NavMod.go('list');
       window.setTimeout(function() { var search = Dom.byId('js-search'); if (search) search.focus(); }, 80);
     });
+    Dom.onId('desktop-cctv-prev', 'click', function() {
+      var count = (RouteMod && RouteMod.filteredCams || []).length;
+      if (count < 2) return;
+      state.cctvIndex = (state.cctvIndex - 1 + count) % count;
+      renderCctv();
+    });
+    Dom.onId('desktop-cctv-next', 'click', function() {
+      var count = (RouteMod && RouteMod.filteredCams || []).length;
+      if (count < 2) return;
+      state.cctvIndex = (state.cctvIndex + 1) % count;
+      renderCctv();
+    });
+    Dom.onId('desktop-condition-info-toggle', 'click', function(button) {
+      var popover = Dom.byId('desktop-condition-info-popover');
+      if (!popover) return;
+      var open = popover.classList.contains('hidden');
+      popover.classList.toggle('hidden', !open);
+      button.setAttribute('aria-expanded', String(open));
+    });
     Dom.onId('desktop-clock-setting', 'click', function() {
       UiPrefsMod.setHidden('clockHidden', !UiPrefsMod.isHidden('clockHidden'));
       syncSettings();
@@ -372,6 +478,8 @@
         enableRenderer();
       }
     });
+    Dom.onId('desktop-basemap-setting', 'click', toggleBasemap);
+    Dom.onId('desktop-map-basemap', 'click', toggleBasemap);
     Dom.onId('desktop-map-2d', 'click', function() {
       state.pendingTerrainMode = '2d';
       if (!state.renderer) {
@@ -441,6 +549,7 @@
     Bus.on('vehicle:changed', syncHeader);
     Bus.on('route:updated', function() {
       syncHeader();
+      state.cctvIndex = 0;
       if (state.renderer) {
         var route = routeCoordinates();
         state.renderer.drawRoute(route, RouteMod.mode);
@@ -451,10 +560,15 @@
       if (window.DesktopElevationMod) DesktopElevationMod.refresh();
     });
     Bus.on('conditions:updated', function(data) { updateDesktopView(data); });
-    Bus.on('condition:select', function(order) { state.selectedOrder = Number(order); renderContext(); });
+    Bus.on('condition:select', function(order) {
+      state.selectedOrder = Number(order);
+      renderContext();
+      renderRouteIntelligence(AppState.routeConditions);
+    });
     Bus.on('route:cleared', function() {
       state.sections = [];
       state.selectedOrder = null;
+      state.cctvIndex = 0;
       if (state.renderer) state.renderer.clear();
       reportConditions(null);
       renderContext();
@@ -464,6 +578,13 @@
     Bus.on('filter:changed', function() { if (state.renderer) state.renderer.drawCameras(RouteMod.filteredCams || []); renderCctv(); });
     Bus.on('camera:selected', function(camera) {
       if (camera && state.renderer) state.renderer.focusPoint(camera.lat, camera.lng, 13);
+    });
+    Bus.on('route-cursor:change', function(event) {
+      if (event && event.sectionOrder !== null && Number(event.sectionOrder) !== Number(state.selectedOrder)) {
+        state.selectedOrder = Number(event.sectionOrder);
+        renderRouteIntelligence(AppState.routeConditions);
+        renderCctv();
+      }
     });
     Bus.on('route-ui:state', syncCameraControls);
     syncHeader();
@@ -563,7 +684,7 @@
     if (valid.length < 2) {
       chart.innerHTML = '<text x="400" y="82" text-anchor="middle" class="desktop-chart-empty">3D 地形資料不足，暫無海拔曲線</text>';
       summary.textContent = '地形資料不足；不將未知高度補成 0。';
-      setVisible('desktop-elevation-panel', false);
+      setVisible('desktop-elevation-panel', true);
       return;
     }
     setVisible('desktop-elevation-panel', true);
@@ -655,10 +776,19 @@
         state.selectedOrder = Number(section.order);
         renderContext();
       }
+      Bus.emit('route-cursor:change', {
+        distanceKm: state.playback.distance,
+        ratio: ratio,
+        point: point,
+        sectionOrder: section ? Number(section.order) : null
+      });
+      var stops = Dom.byId('desktop-route-stops');
+      if (stops) Dom.queryAll('.desktop-route-stop').forEach(function(stop) { stop.classList.toggle('active', Number(stop.dataset.sectionOrder) === Number(state.selectedOrder)); });
     },
     toggle: function() {
       if (state.playback.playing) { this.stop(); return; }
-      if (!state.elevation) return;
+      var points = routeCoordinates();
+      if (points.length < 2) return;
       state.playback.playing = true;
       state.playback.lastTime = performance.now();
       var toggle = Dom.byId('desktop-playback-toggle');
@@ -668,7 +798,9 @@
         if (!state.playback.playing) return;
         var deltaSeconds = Math.min(0.2, Math.max(0, now - state.playback.lastTime) / 1000);
         state.playback.lastTime = now;
-        var total = state.elevation[state.elevation.length - 1].distance || 0;
+        var currentPoints = routeCoordinates();
+        var currentTotal = routeCumulative(currentPoints);
+        var total = currentTotal[currentTotal.length - 1] || 0;
         self.setDistance(state.playback.distance + deltaSeconds * 12 * state.playback.speed);
         if (state.playback.distance >= total) { self.setDistance(total); self.stop(); return; }
         state.playback.raf = window.requestAnimationFrame(frame);
