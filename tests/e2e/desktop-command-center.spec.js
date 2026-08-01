@@ -80,6 +80,68 @@ test('1280px ready command center keeps the map dominant without horizontal over
   expect(metrics.supportHeight).toBeGreaterThan(200);
 });
 
+test('desktop traffic browser keeps the filter shell above cards without covering them', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop traffic-browser verification only.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.goto(WORKER);
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-open-list').click();
+  await expect(page.locator('#pg-list')).toHaveClass(/active/);
+
+  const filter = page.locator('#pg-list .list-filter-shell');
+  const firstCard = page.locator('#pg-list .cam-card').first();
+  await expect(firstCard).toBeVisible();
+  const layout = await page.evaluate(() => {
+    const shell = document.querySelector('#pg-list .list-filter-shell');
+    const card = document.querySelector('#pg-list .cam-card');
+    if (!shell || !card) return null;
+    const shellRect = shell.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    return {
+      position: getComputedStyle(shell).position,
+      shellBottom: shellRect.bottom,
+      cardTop: cardRect.top
+    };
+  });
+  expect(layout).not.toBeNull();
+  expect(layout.position).toBe('relative');
+  expect(layout.cardTop).toBeGreaterThanOrEqual(layout.shellBottom - 1);
+});
+
+test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
+  let mapTilerRequestCount = 0;
+  let satelliteMapRequestCount = 0;
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.hostname !== 'api.maptiler.com') return;
+    mapTilerRequestCount += 1;
+    if (url.pathname.includes('/maps/satellite-v4/')) satelliteMapRequestCount += 1;
+  });
+  await page.setViewportSize({ width: 1280, height: 853 });
+  await page.addInitScript(() => {
+    localStorage.removeItem('tw_desktop_basemap_v1');
+    localStorage.removeItem('tw_desktop_map_renderer_v1');
+  });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  await expect(page.locator('#desktop-route-intelligence')).toBeVisible();
+  await expect(page.locator('.desktop-route-stop').first()).toBeVisible();
+  await expect(page.locator('#desktop-map-basemap')).toHaveText('底圖');
+  await page.locator('#desktop-map-basemap').click();
+  await expect(page.locator('#desktop-basemap-setting-state')).toHaveText('深色地圖');
+  await page.locator('#desktop-playback-toggle').click();
+  await expect.poll(() => page.locator('#desktop-playback-distance').textContent()).not.toBe('0 km');
+  await page.locator('#desktop-playback-toggle').click();
+  const keyConfigured = await page.evaluate(() => Boolean(window.TWMapProviderConfig && window.TWMapProviderConfig.key));
+  if (keyConfigured) {
+    expect(mapTilerRequestCount).toBeGreaterThan(0);
+    expect(satelliteMapRequestCount).toBeGreaterThan(0);
+  } else {
+    expect(mapTilerRequestCount).toBe(0);
+  }
+});
+
 test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop map renderer verification only.');
   await page.setViewportSize({ width: 1536, height: 1024 });
@@ -87,7 +149,8 @@ test('2D and 3D controls can recover from the traditional map fallback', async (
   await page.goto(WORKER);
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
 
-  await page.locator('#desktop-map-legacy').click();
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-map-mode-setting').click();
   await expect(page.locator('body')).toHaveClass(/desktop-legacy-map/);
   await expect(page.locator('#map')).toBeVisible();
 

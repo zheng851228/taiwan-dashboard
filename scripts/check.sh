@@ -16,6 +16,7 @@ node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
 node --check js/desktop-dashboard.js
+node --check js/map-provider-config.js
 node --check js/pwa.js
 node --check sw.js
 node --check worker/src/polyline.js

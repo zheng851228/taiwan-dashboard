@@ -25,6 +25,7 @@
   // keeps MapLibre from requesting surrounding sea/Japan tiles that return
   // 404, while still covering Taiwan, Kinmen, Matsu, and Penghu routes.
   var TERRAIN_BOUNDS = [117.5, 20.5, 123.4, 26.7];
+  var PROVIDER_CONFIG = window.TWMapProviderConfig || {};
   var maplibreModule = null;
   var maplibrePromise = null;
 
@@ -150,6 +151,16 @@
     return element;
   }
 
+  function satelliteTiles() {
+    if (PROVIDER_CONFIG.provider !== 'maptiler' || !PROVIDER_CONFIG.key) return [];
+    var tileset = encodeURIComponent(PROVIDER_CONFIG.tileset || 'satellite-v4');
+    var key = encodeURIComponent(PROVIDER_CONFIG.key);
+    // satellite-v4 is a hosted map (Maps API), not a standalone tileset.
+    // Keep the provider key in the query string so MapLibre can request the
+    // raster XYZ tiles without exposing it in application state or logs.
+    return ['https://api.maptiler.com/maps/' + tileset + '/{z}/{x}/{y}.jpg?key=' + key];
+  }
+
   function createRenderer(options) {
     var renderer = {
       map: null,
@@ -162,6 +173,12 @@
       selectedOrder: null,
       currentPreset: 'solid',
       cameraProgrammatic: false,
+      basemap: options.basemap === 'satellite' && PROVIDER_CONFIG.key ? 'satellite' : 'dark',
+      satelliteAvailable: false,
+      satelliteFailed: false,
+      satelliteTimer: null,
+      routeFitApplied: false,
+      eventMarkerCount: 0,
       onReady: options.onReady || function() {},
       onFallback: options.onFallback || function() {},
       onStatus: options.onStatus || function() {},
@@ -171,6 +188,65 @@
         return loadMapLibre().then(function(module) {
           self.module = module;
           var maplibregl = module;
+          var satellite = satelliteTiles();
+          self.satelliteAvailable = satellite.length > 0;
+          var sources = {
+            base: {
+              type: 'raster',
+              tiles: [
+                'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+                'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+                'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+                'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'
+              ],
+              tileSize: 256,
+              attribution: '&copy; OpenStreetMap &copy; CARTO',
+              maxzoom: 19
+            },
+            terrainSource: {
+              type: 'raster-dem',
+              url: 'https://tiles.mapterhorn.com/tilejson.json',
+              tileSize: 512,
+              encoding: 'terrarium',
+              bounds: TERRAIN_BOUNDS
+            },
+            hillshadeSource: {
+              type: 'raster-dem',
+              url: 'https://tiles.mapterhorn.com/tilejson.json',
+              tileSize: 512,
+              encoding: 'terrarium',
+              bounds: TERRAIN_BOUNDS
+            }
+          };
+          if (self.satelliteAvailable) {
+            sources.satellite = {
+              type: 'raster',
+              tiles: satellite,
+              tileSize: 512,
+              attribution: '<a href="https://www.maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> &copy; OpenStreetMap contributors',
+              maxzoom: 20
+            };
+          }
+          var layers = [
+            // Start on the local CARTO base so MapLibre can finish its initial
+            // style load even when a source-restricted MapTiler key rejects
+            // local requests. The requested satellite basemap is enabled
+            // after `load`, where the existing fallback can handle 403s or
+            // timeouts without blocking labels, route data, or controls.
+            self.satelliteAvailable ? { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } } : null,
+            { id: 'base', type: 'raster', source: 'base', layout: { visibility: 'visible' } },
+            {
+              id: 'hillshade',
+              type: 'hillshade',
+              source: 'hillshadeSource',
+              paint: {
+                'hillshade-shadow-color': '#0b1f2a',
+                'hillshade-highlight-color': '#b8d5c5',
+                'hillshade-accent-color': '#284c4d',
+                'hillshade-exaggeration': 0.55
+              }
+            }
+          ].filter(Boolean);
           self.map = new maplibregl.Map({
             container: options.container,
             center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]],
@@ -185,48 +261,8 @@
             attributionControl: true,
             style: {
               version: 8,
-              sources: {
-                base: {
-                  type: 'raster',
-                  tiles: [
-                    'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                    'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                    'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                    'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'
-                  ],
-                  tileSize: 256,
-                  attribution: '&copy; OpenStreetMap &copy; CARTO',
-                  maxzoom: 19
-                },
-                terrainSource: {
-                  type: 'raster-dem',
-                  url: 'https://tiles.mapterhorn.com/tilejson.json',
-                  tileSize: 512,
-                  encoding: 'terrarium',
-                  bounds: TERRAIN_BOUNDS
-                },
-                hillshadeSource: {
-                  type: 'raster-dem',
-                  url: 'https://tiles.mapterhorn.com/tilejson.json',
-                  tileSize: 512,
-                  encoding: 'terrarium',
-                  bounds: TERRAIN_BOUNDS
-                }
-              },
-              layers: [
-                { id: 'base', type: 'raster', source: 'base' },
-                {
-                  id: 'hillshade',
-                  type: 'hillshade',
-                  source: 'hillshadeSource',
-                  paint: {
-                    'hillshade-shadow-color': '#0b1f2a',
-                    'hillshade-highlight-color': '#b8d5c5',
-                    'hillshade-accent-color': '#284c4d',
-                    'hillshade-exaggeration': 0.55
-                  }
-                }
-              ],
+              sources: sources,
+              layers: layers,
               terrain: { source: 'terrainSource', exaggeration: 1 },
               sky: {}
             }
@@ -247,10 +283,25 @@
                 self.onStatus('terrain-unavailable');
               }
             }, 8000);
+            self._syncProviderLogo();
             self.onReady(self);
+            if (self.satelliteAvailable && self.basemap === 'satellite') {
+              self.setBasemap('satellite');
+              self.satelliteTimer = window.setTimeout(function() {
+                if (self.map && self.basemap === 'satellite' && !self.map.isSourceLoaded('satellite')) {
+                  self.setBasemap('dark', true);
+                  self.onStatus('basemap-unavailable');
+                }
+              }, 8000);
+            }
           });
           self.map.on('error', function(event) {
             var message = String(event && event.error && event.error.message || '');
+            if (self.basemap === 'satellite' && (/maptiler|satellite/i.test(message) || event && event.sourceId === 'satellite')) {
+              self.setBasemap('dark', true);
+              self.onStatus('basemap-unavailable');
+              return;
+            }
             if (/mapterhorn|terrainSource|raster-dem/i.test(message)) {
               self.setTerrainMode('2d');
               self.onStatus('terrain-unavailable');
@@ -262,6 +313,25 @@
           throw error;
         });
       },
+      _syncProviderLogo: function() {
+        var container = Dom.byId(options.container);
+        if (!container) return;
+        var existing = container.querySelector('.desktop-map-provider-logo');
+        if (this.basemap !== 'satellite' || !this.satelliteAvailable || this.satelliteFailed) {
+          if (existing) existing.remove();
+          return;
+        }
+        if (!existing) {
+          existing = document.createElement('a');
+          existing.className = 'desktop-map-provider-logo';
+          existing.target = '_blank';
+          existing.rel = 'noopener noreferrer';
+          existing.href = PROVIDER_CONFIG.logoLink || 'https://www.maptiler.com/';
+          existing.textContent = 'MapTiler';
+          existing.setAttribute('aria-label', 'MapTiler 地圖來源');
+          container.appendChild(existing);
+        }
+      },
       _addDataLayers: function() {
         var map = this.map;
         if (!map || map.getSource('desktop-route')) return;
@@ -270,8 +340,10 @@
         map.addSource('desktop-events', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('desktop-cameras', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addSource('desktop-weather', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({ id: 'desktop-route-casing', type: 'line', source: 'desktop-route', paint: { 'line-color': '#07111b', 'line-width': 10, 'line-opacity': 0.9 } });
         map.addLayer({ id: 'desktop-route-glow', type: 'line', source: 'desktop-route', paint: { 'line-color': '#fb923c', 'line-width': 12, 'line-opacity': 0.18, 'line-blur': 2 } });
         map.addLayer({ id: 'desktop-route-core', type: 'line', source: 'desktop-route', paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.96 } });
+        map.addLayer({ id: 'desktop-section-casing', type: 'line', source: 'desktop-sections', paint: { 'line-color': '#07111b', 'line-width': 10, 'line-opacity': 0.88 } });
         map.addLayer({ id: 'desktop-section-glow', type: 'line', source: 'desktop-sections', paint: { 'line-color': ['match', ['get', 'level'], 'clear', TRAFFIC_COLORS.clear, 'slow', TRAFFIC_COLORS.slow, 'congested', TRAFFIC_COLORS.congested, TRAFFIC_COLORS.unknown], 'line-width': 12, 'line-opacity': 0.2, 'line-blur': 2 } });
         map.addLayer({ id: 'desktop-section-core', type: 'line', source: 'desktop-sections', paint: { 'line-color': ['match', ['get', 'level'], 'clear', TRAFFIC_COLORS.clear, 'slow', TRAFFIC_COLORS.slow, 'congested', TRAFFIC_COLORS.congested, TRAFFIC_COLORS.unknown], 'line-width': 6, 'line-opacity': 0.98 } });
         map.addLayer({ id: 'desktop-event-cue', type: 'line', source: 'desktop-events', paint: { 'line-color': ['get', 'color'], 'line-width': 8, 'line-opacity': 0.96, 'line-dasharray': [1.5, 1] } });
@@ -322,22 +394,34 @@
         if (this.cursorMarker) { this.cursorMarker.remove(); this.cursorMarker = null; }
         this.cameraById = {};
         this.routeCoords = [];
+        this.routeFitApplied = false;
         this.selectedOrder = null;
         this.currentPreset = 'solid';
+        this.eventMarkerCount = 0;
       },
       drawRoute: function(coords) {
         if (!coords || coords.length < 2) return;
         this.routeCoords = coords.slice();
+        this.routeFitApplied = true;
         var line = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords.map(toLngLat) } };
         this._setSourceData('desktop-route', { type: 'FeatureCollection', features: [line] });
         var bounds = makeBounds(this.module, coords);
-        if (bounds && this.map) this.map.fitBounds(bounds, { padding: 60, maxZoom: 11, duration: 0 });
+        if (bounds && this.map) this.map.fitBounds(bounds, { padding: this._routePadding(), maxZoom: 11, duration: 0 });
       },
       drawConditionSections: function(sections) {
         var self = this;
         var sectionFeatures = [];
         var eventFeatures = [];
         var weatherFeatures = [];
+        this.eventMarkerCount = 0;
+        this.markers.forEach(function(marker) {
+          var element = marker.getElement && marker.getElement();
+          if (element && element.classList.contains('desktop-event-marker')) marker.remove();
+        });
+        this.markers = this.markers.filter(function(marker) {
+          var element = marker.getElement && marker.getElement();
+          return !(element && element.classList.contains('desktop-event-marker'));
+        });
         (sections || []).forEach(function(section) {
           var feature = sectionFeature(section);
           if (!feature) return;
@@ -345,8 +429,9 @@
           (section.incidents || []).forEach(function(incident) {
             var cue = eventCue(section, incident);
             if (cue) eventFeatures.push(cue);
-            if (!incident.locationApproximate && Number.isFinite(Number(incident.lat)) && Number.isFinite(Number(incident.lng))) {
+            if (self.eventMarkerCount < 6 && !incident.locationApproximate && Number.isFinite(Number(incident.lat)) && Number.isFinite(Number(incident.lng))) {
               self._addEventMarker(incident, section);
+              self.eventMarkerCount += 1;
             }
           });
           var weather = section.weather || {};
@@ -362,14 +447,17 @@
         sectionFeatures.forEach(function(feature) { coords = coords.concat(feature.geometry.coordinates.map(function(point) { return [point[1], point[0]]; })); });
         if (!this.routeCoords.length && coords.length) this.routeCoords = coords;
         var bounds = makeBounds(this.module, coords);
-        if (bounds && this.map) this.map.fitBounds(bounds, { padding: 60, maxZoom: 11, duration: 0 });
+        if (bounds && this.map && !this.routeFitApplied) {
+          this.routeFitApplied = true;
+          this.map.fitBounds(bounds, { padding: this._routePadding(), maxZoom: 11, duration: 0 });
+        }
       },
       _addEventMarker: function(incident, section) {
         if (!this.module || !this.map) return;
         var kind = inferEventKind(incident);
         var label = (section.roadRef || section.roadName || '沿途路段') + ' · ' + (incident.title || kind);
         var element = markerElement('desktop-event-marker desktop-event-' + kind, label, EVENT_COLORS[kind]);
-        element.innerHTML = '<span>' + (kind === 'construction' ? '⚠' : kind === 'accident' ? '!' : kind === 'weather' ? '☁' : '•') + '</span>';
+        element.innerHTML = '<span class="desktop-event-icon">' + (kind === 'construction' ? '⚠' : kind === 'accident' ? '!' : kind === 'weather' ? '☁' : '•') + '</span><span class="desktop-event-callout">' + escapeHtml(incident.title || kind) + '</span>';
         element.addEventListener('click', function() { Bus.emit('condition:select', Number(section.order)); });
         this.markers.push(new this.module.Marker({ element: element, anchor: 'center' }).setLngLat([Number(incident.lng), Number(incident.lat)]).addTo(this.map));
       },
@@ -429,7 +517,7 @@
         if (!bounds) {
           return { center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]], zoom: Config.MAP_ZOOM, pitch: pitch, bearing: bearing };
         }
-        var fitted = this.map.cameraForBounds(bounds, { padding: 60, maxZoom: 11 });
+        var fitted = this.map.cameraForBounds(bounds, { padding: this._routePadding(), maxZoom: 11 });
         if (!fitted) return null;
         return { center: fitted.center, zoom: fitted.zoom, pitch: pitch, bearing: bearing };
       },
@@ -480,6 +568,23 @@
         var last = this.routeCoords[this.routeCoords.length - 1];
         return bearingBetween(first, last);
       },
+      _routePadding: function() {
+        if (!this.map || !this.map.getContainer) return 72;
+        var width = this.map.getContainer().clientWidth || 0;
+        return Math.max(56, Math.min(118, Math.round(Math.min(width * 0.12, 118))));
+      },
+      setBasemap: function(basemap, silent) {
+        var next = basemap === 'satellite' && this.satelliteAvailable ? 'satellite' : 'dark';
+        this.basemap = next;
+        if (!this.map) return next;
+        if (this.map.getLayer('satellite')) this.map.setLayoutProperty('satellite', 'visibility', next === 'satellite' ? 'visible' : 'none');
+        if (this.map.getLayer('base')) this.map.setLayoutProperty('base', 'visibility', next === 'satellite' ? 'none' : 'visible');
+        this.satelliteFailed = next === 'dark' && this.satelliteAvailable && Boolean(silent);
+        this._syncProviderLogo();
+        if (this.satelliteFailed && !silent) this.onStatus('basemap-unavailable');
+        return next;
+      },
+      getBasemap: function() { return this.basemap; },
       focusRoute: function() {
         return this.setCameraPreset(this.mode === '3d' ? 'solid' : 'reset');
       },
@@ -502,12 +607,16 @@
       resize: function() { if (this.map) this.map.resize(); },
       destroy: function() {
         if (this.terrainTimer) window.clearTimeout(this.terrainTimer);
+        if (this.satelliteTimer) window.clearTimeout(this.satelliteTimer);
         this.markers.forEach(function(marker) { marker.remove(); });
         this.markers = [];
         this.placeMarkers.forEach(function(marker) { marker.remove(); });
         this.placeMarkers = [];
         if (this.cursorMarker) this.cursorMarker.remove();
         this.cursorMarker = null;
+        var container = Dom.byId(options.container);
+        var logo = container && container.querySelector('.desktop-map-provider-logo');
+        if (logo) logo.remove();
         if (this.map) this.map.remove();
         this.map = null;
       }

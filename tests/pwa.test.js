@@ -31,14 +31,15 @@ describe('PWA install and offline assets', () => {
   });
 
   it('keeps the complete app shell local and cacheable', async () => {
-    const [html, pwaScript, styles, serviceWorker, developerChangelog, maplibreRenderer, desktopBootstrap] = await Promise.all([
+    const [html, pwaScript, styles, serviceWorker, developerChangelog, maplibreRenderer, desktopBootstrap, providerConfig] = await Promise.all([
       readFile(path.join(root, 'index.html'), 'utf8'),
       readFile(path.join(root, 'js/pwa.js'), 'utf8'),
       readFile(path.join(root, 'css/style.css'), 'utf8'),
       readFile(path.join(root, 'sw.js'), 'utf8'),
       readFile(path.join(root, '.github/DEVELOPER_CHANGELOG.md'), 'utf8'),
       readFile(path.join(root, 'js/maplibre-renderer.js'), 'utf8'),
-      readFile(path.join(root, 'js/desktop-bootstrap.js'), 'utf8')
+      readFile(path.join(root, 'js/desktop-bootstrap.js'), 'utf8'),
+      readFile(path.join(root, 'js/map-provider-config.js'), 'utf8')
     ]);
     expect(html).not.toMatch(/(?:unpkg|cdnjs|fonts\.googleapis)\.com/);
     expect(html).toContain('js/pwa.js');
@@ -47,8 +48,8 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v37"');
-    expect(serviceWorker).toContain('./css/style.css?v=37');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v38"');
+    expect(serviceWorker).toContain('./css/style.css?v=38');
     expect(html).toContain('js/desktop-bootstrap.js');
     expect(serviceWorker).toContain('./js/desktop-bootstrap.js');
     expect(serviceWorker).not.toContain('./js/maplibre-renderer.js');
@@ -66,6 +67,8 @@ describe('PWA install and offline assets', () => {
     expect(maplibreRenderer).toContain('dark_nolabels');
     expect(maplibreRenderer).toContain('_addPlaceLabels');
     expect(maplibreRenderer).toContain('setCameraPreset');
+    expect(maplibreRenderer).toContain('setBasemap');
+    expect(maplibreRenderer).toContain('satelliteTiles');
     expect(maplibreRenderer).toContain('setWorkerUrl');
     expect(html).toContain("script-src 'self'");
     expect(html).toContain("worker-src 'self'");
@@ -77,6 +80,10 @@ describe('PWA install and offline assets', () => {
     expect(mainUi).toContain('allow-scripts allow-same-origin allow-presentation');
     expect(desktopBootstrap).toContain('DESKTOP_QUERY');
     expect(desktopBootstrap).toContain('maplibre-renderer.js');
+    expect(desktopBootstrap).toContain('map-provider-config.js');
+    expect(providerConfig).toContain("keyName: 'taiwan-dashboard-pages'");
+    expect(providerConfig).toContain("tileset: 'satellite-v4'");
+    expect(providerConfig).toMatch(/key:\s*['\"][^'\"]+['\"]/);
     expect(html).not.toContain('DEVELOPER_CHANGELOG');
     expect(serviceWorker).not.toContain('DEVELOPER_CHANGELOG');
   });
