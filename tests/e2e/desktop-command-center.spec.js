@@ -80,6 +80,34 @@ test('1280px ready command center keeps the map dominant without horizontal over
   expect(metrics.supportHeight).toBeGreaterThan(200);
 });
 
+test('desktop traffic browser keeps the filter shell above cards without covering them', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop traffic-browser verification only.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.goto(WORKER);
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-open-list').click();
+  await expect(page.locator('#pg-list')).toHaveClass(/active/);
+
+  const filter = page.locator('#pg-list .list-filter-shell');
+  const firstCard = page.locator('#pg-list .cam-card').first();
+  await expect(firstCard).toBeVisible();
+  const layout = await page.evaluate(() => {
+    const shell = document.querySelector('#pg-list .list-filter-shell');
+    const card = document.querySelector('#pg-list .cam-card');
+    if (!shell || !card) return null;
+    const shellRect = shell.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    return {
+      position: getComputedStyle(shell).position,
+      shellBottom: shellRect.bottom,
+      cardTop: cardRect.top
+    };
+  });
+  expect(layout).not.toBeNull();
+  expect(layout.position).toBe('relative');
+  expect(layout.cardTop).toBeGreaterThanOrEqual(layout.shellBottom - 1);
+});
+
 test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
   const mapTilerRequests = [];

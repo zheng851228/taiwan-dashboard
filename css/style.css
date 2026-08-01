@@ -2886,6 +2886,13 @@ body.light .condition-road-event-icon {
   #favorites-panel { top: calc(var(--desktop-header-height) + .7rem) !important; right: 1rem !important; width: 22rem !important; border-radius: .45rem; }
   #pg-list,
   #pg-tools { padding-top: calc(var(--desktop-header-height) + 1rem) !important; padding-bottom: 1.5rem !important; }
+  /* The traffic browser is a page-level view on desktop. Keep its filter
+     shell in normal flow so scrolling never lets it cover camera cards. */
+  #pg-list .list-filter-shell {
+    position: relative !important;
+    top: auto !important;
+    z-index: 1 !important;
+  }
   #pg-list .max-w-xl,
   #pg-tools .max-w-xl { max-width: 60rem; }
 
