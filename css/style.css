@@ -2410,7 +2410,7 @@ body.light .condition-road-event-icon {
     grid-template-columns: var(--desktop-left-rail) minmax(30rem, 1fr) var(--desktop-right-rail);
     grid-template-rows: minmax(0, 1fr) 17.4rem;
     gap: var(--desktop-gap);
-    padding: var(--desktop-gap);
+    padding: var(--desktop-gap) var(--desktop-gap) 0;
     position: absolute !important;
     inset: 0;
     background: #07111b;
@@ -2620,10 +2620,12 @@ body.light .condition-road-event-icon {
     width: auto !important;
     max-width: none !important;
     max-height: none !important;
-    /* The disclaimer is a fixed overlay; let the timeline use the bottom
-       padding that previously belonged to the removed footer row. */
-    height: calc(100% + var(--desktop-gap));
+    /* The disclaimer is a fixed overlay. Grid now reaches the viewport edge,
+       so the three bottom panels can share one clean baseline. */
+    height: auto;
+    margin: 0;
     overflow: hidden;
+    animation: none;
     border-radius: .45rem;
     background: rgba(10,19,30,0.96);
   }
