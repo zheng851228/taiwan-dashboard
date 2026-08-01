@@ -225,8 +225,13 @@
             };
           }
           var layers = [
-            self.satelliteAvailable ? { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: self.basemap === 'satellite' ? 'visible' : 'none' } } : null,
-            { id: 'base', type: 'raster', source: 'base', layout: { visibility: self.basemap === 'satellite' ? 'none' : 'visible' } },
+            // Start on the local CARTO base so MapLibre can finish its initial
+            // style load even when a source-restricted MapTiler key rejects
+            // local requests. The requested satellite basemap is enabled
+            // after `load`, where the existing fallback can handle 403s or
+            // timeouts without blocking labels, route data, or controls.
+            self.satelliteAvailable ? { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } } : null,
+            { id: 'base', type: 'raster', source: 'base', layout: { visibility: 'visible' } },
             {
               id: 'hillshade',
               type: 'hillshade',
@@ -275,7 +280,10 @@
                 self.onStatus('terrain-unavailable');
               }
             }, 8000);
+            self._syncProviderLogo();
+            self.onReady(self);
             if (self.satelliteAvailable && self.basemap === 'satellite') {
+              self.setBasemap('satellite');
               self.satelliteTimer = window.setTimeout(function() {
                 if (self.map && self.basemap === 'satellite' && !self.map.isSourceLoaded('satellite')) {
                   self.setBasemap('dark', true);
@@ -283,8 +291,6 @@
                 }
               }, 8000);
             }
-            self._syncProviderLogo();
-            self.onReady(self);
           });
           self.map.on('error', function(event) {
             var message = String(event && event.error && event.error.message || '');

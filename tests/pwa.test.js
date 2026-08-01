@@ -83,7 +83,7 @@ describe('PWA install and offline assets', () => {
     expect(desktopBootstrap).toContain('map-provider-config.js');
     expect(providerConfig).toContain("keyName: 'taiwan-dashboard-pages'");
     expect(providerConfig).toContain("tileset: 'satellite-v4'");
-    expect(providerConfig).toContain("key: ''");
+    expect(providerConfig).toMatch(/key:\s*['\"][^'\"]+['\"]/);
     expect(html).not.toContain('DEVELOPER_CHANGELOG');
     expect(serviceWorker).not.toContain('DEVELOPER_CHANGELOG');
   });

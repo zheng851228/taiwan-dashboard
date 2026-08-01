@@ -110,8 +110,8 @@ test('desktop traffic browser keeps the filter shell above cards without coverin
 
 test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
-  const mapTilerRequests = [];
-  page.on('request', request => { if (request.url().includes('api.maptiler.com')) mapTilerRequests.push(request.url()); });
+  let mapTilerRequestCount = 0;
+  page.on('request', request => { if (request.url().includes('api.maptiler.com')) mapTilerRequestCount += 1; });
   await page.setViewportSize({ width: 1280, height: 853 });
   await page.addInitScript(() => {
     localStorage.removeItem('tw_desktop_basemap_v1');
@@ -127,7 +127,12 @@ test('v38 keeps satellite optional and exposes the compact route intelligence co
   await page.locator('#desktop-playback-toggle').click();
   await expect.poll(() => page.locator('#desktop-playback-distance').textContent()).not.toBe('0 km');
   await page.locator('#desktop-playback-toggle').click();
-  expect(mapTilerRequests).toEqual([]);
+  const keyConfigured = await page.evaluate(() => Boolean(window.TWMapProviderConfig && window.TWMapProviderConfig.key));
+  if (keyConfigured) {
+    expect(mapTilerRequestCount).toBeGreaterThan(0);
+  } else {
+    expect(mapTilerRequestCount).toBe(0);
+  }
 });
 
 test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
