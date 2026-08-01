@@ -59,7 +59,7 @@ function liveRouteRecord(routeId) {
 
 describe('Worker provider snapshot integration', () => {
   it('returns HTTP 200 partial unknowns when a live route snapshot is missing', async () => {
-    const routeId = 'snapshot-miss-route';
+    const routeId = '11111111-1111-4111-8111-111111111111';
     const kv = createMutableKv({
       [`route:${routeId}`]: liveRouteRecord(routeId)
     });

@@ -618,6 +618,7 @@ var RouteStripMod = {
           if (!e.isIntersecting) return;
           var img = e.target;
           if (img.dataset.src && !img.src) {
+            img.referrerPolicy = 'no-referrer';
             img.src = img.dataset.src;
             img.onload = function() {
               img.style.opacity = '1';
@@ -632,6 +633,7 @@ var RouteStripMod = {
       Dom.queryAll('img[data-src]', scroll).forEach(function(img) { obs.observe(img); });
     } else {
       Dom.queryAll('img[data-src]', scroll).forEach(function(img) {
+        img.referrerPolicy = 'no-referrer';
         img.src = img.dataset.src;
         img.onload = function() {
           img.style.opacity = '1';

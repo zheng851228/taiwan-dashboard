@@ -466,6 +466,17 @@
       if (!layer || !layer.getBounds) return;
       MapMod.map.fitBounds(layer.getBounds(), { padding: [70, 70], maxZoom: 14 });
     },
+    focusRoute: function() {
+      if (!MapMod.map) return;
+      var points = (RouteMod.routeCoords || []).filter(function(point) {
+        return point && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
+      });
+      if (points.length >= 2) {
+        MapMod.map.fitBounds(L.latLngBounds(points), { padding: [42, 42], maxZoom: 11 });
+      } else {
+        MapMod.map.setView(Config.MAP_CENTER, Config.MAP_ZOOM);
+      }
+    },
     clearRoute: function() {
       if (MapMod.routeLayer) {
         if (Array.isArray(MapMod.routeLayer)) {
@@ -571,6 +582,7 @@
         if (thumbSrc) {
           thumbEl.innerHTML = '<div class="ph"><i class="fa-solid fa-spinner fa-spin"></i></div><img alt="" />';
           var imgNode = thumbEl.querySelector('img');
+          if (imgNode) imgNode.referrerPolicy = 'no-referrer';
           imgNode.onload = function() {
             imgNode.style.opacity = '1';
             var ph = thumbEl.querySelector('.ph');
@@ -1241,7 +1253,7 @@
           entries.forEach(function(e){
             if(!e.isIntersecting)return;
             var img=e.target.querySelector('.cam-th');
-            if(img&&img.dataset.src&&!img.src){img.src=img.dataset.src;img.onload=function(){img.style.opacity='1';};}
+            if(img&&img.dataset.src&&!img.src){img.referrerPolicy='no-referrer';img.src=img.dataset.src;img.onload=function(){img.style.opacity='1';};}
             ListMod._imageObserver.unobserve(e.target);
           });
         },{rootMargin:'80px'});
@@ -1266,10 +1278,16 @@
         med.innerHTML = '';
         if (cam.type === 'youtube' && cam.videoId) {
           var iframe = document.createElement('iframe');
-          iframe.src = 'https://www.youtube.com/embed/' + cam.videoId + '?autoplay=1&mute=0';
+          if (!/^[A-Za-z0-9_-]{11}$/.test(String(cam.videoId))) {
+            med.textContent = '此直播來源格式不正確';
+            return;
+          }
+          iframe.src = 'https://www.youtube-nocookie.com/embed/' + cam.videoId + '?autoplay=1&mute=0';
           iframe.className = 'w-full h-full';
           iframe.style.minHeight = '240px';
           iframe.allow = 'autoplay; encrypted-media';
+          iframe.referrerPolicy = 'no-referrer';
+          iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
           iframe.allowFullscreen = true;
           med.appendChild(iframe);
         } else if (safeHttpUrl(cam.url)) {
@@ -1277,6 +1295,7 @@
           var safeUrl = safeHttpUrl(cam.url);
           var imgUrl = safeUrl + (safeUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Date.now();
           img.src = imgUrl;
+          img.referrerPolicy = 'no-referrer';
           img.className = 'w-full h-full object-contain';
           img.style.opacity = '0';
           img.style.transition = 'opacity 0.3s';
@@ -1324,9 +1343,20 @@
     }
     ThemeMod.init();
     NavMod.init();
+    Dom.onId('brand-home', 'click', function() {
+      if (window.DesktopDashboardMod && DesktopDashboardMod.goHome) DesktopDashboardMod.goHome();
+      else {
+        NavMod.go('map');
+        if (MapMod.focusRoute) MapMod.focusRoute();
+      }
+    });
     RouteMod.init();
     ListMod.init();
     InfoMod.init();
+    Dom.onId('diag-close', 'click', function() {
+      var panel = Dom.byId('diag-panel');
+      if (panel) panel.classList.remove('visible');
+    });
 
     // render 加 debounce，避免短時間內多次觸發（天氣+資料同時到達時）
     var _renderTimer;
@@ -1349,5 +1379,6 @@
 
     // 沿途影像按鈕
     Dom.onId('js-strip-btn', 'click', function() { RouteStripMod.toggle(); });
+    Dom.onId('route-strip-close', 'click', function() { RouteStripMod.hide(); });
   });
 })();

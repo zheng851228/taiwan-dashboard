@@ -100,6 +100,35 @@ test('2D and 3D controls can recover from the traditional map fallback', async (
   await expect(page.locator('#desktop-map-2d')).not.toHaveClass(/active/);
 });
 
+test('camera presets and brand home preserve the active route', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop camera verification only.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.addInitScript(() => localStorage.removeItem('tw_desktop_camera_preset_v1'));
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+
+  await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
+  await page.locator('#desktop-camera-toggle').click();
+  await expect(page.locator('#desktop-camera-popover')).toBeVisible();
+
+  const pitch = () => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch());
+  await page.locator('.desktop-camera-preset[data-camera-preset="birdseye"]').click();
+  await expect(page.locator('#desktop-camera-state')).toHaveText('鳥瞰');
+  await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(32, 0);
+
+  await page.locator('#desktop-camera-toggle').click();
+  await page.locator('.desktop-camera-preset[data-camera-preset="along"]').click();
+  await expect(page.locator('#desktop-camera-state')).toHaveText('沿路');
+  await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(72, 0);
+
+  const routeId = await page.evaluate(() => window.AppState.activeRoute.routeId);
+  await page.locator('#brand-home').click();
+  await expect(page.locator('#pg-map')).toHaveClass(/active/);
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'ready');
+  await expect.poll(() => page.evaluate(() => window.AppState.activeRoute.routeId)).toBe(routeId);
+  await expect(page.locator('#desktop-camera-popover')).toBeHidden();
+});
+
 test('tall desktop ready layout starts the map directly below the header', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop density verification only.');
   await page.setViewportSize({ width: 2048, height: 978 });
