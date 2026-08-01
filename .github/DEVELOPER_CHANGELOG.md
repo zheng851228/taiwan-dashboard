@@ -2,6 +2,11 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-01 — PWA v36 diagnostic boundary
+
+- CCTV 回傳 0 時只保留 console／開發者診斷紀錄與一般提醒，不再自動把診斷面板疊在 App 主畫面；仍可用時鐘三擊手動開啟。
+- Service Worker 清除 v35 shell；不改 Worker endpoint、路線 schema 或 production routing。
+
 ## 2026-08-01 — PWA v35 mobile shell boundary
 
 - Mobile Safari／Android 不再載入 MapLibre renderer 或桌面指揮台模組；只有 ≥1200px 桌面視窗才動態請求，失敗時回退 Leaflet 傳統地圖。

@@ -156,8 +156,7 @@
         var statEl = Dom.byId('js-stat-cams');
         if (statEl) statEl.textContent = _cams.length;
         if (_cams.length === 0) {
-          Diag.err('CCTV 為 0，Worker 可能需要更新');
-          Diag.show();
+          Diag.warn('CCTV 為 0，已標記為資料未知');
           setTimeout(function() { Toast.show('\u26a0\ufe0f CCTV \u8cc7\u6599\u672a\u8f09\u5165', 4000); }, 1500);
         }
         Bus.emit('cams:updated');
