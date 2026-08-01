@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=38" />
+  <link rel="stylesheet" href="css/style.css?v=39" />
 </head>
 <body class="text-slate-100" data-route-state="empty">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -130,6 +130,9 @@
       </button>
       <button id="desktop-basemap-setting" type="button" class="desktop-settings-row">
         <span>底圖來源</span><span id="desktop-basemap-setting-state">深色地圖</span>
+      </button>
+      <button id="desktop-layout-reset" type="button" class="desktop-settings-row">
+        <span>版面配置</span><span id="desktop-layout-setting-state">可拖曳調整</span>
       </button>
       <button id="desktop-open-list" type="button" class="desktop-settings-link">開啟路況列表 <i class="fa-solid fa-arrow-right"></i></button>
       <button id="desktop-open-tools" type="button" class="desktop-settings-link">開啟完整工具頁 <i class="fa-solid fa-arrow-right"></i></button>
@@ -426,6 +429,10 @@
       <span id="desktop-camera-state" class="desktop-camera-state">立體</span>
     </div>
   </div>
+
+  <div id="desktop-resize-left" class="desktop-resizer desktop-resizer-vertical" role="separator" aria-orientation="vertical" aria-label="調整左側欄寬度" aria-valuemin="240" aria-valuemax="420" aria-valuenow="296" tabindex="0" title="拖曳調整左側欄寬度"></div>
+  <div id="desktop-resize-right" class="desktop-resizer desktop-resizer-vertical" role="separator" aria-orientation="vertical" aria-label="調整右側欄寬度" aria-valuemin="220" aria-valuemax="420" aria-valuenow="240" tabindex="0" title="拖曳調整右側欄寬度"></div>
+  <div id="desktop-resize-bottom" class="desktop-resizer desktop-resizer-horizontal" role="separator" aria-orientation="horizontal" aria-label="調整下方資訊高度" aria-valuemin="160" aria-valuemax="340" aria-valuenow="278" tabindex="0" title="拖曳調整下方資訊高度"></div>
 
   <aside id="desktop-cctv-card" class="desktop-only-panel" aria-live="polite">
     <div class="desktop-cctv-heading"><span>沿途 CCTV 影像</span><span id="desktop-cctv-status">等待路線</span></div>

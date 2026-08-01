@@ -108,6 +108,64 @@ test('desktop traffic browser keeps the filter shell above cards without coverin
   expect(layout.cardTop).toBeGreaterThanOrEqual(layout.shellBottom - 1);
 });
 
+test('desktop workspace splitters resize and persist the three command-center regions', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop workspace verification only.');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => localStorage.removeItem('tw_desktop_layout_v1'));
+  await page.goto(WORKER);
+  await expect(page.locator('#desktop-resize-left')).toBeVisible();
+  await buildFixtureRoute(page);
+  await expect(page.locator('#desktop-resize-right')).toBeVisible();
+  await expect(page.locator('#desktop-resize-bottom')).toBeVisible();
+
+  const readLayout = () => page.evaluate(() => ({
+    layout: window.DesktopDashboardMod.getLayout(),
+    columns: getComputedStyle(document.querySelector('#pg-map')).gridTemplateColumns,
+    rows: getComputedStyle(document.querySelector('#pg-map')).gridTemplateRows,
+    bottomHeight: document.querySelector('#desktop-support-panel')?.getBoundingClientRect().height || 0
+  }));
+  const initial = await readLayout();
+
+  const leftHandle = page.locator('#desktop-resize-left');
+  const leftBox = await leftHandle.boundingBox();
+  expect(leftBox).not.toBeNull();
+  await page.mouse.move(leftBox.x + leftBox.width / 2, leftBox.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(leftBox.x + leftBox.width / 2 + 72, leftBox.y + 120);
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getLayout().left)).toBeGreaterThan(initial.layout.left);
+
+  const rightHandle = page.locator('#desktop-resize-right');
+  const rightBox = await rightHandle.boundingBox();
+  expect(rightBox).not.toBeNull();
+  await page.mouse.move(rightBox.x + rightBox.width / 2, rightBox.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(rightBox.x + rightBox.width / 2 - 56, rightBox.y + 120);
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getLayout().right)).toBeGreaterThan(initial.layout.right);
+
+  const bottomHandle = page.locator('#desktop-resize-bottom');
+  const bottomBox = await bottomHandle.boundingBox();
+  expect(bottomBox).not.toBeNull();
+  await page.mouse.move(bottomBox.x + 300, bottomBox.y + bottomBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bottomBox.x + 300, bottomBox.y + bottomBox.height / 2 - 48);
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getLayout().bottom)).toBeGreaterThan(initial.layout.bottom);
+
+  const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('tw_desktop_layout_v1')));
+  expect(persisted.left).toBeGreaterThan(initial.layout.left);
+  expect(persisted.right).toBeGreaterThan(initial.layout.right);
+  expect(persisted.bottom).toBeGreaterThan(initial.layout.bottom);
+  expect((await readLayout()).columns).not.toBe(initial.columns);
+  const current = await readLayout();
+  expect(current.rows).not.toBe(initial.rows);
+
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-layout-reset').click();
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getLayout())).toEqual(initial.layout);
+});
+
 test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
   let mapTilerRequestCount = 0;
@@ -360,4 +418,6 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible();
   await expect(page.locator('#desktop-map')).toBeHidden();
+  await expect(page.locator('.desktop-resizer')).toHaveCount(3);
+  await expect(page.locator('.desktop-resizer').first()).toBeHidden();
 });
