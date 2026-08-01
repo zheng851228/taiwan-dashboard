@@ -506,6 +506,10 @@ function rateLimitDescriptor(path, method, url) {
 }
 
 async function enforceRateLimit(request, env, path, url) {
+  // Fixture mode is an in-process test data source; keep the production
+  // abuse guard out of deterministic local E2E runs. Configured bindings
+  // remain active for staging/production and for explicit limiter tests.
+  if (isFixtureMode(env)) return;
   const descriptor = rateLimitDescriptor(path, request.method, url);
   if (!descriptor) return;
   const limiter = env[descriptor.binding];

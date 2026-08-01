@@ -79,6 +79,20 @@
     return bounds.isEmpty() ? null : bounds;
   }
 
+  function bearingBetween(start, end) {
+    var lat1 = Number(start[0]) * Math.PI / 180;
+    var lat2 = Number(end[0]) * Math.PI / 180;
+    var deltaLng = (Number(end[1]) - Number(start[1])) * Math.PI / 180;
+    var y = Math.sin(deltaLng) * Math.cos(lat2);
+    var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+    var bearing = Math.atan2(y, x) * 180 / Math.PI;
+    return (bearing + 360) % 360;
+  }
+
+  function reduceMotion() {
+    return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   function inferEventKind(incident) {
     if (incident && EVENT_COLORS[incident.kind]) return incident.kind;
     var text = String((incident && incident.title || '') + ' ' + (incident && incident.description || ''));
@@ -144,9 +158,14 @@
       placeMarkers: [],
       terrainTimer: null,
       mode: '3d',
+      routeCoords: [],
+      selectedOrder: null,
+      currentPreset: 'solid',
+      cameraProgrammatic: false,
       onReady: options.onReady || function() {},
       onFallback: options.onFallback || function() {},
       onStatus: options.onStatus || function() {},
+      onCameraState: options.onCameraState || function() {},
       init: function() {
         var self = this;
         return loadMapLibre().then(function(module) {
@@ -213,6 +232,12 @@
             }
           });
           self.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+          self.map.on('moveend', function() {
+            if (!self.cameraProgrammatic) {
+              self.currentPreset = 'custom';
+              self.onCameraState({ preset: 'custom', pitch: self.map.getPitch(), bearing: self.map.getBearing() });
+            }
+          });
           self.map.on('load', function() {
             self._addDataLayers();
             self._addPlaceLabels();
@@ -296,9 +321,13 @@
         this.markers = [];
         if (this.cursorMarker) { this.cursorMarker.remove(); this.cursorMarker = null; }
         this.cameraById = {};
+        this.routeCoords = [];
+        this.selectedOrder = null;
+        this.currentPreset = 'solid';
       },
       drawRoute: function(coords) {
         if (!coords || coords.length < 2) return;
+        this.routeCoords = coords.slice();
         var line = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords.map(toLngLat) } };
         this._setSourceData('desktop-route', { type: 'FeatureCollection', features: [line] });
         var bounds = makeBounds(this.module, coords);
@@ -331,6 +360,7 @@
         this._setSourceData('desktop-weather', { type: 'FeatureCollection', features: weatherFeatures });
         var coords = [];
         sectionFeatures.forEach(function(feature) { coords = coords.concat(feature.geometry.coordinates.map(function(point) { return [point[1], point[0]]; })); });
+        if (!this.routeCoords.length && coords.length) this.routeCoords = coords;
         var bounds = makeBounds(this.module, coords);
         if (bounds && this.map) this.map.fitBounds(bounds, { padding: 60, maxZoom: 11, duration: 0 });
       },
@@ -382,6 +412,7 @@
         this.cursorMarker.setLngLat([Number(point[1]), Number(point[0])]);
       },
       focusSection: function(order) {
+        this.selectedOrder = Number(order);
         var source = this.map && this.map.getSource('desktop-sections');
         if (!source || !source._data) return;
         var feature = (source._data.features || []).find(function(item) { return Number(item.properties.order) === Number(order); });
@@ -391,6 +422,69 @@
       },
       focusPoint: function(lat, lng, zoom) {
         if (this.map) this.map.easeTo({ center: [Number(lng), Number(lat)], zoom: zoom || 12, duration: 450 });
+      },
+      _cameraForRoute: function(pitch, bearing) {
+        if (!this.map) return null;
+        var bounds = makeBounds(this.module, this.routeCoords);
+        if (!bounds) {
+          return { center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]], zoom: Config.MAP_ZOOM, pitch: pitch, bearing: bearing };
+        }
+        var fitted = this.map.cameraForBounds(bounds, { padding: 60, maxZoom: 11 });
+        if (!fitted) return null;
+        return { center: fitted.center, zoom: fitted.zoom, pitch: pitch, bearing: bearing };
+      },
+      setCameraPreset: function(preset, options) {
+        if (!this.map || this.mode !== '3d') return false;
+        options = options || {};
+        var selected = options.sectionOrder || this.selectedOrder;
+        var camera;
+        var normalized = preset === 'birdseye' || preset === 'along' || preset === 'reset' ? preset : 'solid';
+        if (normalized === 'reset' && !this.routeCoords.length) {
+          camera = { center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]], zoom: Config.MAP_ZOOM, pitch: 0, bearing: 0 };
+        } else if (normalized === 'along') {
+          var sectionSource = this.map.getSource('desktop-sections');
+          var feature = sectionSource && sectionSource._data && (sectionSource._data.features || []).find(function(item) {
+            return selected !== null && Number(item.properties.order) === Number(selected);
+          });
+          var points = feature && feature.geometry && feature.geometry.coordinates;
+          if (!points || points.length < 2) points = this.routeCoords.map(toLngLat);
+          var index = Math.max(0, Math.floor(points.length / 2) - 1);
+          var first = points[index] || points[0];
+          var last = points[index + 1] || points[points.length - 1];
+          camera = {
+            center: points[Math.floor(points.length / 2)] || [Config.MAP_CENTER[1], Config.MAP_CENTER[0]],
+            zoom: 13,
+            pitch: 72,
+            bearing: bearingBetween([first[1], first[0]], [last[1], last[0]])
+          };
+        } else {
+          var bearing = normalized === 'birdseye' ? 0 : this._routeBearing();
+          camera = this._cameraForRoute(normalized === 'birdseye' ? 32 : 58, bearing);
+        }
+        if (!camera) return false;
+        var duration = reduceMotion() ? 0 : (options.duration === undefined ? 650 : options.duration);
+        this.cameraProgrammatic = true;
+        this.currentPreset = normalized === 'reset' && !this.routeCoords.length ? 'reset' : normalized;
+        if (duration > 0) this.map.easeTo(Object.assign({}, camera, { duration: duration }));
+        else this.map.jumpTo(camera);
+        var self = this;
+        window.setTimeout(function() {
+          self.cameraProgrammatic = false;
+          self.onCameraState({ preset: self.currentPreset, pitch: self.map.getPitch(), bearing: self.map.getBearing() });
+        }, duration + 30);
+        return true;
+      },
+      _routeBearing: function() {
+        if (!this.routeCoords || this.routeCoords.length < 2) return -12;
+        var first = this.routeCoords[0];
+        var last = this.routeCoords[this.routeCoords.length - 1];
+        return bearingBetween(first, last);
+      },
+      focusRoute: function() {
+        return this.setCameraPreset(this.mode === '3d' ? 'solid' : 'reset');
+      },
+      resetView: function() {
+        return this.setCameraPreset('reset');
       },
       setTerrainMode: function(mode) {
         if (!this.map) return;

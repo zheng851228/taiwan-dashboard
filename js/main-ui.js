@@ -466,6 +466,17 @@
       if (!layer || !layer.getBounds) return;
       MapMod.map.fitBounds(layer.getBounds(), { padding: [70, 70], maxZoom: 14 });
     },
+    focusRoute: function() {
+      if (!MapMod.map) return;
+      var points = (RouteMod.routeCoords || []).filter(function(point) {
+        return point && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
+      });
+      if (points.length >= 2) {
+        MapMod.map.fitBounds(L.latLngBounds(points), { padding: [42, 42], maxZoom: 11 });
+      } else {
+        MapMod.map.setView(Config.MAP_CENTER, Config.MAP_ZOOM);
+      }
+    },
     clearRoute: function() {
       if (MapMod.routeLayer) {
         if (Array.isArray(MapMod.routeLayer)) {
@@ -1332,6 +1343,13 @@
     }
     ThemeMod.init();
     NavMod.init();
+    Dom.onId('brand-home', 'click', function() {
+      if (window.DesktopDashboardMod && DesktopDashboardMod.goHome) DesktopDashboardMod.goHome();
+      else {
+        NavMod.go('map');
+        if (MapMod.focusRoute) MapMod.focusRoute();
+      }
+    });
     RouteMod.init();
     ListMod.init();
     InfoMod.init();

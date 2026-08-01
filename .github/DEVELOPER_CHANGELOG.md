@@ -2,6 +2,12 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-01 — PWA v34 3D camera and home navigation
+
+- 桌面 3D 地圖新增鳥瞰、立體、沿路、重置視角，保留原生羅盤、縮放與自由旋轉；DEM／WebGL fallback 時自動停用視角選單。
+- Logo 改為語意化「返回規劃主畫面」按鈕，保留目前 routeId、conditions、收藏與最近路線，只關閉浮層並重新聚焦全線。
+- UI／Service Worker cache version 升至 PWA v34；開發紀錄不會載入或顯示在 App 介面。
+
 ## 2026-08-01 — PWA v33 security boundaries
 
 - Worker 加入 allowlisted CORS、rate limiting、32 KiB JSON body cap、UUID 與 HTTPS 地圖網址驗證。

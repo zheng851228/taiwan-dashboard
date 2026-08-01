@@ -2755,13 +2755,22 @@ body.light .condition-road-event-icon {
     grid-row: 1;
   }
 
-  .desktop-map-tools { position: absolute; top: .8rem; left: calc(var(--desktop-left-rail) + var(--desktop-gap) + .8rem); z-index: 20; display: flex; overflow: hidden; border: 1px solid rgba(148,163,184,0.2); border-radius: .35rem; background: rgba(7,17,27,0.84); }
+  .brand-home { padding: 0; color: inherit; background: transparent; border: 0; text-align: left; cursor: pointer; }
+  .brand-home:focus-visible { outline: 2px solid #52b788; outline-offset: 3px; border-radius: .35rem; }
+  .desktop-map-tools { position: absolute; top: .8rem; left: calc(var(--desktop-left-rail) + var(--desktop-gap) + .8rem); z-index: 20; display: flex; overflow: visible; border: 1px solid rgba(148,163,184,0.2); border-radius: .35rem; background: rgba(7,17,27,0.84); }
   #desktop-map-tools { display: flex; }
   .desktop-map-tools button { min-height: 2rem; padding: 0 .7rem; color: #cbd5e1; background: transparent; border: 0; border-right: 1px solid rgba(148,163,184,0.14); font-size: .62rem; font-weight: 800; }
   .desktop-map-tools button:last-child { border-right: 0; }
   .desktop-map-tools button:hover,
   .desktop-map-tools button.active { color: #ecfdf5; background: #145c47; }
+  .desktop-map-tools button:disabled { color: #64748b; background: transparent; cursor: not-allowed; }
   body.desktop-legacy-map .desktop-map-tools button.active { background: #334155; }
+  .desktop-camera-popover { position: absolute; top: calc(100% + .35rem); right: 0; display: grid; grid-template-columns: repeat(2, minmax(4rem, 1fr)); gap: .25rem; min-width: 10rem; padding: .35rem; border: 1px solid rgba(148,163,184,0.25); border-radius: .35rem; background: rgba(7,17,27,0.96); box-shadow: 0 12px 28px rgba(0,0,0,0.35); }
+  .desktop-camera-popover.hidden { display: none; }
+  .desktop-camera-popover .desktop-camera-preset { min-height: 1.8rem; padding: 0 .45rem; border: 1px solid transparent; border-radius: .25rem; color: #cbd5e1; font-size: .6rem; }
+  .desktop-camera-popover .desktop-camera-preset:hover,
+  .desktop-camera-popover .desktop-camera-preset.active { color: #ecfdf5; background: #145c47; border-color: rgba(82,183,136,0.55); }
+  .desktop-camera-state { grid-column: 1 / -1; padding: .25rem .35rem .1rem; color: #94a3b8; border-top: 1px solid rgba(148,163,184,0.14); font-size: .54rem; text-align: center; }
 
   .desktop-map-marker { display: inline-flex; align-items: center; justify-content: center; width: 1.65rem; height: 1.65rem; padding: 0; color: #07111b; background: var(--marker-color); border: 2px solid rgba(255,255,255,0.9); border-radius: 50%; box-shadow: 0 2px 9px rgba(0,0,0,0.5); font-size: .72rem; font-weight: 900; cursor: pointer; }
   .desktop-map-marker:hover { transform: scale(1.12); }
@@ -2796,6 +2805,10 @@ body.light .condition-road-event-icon {
   body.light .desktop-header-route-meta,
   body.light .desktop-source-note,
   body.light .desktop-muted { color: #64748b; }
+  body.light .desktop-camera-popover { background: rgba(248,250,252,0.98); border-color: rgba(71,85,105,0.25); }
+  body.light .desktop-camera-popover .desktop-camera-preset { color: #334155; }
+  body.light .desktop-camera-popover .desktop-camera-preset:hover,
+  body.light .desktop-camera-popover .desktop-camera-preset.active { color: #064e3b; background: #bbf7d0; }
 }
 
 @media (min-width: 1200px) and (max-height: 820px) {

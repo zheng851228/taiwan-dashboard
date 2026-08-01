@@ -5,6 +5,7 @@
 
   var DESKTOP_BREAKPOINT = '(min-width: 1200px)';
   var MAP_PREF_KEY = 'tw_desktop_map_renderer_v1';
+  var CAMERA_PREF_KEY = 'tw_desktop_camera_preset_v1';
   var ELEVATION_CACHE_KEY = 'tw_route_elevation_cache_v1';
   var ELEVATION_SOURCE_VERSION = 'mapterhorn-v1';
   var state = {
@@ -15,7 +16,8 @@
     resizeTimer: null,
     playback: { playing: false, distance: 0, lastTime: 0, raf: null, speed: 1 },
     elevation: null,
-    pendingTerrainMode: null
+    pendingTerrainMode: null,
+    cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid')
   };
 
   var TRAFFIC_LABELS = {
@@ -180,6 +182,56 @@
     if (legacy && MapMod.map && MapMod.map.invalidateSize) window.setTimeout(function() { MapMod.map.invalidateSize(); }, 80);
     var setting = Dom.byId('desktop-map-mode-state');
     if (setting) setting.textContent = legacy ? '傳統地圖' : '3D 地形';
+    syncCameraControls();
+  }
+
+  function cameraLabel(preset) {
+    return ({ birdseye: '鳥瞰', solid: '立體', along: '沿路', reset: '重置', custom: '自訂' })[preset] || '視角';
+  }
+
+  function syncCameraControls() {
+    var button = Dom.byId('desktop-camera-toggle');
+    var popover = Dom.byId('desktop-camera-popover');
+    var enabled = Boolean(state.renderer && state.renderer.mode === '3d' && !document.body.classList.contains('desktop-legacy-map'));
+    if (button) {
+      button.disabled = !enabled;
+      button.setAttribute('aria-disabled', String(!enabled));
+      button.textContent = enabled ? '視角' : '視角（不可用）';
+    }
+    if (!enabled && popover) {
+      popover.classList.add('hidden');
+      if (button) button.setAttribute('aria-expanded', 'false');
+    }
+    var stateEl = Dom.byId('desktop-camera-state');
+    if (stateEl) stateEl.textContent = cameraLabel(state.cameraPreset);
+    Dom.queryAll('.desktop-camera-preset').forEach(function(item) {
+      var active = item.dataset.cameraPreset === state.cameraPreset;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-checked', String(active));
+    });
+  }
+
+  function toggleCameraPopover() {
+    var button = Dom.byId('desktop-camera-toggle');
+    var popover = Dom.byId('desktop-camera-popover');
+    if (!button || !popover || button.disabled) return;
+    var next = popover.classList.contains('hidden');
+    popover.classList.toggle('hidden', !next);
+    button.setAttribute('aria-expanded', String(next));
+  }
+
+  function setCameraPreset(preset) {
+    if (!state.renderer || state.renderer.mode !== '3d') return;
+    var sectionOrder = state.selectedOrder;
+    if (state.renderer.setCameraPreset(preset, { sectionOrder: sectionOrder })) {
+      state.cameraPreset = preset;
+      Storage.set(CAMERA_PREF_KEY, preset);
+      syncCameraControls();
+    }
+    var popover = Dom.byId('desktop-camera-popover');
+    var button = Dom.byId('desktop-camera-toggle');
+    if (popover) popover.classList.add('hidden');
+    if (button) button.setAttribute('aria-expanded', 'false');
   }
 
   function destroyRenderer() {
@@ -211,6 +263,8 @@
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
         updateDesktopView(AppState.routeConditions);
         DesktopElevationMod.refresh();
+        syncCameraControls();
+        if (state.renderer.mode === '3d') state.renderer.setCameraPreset(state.cameraPreset, { duration: 0, sectionOrder: state.selectedOrder });
       },
       onStatus: function(status) {
         if (status === 'terrain-unavailable') {
@@ -218,12 +272,21 @@
           if (note) note.textContent = '3D 地形暫時無法載入，已切換 2D；路況資料仍可使用。';
           var modeState = Dom.byId('desktop-map-mode-state');
           if (modeState) modeState.textContent = '2D 地圖';
+          syncCameraControls();
         }
       },
       onFallback: function() {
         destroyRenderer();
         showLegacyMap(true);
         Toast.show('3D 地圖暫時無法載入，已切換傳統地圖', 4000);
+      },
+      onCameraState: function(camera) {
+        if (!camera || camera.preset === 'custom') {
+          state.cameraPreset = 'custom';
+        } else {
+          state.cameraPreset = camera.preset;
+        }
+        syncCameraControls();
       }
     });
     renderer.init().catch(function() {});
@@ -270,6 +333,10 @@
 
   function bindControls() {
     Dom.onId('desktop-settings-toggle', 'click', toggleSettings);
+    Dom.onId('desktop-camera-toggle', 'click', toggleCameraPopover);
+    Dom.onAll('.desktop-camera-preset', 'click', function(button) {
+      setCameraPreset(button.dataset.cameraPreset);
+    });
     Dom.onId('desktop-favorites-toggle', 'click', function() {
       var button = Dom.byId('js-open-favorites');
       if (button) button.click();
@@ -310,6 +377,7 @@
         state.renderer.setTerrainMode('2d');
         state.pendingTerrainMode = null;
       }
+      syncCameraControls();
       Dom.byId('desktop-map-2d').classList.add('active');
       Dom.byId('desktop-map-3d').classList.remove('active');
       text('desktop-map-mode-state', '2D 地圖');
@@ -323,7 +391,9 @@
       } else {
         state.renderer.setTerrainMode('3d');
         state.pendingTerrainMode = null;
+        setCameraPreset(state.cameraPreset || 'solid');
       }
+      syncCameraControls();
       Dom.byId('desktop-map-3d').classList.add('active');
       Dom.byId('desktop-map-2d').classList.remove('active');
       text('desktop-map-mode-state', '3D 地形');
@@ -344,6 +414,12 @@
       if (panel && toggle && !panel.contains(event.target) && !toggle.contains(event.target)) {
         panel.classList.add('hidden');
         toggle.setAttribute('aria-expanded', 'false');
+      }
+      var cameraPopover = Dom.byId('desktop-camera-popover');
+      var cameraToggle = Dom.byId('desktop-camera-toggle');
+      if (cameraPopover && cameraToggle && !cameraPopover.contains(event.target) && !cameraToggle.contains(event.target)) {
+        cameraPopover.classList.add('hidden');
+        cameraToggle.setAttribute('aria-expanded', 'false');
       }
     });
   }
@@ -385,7 +461,30 @@
     Bus.on('camera:selected', function(camera) {
       if (camera && state.renderer) state.renderer.focusPoint(camera.lat, camera.lng, 13);
     });
+    Bus.on('route-ui:state', syncCameraControls);
     syncHeader();
+    syncCameraControls();
+  }
+
+  function goHome() {
+    if (window.NavMod) NavMod.go('map');
+    ['desktop-settings-popover', 'favorites-panel', 'info-panel', 'modal', 'nearby-panel', 'route-camera-strip', 'desktop-camera-popover'].forEach(function(id) {
+      var element = Dom.byId(id);
+      if (element) {
+        element.classList.add('hidden');
+        if (id === 'route-camera-strip') element.style.display = 'none';
+      }
+    });
+    var settingsButton = Dom.byId('desktop-settings-toggle');
+    var cameraButton = Dom.byId('desktop-camera-toggle');
+    if (settingsButton) settingsButton.setAttribute('aria-expanded', 'false');
+    if (cameraButton) cameraButton.setAttribute('aria-expanded', 'false');
+    if (state.renderer) {
+      if (AppState.activeRoute) state.renderer.focusRoute();
+      else state.renderer.resetView();
+    } else if (window.MapMod && MapMod.focusRoute) {
+      MapMod.focusRoute();
+    }
   }
 
   function haversineKm(a, b) {
@@ -594,7 +693,8 @@
   window.DesktopDashboardMod = {
     state: state,
     init: init,
-    getRenderer: function() { return state.renderer; }
+    getRenderer: function() { return state.renderer; },
+    goHome: goHome
   };
   window.addEventListener('load', function() { bindPlayback(); init(); });
 })();

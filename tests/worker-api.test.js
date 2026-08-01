@@ -38,7 +38,7 @@ describe('Worker v2 fixture API', () => {
   it('returns 429 and Retry-After when an expensive endpoint exceeds its limit', async () => {
     const limiter = { limit: vi.fn(async () => ({ success: false })) };
     const response = await worker.fetch(new Request('https://worker.test/v2/geocode?q=台北'), {
-      ...env,
+      USE_FIXTURES: 'false',
       LOOKUP_RATE_LIMITER: limiter
     });
     expect(response.status).toBe(429);

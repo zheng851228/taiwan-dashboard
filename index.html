@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=33" />
+  <link rel="stylesheet" href="css/style.css?v=34" />
 </head>
 <body class="text-slate-100" data-route-state="empty">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -80,12 +80,12 @@
 
   <header class="fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.25rem)] pb-2 glass shadow-2xl">
     <div class="flex justify-between items-center max-w-5xl mx-auto">
-      <div class="flex items-center gap-2">
+      <button id="brand-home" type="button" class="brand-home flex items-center gap-2" aria-label="返回規劃主畫面" title="返回規劃主畫面">
         <div class="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center shadow-lg shadow-orange-500/30">
           <i class="fa-solid fa-motorcycle text-white text-xs"></i>
         </div>
         <h1 class="text-sm font-black tracking-tighter leading-none">環島路況指揮中心</h1>
-      </div>
+      </button>
       <div id="desktop-header-route" class="desktop-only-header" aria-live="polite">
         <div class="desktop-header-route-copy">
           <span class="desktop-header-route-label" id="desktop-route-label">尚未規劃路線</span>
@@ -400,6 +400,14 @@
     <button id="desktop-map-2d" type="button">2D 地圖</button>
     <button id="desktop-map-3d" type="button" class="active">3D 地形</button>
     <button id="desktop-map-legacy" type="button" title="切換至傳統地圖">傳統地圖</button>
+    <button id="desktop-camera-toggle" type="button" aria-expanded="false" aria-controls="desktop-camera-popover">視角</button>
+    <div id="desktop-camera-popover" class="desktop-camera-popover hidden" role="menu" aria-label="3D 視角選擇">
+      <button type="button" class="desktop-camera-preset" data-camera-preset="birdseye" role="menuitem">鳥瞰</button>
+      <button type="button" class="desktop-camera-preset" data-camera-preset="solid" role="menuitem">立體</button>
+      <button type="button" class="desktop-camera-preset" data-camera-preset="along" role="menuitem">沿路</button>
+      <button type="button" class="desktop-camera-preset" data-camera-preset="reset" role="menuitem">重置</button>
+      <span id="desktop-camera-state" class="desktop-camera-state">立體</span>
+    </div>
   </div>
 
   <aside id="desktop-cctv-card" class="desktop-only-panel" aria-live="polite">

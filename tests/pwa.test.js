@@ -46,8 +46,8 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v33"');
-    expect(serviceWorker).toContain('./css/style.css?v=33');
+    expect(serviceWorker).toContain('const CACHE_VERSION = "v34"');
+    expect(serviceWorker).toContain('./css/style.css?v=34');
     expect(serviceWorker).toContain('./js/maplibre-renderer.js');
     expect(serviceWorker).toContain('./js/desktop-dashboard.js');
     expect(serviceWorker).not.toContain('twdash-shell-v24');
@@ -57,11 +57,13 @@ describe('PWA install and offline assets', () => {
     expect(pwaScript).toContain('isSafari()');
     expect(pwaScript).toContain('installGuideWouldInterrupt()');
     expect(styles).toContain('body:has(#pwa-update-banner:not(.hidden)) .map-top-panel');
-    expect(developerChangelog).toContain('PWA v33');
+    expect(developerChangelog).toContain('PWA v34');
     expect(maplibreRenderer).toContain('var TERRAIN_BOUNDS = [117.5, 20.5, 123.4, 26.7]');
     expect(maplibreRenderer).toContain('bounds: TERRAIN_BOUNDS');
     expect(maplibreRenderer).toContain('dark_nolabels');
     expect(maplibreRenderer).toContain('_addPlaceLabels');
+    expect(maplibreRenderer).toContain('setCameraPreset');
+    expect(maplibreRenderer).toContain('setWorkerUrl');
     expect(html).not.toContain('DEVELOPER_CHANGELOG');
     expect(serviceWorker).not.toContain('DEVELOPER_CHANGELOG');
   });
