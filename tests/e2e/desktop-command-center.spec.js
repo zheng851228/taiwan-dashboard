@@ -48,6 +48,7 @@ test('desktop command center keeps the initial map focused and expands on a read
 
   await page.locator('#desktop-map-2d').click();
   await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+  await expect(page.locator('#desktop-camera-toggle')).toBeDisabled();
   await page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]').click();
   await expect(page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.route-mode-btn[data-plate="yellow"]')).toHaveClass(/active/);
@@ -121,12 +122,68 @@ test('camera presets and brand home preserve the active route', async ({ page },
   await expect(page.locator('#desktop-camera-state')).toHaveText('沿路');
   await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(72, 0);
 
+  await page.locator('#desktop-camera-toggle').click();
+  await page.locator('.desktop-camera-preset[data-camera-preset="solid"]').click();
+  await expect(page.locator('#desktop-camera-state')).toHaveText('立體');
+  await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(58, 0);
+  const routeBearing = await page.evaluate(() => window.DesktopDashboardMod.getRenderer()._routeBearing());
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getBearing()), { timeout: 3000 }).toBeCloseTo(routeBearing, 0);
+
   const routeId = await page.evaluate(() => window.AppState.activeRoute.routeId);
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-open-list').click();
+  await expect(page.locator('#pg-list')).toHaveClass(/active/);
+  await page.locator('#brand-home').click();
+  await expect(page.locator('#pg-map')).toHaveClass(/active/);
+  await page.locator('#desktop-settings-toggle').click();
+  await page.locator('#desktop-open-tools').click();
+  await expect(page.locator('#pg-tools')).toHaveClass(/active/);
   await page.locator('#brand-home').click();
   await expect(page.locator('#pg-map')).toHaveClass(/active/);
   await expect(page.locator('body')).toHaveAttribute('data-route-state', 'ready');
   await expect.poll(() => page.evaluate(() => window.AppState.activeRoute.routeId)).toBe(routeId);
   await expect(page.locator('#desktop-camera-popover')).toBeHidden();
+});
+
+test('camera custom state is not persisted and reset returns to the full route', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop camera persistence verification only.');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => localStorage.removeItem('tw_desktop_camera_preset_v1'));
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+
+  const camera = page.locator('#desktop-camera-toggle');
+  await expect(camera).toBeEnabled();
+  await camera.click();
+  await page.locator('.desktop-camera-preset[data-camera-preset="birdseye"]').click();
+  await expect(page.locator('#desktop-camera-state')).toHaveText('鳥瞰');
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: 3000 }).toBeCloseTo(32, 0);
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getBearing()), { timeout: 3000 }).toBeCloseTo(0, 0);
+
+  await page.evaluate(() => {
+    const renderer = window.DesktopDashboardMod.getRenderer();
+    renderer.map.rotateTo(37, { duration: 0 });
+  });
+  await expect(page.locator('#desktop-camera-state')).toHaveText('自訂');
+  expect(await page.evaluate(() => localStorage.getItem('tw_desktop_camera_preset_v1'))).toBe('birdseye');
+
+  await camera.click();
+  await page.locator('.desktop-camera-preset[data-camera-preset="reset"]').click();
+  await expect(page.locator('#desktop-camera-state')).toHaveText('重置');
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: 3000 }).toBeCloseTo(58, 0);
+  expect(await page.evaluate(() => localStorage.getItem('tw_desktop_camera_preset_v1'))).toBe('reset');
+});
+
+test('reduced motion applies camera presets without animation', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Reduced-motion verification only.');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  await page.locator('#desktop-camera-toggle').click();
+  await page.locator('.desktop-camera-preset[data-camera-preset="along"]').click();
+  await expect(page.locator('#desktop-camera-state')).toHaveText('沿路');
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: 1000 }).toBeCloseTo(72, 0);
 });
 
 test('tall desktop ready layout starts the map directly below the header', async ({ page }, testInfo) => {

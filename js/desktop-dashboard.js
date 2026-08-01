@@ -222,10 +222,14 @@
 
   function setCameraPreset(preset) {
     if (!state.renderer || state.renderer.mode !== '3d') return;
+    var allowedPresets = { birdseye: true, solid: true, along: true, reset: true };
+    var selectedPreset = allowedPresets[preset]
+      ? preset
+      : (Storage.get(CAMERA_PREF_KEY, 'solid') || 'solid');
     var sectionOrder = state.selectedOrder;
-    if (state.renderer.setCameraPreset(preset, { sectionOrder: sectionOrder })) {
-      state.cameraPreset = preset;
-      Storage.set(CAMERA_PREF_KEY, preset);
+    if (state.renderer.setCameraPreset(selectedPreset, { sectionOrder: sectionOrder })) {
+      state.cameraPreset = selectedPreset;
+      Storage.set(CAMERA_PREF_KEY, selectedPreset);
       syncCameraControls();
     }
     var popover = Dom.byId('desktop-camera-popover');
