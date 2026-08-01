@@ -64,6 +64,13 @@ describe('PWA install and offline assets', () => {
     expect(maplibreRenderer).toContain('_addPlaceLabels');
     expect(maplibreRenderer).toContain('setCameraPreset');
     expect(maplibreRenderer).toContain('setWorkerUrl');
+    expect(html).toContain("script-src 'self'");
+    expect(html).toContain("worker-src 'self'");
+    expect(html).toContain("object-src 'none'");
+    expect(html).toContain("base-uri 'self'");
+    expect(html).not.toContain('onclick=');
+    expect(await readFile(path.join(root, 'js/main-ui.js'), 'utf8')).toContain('youtube-nocookie.com');
+    expect(await readFile(path.join(root, 'js/main-ui.js'), 'utf8')).toContain('allow-scripts allow-same-origin allow-presentation');
     expect(html).not.toContain('DEVELOPER_CHANGELOG');
     expect(serviceWorker).not.toContain('DEVELOPER_CHANGELOG');
   });
