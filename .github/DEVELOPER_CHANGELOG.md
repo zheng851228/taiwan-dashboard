@@ -11,6 +11,7 @@ This repository-only log records user-facing changes, verification evidence, and
 ## 2026-08-01 — PWA v33 security boundaries
 
 - Worker 加入 allowlisted CORS、rate limiting、32 KiB JSON body cap、UUID 與 HTTPS 地圖網址驗證。
+- staging／production environment 明確綁定兩個 rate-limit namespace，避免 Wrangler environment 不繼承頂層 binding。
 - GitHub Pages 加入 page-level CSP，MapLibre 使用同源 vendored worker；外部影像與 YouTube embed 使用 no-referrer／sandbox。
 - UI／Service Worker cache version 升至 PWA v33；開發紀錄不會載入或顯示在 App 介面。
 
