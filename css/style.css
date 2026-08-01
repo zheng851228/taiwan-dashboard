@@ -2197,7 +2197,8 @@ body.light .condition-road-event-icon {
 @media (min-width: 1200px) {
   :root {
     --desktop-header-height: 4.55rem;
-    --desktop-footer-height: 2.75rem;
+    /* The desktop disclaimer is an overlay, so it must not reserve a footer row. */
+    --desktop-footer-height: 0rem;
     --desktop-left-rail: 18.5rem;
     --desktop-right-rail: 15rem;
     --desktop-gap: 0.55rem;
@@ -2371,24 +2372,36 @@ body.light .condition-road-event-icon {
 
   main {
     margin-top: var(--desktop-header-height) !important;
-    height: calc(100dvh - var(--desktop-header-height) - var(--desktop-footer-height));
+    height: calc(100dvh - var(--desktop-header-height));
     flex: none;
     overflow: hidden;
   }
 
   .desktop-disclaimer {
+    position: fixed;
+    left: 50%;
+    bottom: .28rem;
+    z-index: 1450;
+    width: min(90vw, 58rem);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: .55rem;
-    min-height: var(--desktop-footer-height);
-    padding: .4rem 1rem;
+    min-height: 0;
+    padding: .16rem .55rem;
+    transform: translateX(-50%);
     color: var(--ui-text-subtle);
-    background: var(--ui-bg);
-    border-top: 1px solid var(--ui-border);
-    font-size: .58rem;
-    line-height: 1.35;
+    background: rgba(10,19,30,.9);
+    border: 1px solid rgba(148,163,184,.2);
+    background: color-mix(in srgb, var(--ui-bg) 84%, transparent);
+    border-color: color-mix(in srgb, var(--ui-border) 72%, transparent);
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.16);
+    font-size: .5rem;
+    line-height: 1.25;
     text-align: center;
+    pointer-events: none;
+    opacity: .82;
   }
   .desktop-disclaimer i { flex: 0 0 auto; color: #facc15; }
 
@@ -2799,7 +2812,7 @@ body.light .condition-road-event-icon {
 @media (min-width: 1200px) and (max-width: 1399px) {
   :root {
     --desktop-header-height: 3.8rem;
-    --desktop-footer-height: 2.75rem;
+    --desktop-footer-height: 0rem;
     --desktop-left-rail: 15rem;
     --desktop-right-rail: 12.2rem;
     --desktop-gap: .45rem;
@@ -3202,8 +3215,8 @@ body.light .desktop-cctv-placeholder {
 }
 body.light .desktop-disclaimer {
   color: var(--ui-text-muted);
-  background: #f8fafc;
-  border-top-color: rgba(15,23,42,0.14);
+  background: rgba(248,250,252,.9);
+  border-color: rgba(15,23,42,0.14);
 }
 body.light .desktop-disclaimer i { color: #b45309; }
 
