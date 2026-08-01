@@ -5,6 +5,7 @@ This repository-only log records user-facing changes, verification evidence, and
 ## 2026-08-02 — PWA v38 desktop fidelity draft
 
 - 桌面 MapLibre 支援受限 MapTiler `satellite-v4` 公開 Key；`taiwan-dashboard-pages` 已接入前端 provider config，未設定、403、逾時或離線時維持 CARTO 深色 3D，不阻塞路線分析。Key 值不進 log，來源限制仍須維持 `zheng851228.github.io`。
+- 衛星圖磚改用 MapTiler Maps API 的 `/maps/satellite-v4` 路徑，並以 Pages origin smoke 確認 TileJSON 與 XYZ 回應成功。
 - 補上衛星／深色偏好、MapTiler attribution、路線深色 casing、最多六個定位事件 callout、緊湊沿途時間軸、CCTV 輪播與 geometry-only 模擬播放。
 - 海拔資料不足時保留面板並明確標示未知，不補成零；手機不載入桌面 MapLibre／MapTiler。v38 仍保持 draft，待 Pages 公開 smoke 與來源限制確認後再決定是否合併。
 - 桌面路況列表分類篩選區回到正常文流，避免捲動時遮住攝影機卡片；新增桌面回歸測試。

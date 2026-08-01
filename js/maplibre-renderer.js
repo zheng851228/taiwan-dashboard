@@ -155,7 +155,10 @@
     if (PROVIDER_CONFIG.provider !== 'maptiler' || !PROVIDER_CONFIG.key) return [];
     var tileset = encodeURIComponent(PROVIDER_CONFIG.tileset || 'satellite-v4');
     var key = encodeURIComponent(PROVIDER_CONFIG.key);
-    return ['https://api.maptiler.com/tiles/' + tileset + '/{z}/{x}/{y}.jpg?key=' + key];
+    // satellite-v4 is a hosted map (Maps API), not a standalone tileset.
+    // Keep the provider key in the query string so MapLibre can request the
+    // raster XYZ tiles without exposing it in application state or logs.
+    return ['https://api.maptiler.com/maps/' + tileset + '/{z}/{x}/{y}.jpg?key=' + key];
   }
 
   function createRenderer(options) {

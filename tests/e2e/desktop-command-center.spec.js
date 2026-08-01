@@ -111,7 +111,13 @@ test('desktop traffic browser keeps the filter shell above cards without coverin
 test('v38 keeps satellite optional and exposes the compact route intelligence controls', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v38 verification only.');
   let mapTilerRequestCount = 0;
-  page.on('request', request => { if (request.url().includes('api.maptiler.com')) mapTilerRequestCount += 1; });
+  let satelliteMapRequestCount = 0;
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.hostname !== 'api.maptiler.com') return;
+    mapTilerRequestCount += 1;
+    if (url.pathname.includes('/maps/satellite-v4/')) satelliteMapRequestCount += 1;
+  });
   await page.setViewportSize({ width: 1280, height: 853 });
   await page.addInitScript(() => {
     localStorage.removeItem('tw_desktop_basemap_v1');
@@ -130,6 +136,7 @@ test('v38 keeps satellite optional and exposes the compact route intelligence co
   const keyConfigured = await page.evaluate(() => Boolean(window.TWMapProviderConfig && window.TWMapProviderConfig.key));
   if (keyConfigured) {
     expect(mapTilerRequestCount).toBeGreaterThan(0);
+    expect(satelliteMapRequestCount).toBeGreaterThan(0);
   } else {
     expect(mapTilerRequestCount).toBe(0);
   }
