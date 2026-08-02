@@ -7,8 +7,17 @@
   var MAP_PREF_KEY = 'tw_desktop_map_renderer_v1';
   var BASEMAP_PREF_KEY = 'tw_desktop_basemap_v1';
   var CAMERA_PREF_KEY = 'tw_desktop_camera_preset_v1';
+  var LAYOUT_PREF_KEY = 'tw_desktop_layout_v1';
   var ELEVATION_CACHE_KEY = 'tw_route_elevation_cache_v1';
   var ELEVATION_SOURCE_VERSION = 'mapterhorn-v1';
+  function defaultLayout() {
+    var narrow = window.innerWidth < 1400;
+    return {
+      left: narrow ? 240 : 296,
+      right: narrow ? 195 : 240,
+      bottom: window.innerHeight <= 820 ? 272 : 312
+    };
+  }
   var state = {
     desktop: false,
     renderer: null,
@@ -20,7 +29,9 @@
     pendingTerrainMode: null,
     cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid'),
     basemap: Storage.get(BASEMAP_PREF_KEY, 'satellite') === 'satellite' ? 'satellite' : 'dark',
-    cctvIndex: 0
+    cctvIndex: 0,
+    layout: null,
+    layoutDrag: null
   };
 
   var TRAFFIC_LABELS = {
@@ -32,6 +43,154 @@
 
   function isDesktop() {
     return Boolean(window.matchMedia && window.matchMedia(DESKTOP_BREAKPOINT).matches);
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  function layoutBounds() {
+    var root = document.documentElement;
+    var rootFontSize = parseFloat(window.getComputedStyle(root).fontSize) || 16;
+    var gap = (parseFloat(window.getComputedStyle(root).getPropertyValue('--desktop-gap')) || .55) * rootFontSize;
+    var minLeft = 240;
+    var minRight = 220;
+    var maxLeft = 420;
+    var maxRight = 420;
+    var minCenter = 30 * rootFontSize;
+    var sideBudget = Math.max(minLeft + minRight, window.innerWidth - minCenter - gap * 2);
+    var headerHeight = (parseFloat(window.getComputedStyle(root).getPropertyValue('--desktop-header-height')) || 4.55) * rootFontSize;
+    var availableHeight = Math.max(0, window.innerHeight - headerHeight - gap);
+    var maxBottom = Math.min(360, Math.max(160, availableHeight - 280));
+    return {
+      left: { min: minLeft, max: Math.min(maxLeft, sideBudget - minRight) },
+      right: { min: minRight, max: Math.min(maxRight, sideBudget - minLeft) },
+      bottom: { min: 160, max: maxBottom }
+    };
+  }
+
+  function normalizeLayout(value) {
+    var defaults = defaultLayout();
+    var candidate = value && typeof value === 'object' ? value : defaults;
+    var bounds = layoutBounds();
+    var left = clamp(Number(candidate.left) || defaults.left, bounds.left.min, bounds.left.max);
+    var right = clamp(Number(candidate.right) || defaults.right, bounds.right.min, bounds.right.max);
+    var sideBudget = window.innerWidth - ((parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--desktop-gap')) || .55) * (parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16) * 2) - 30 * (parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16);
+    if (left + right > sideBudget) {
+      var overflow = left + right - sideBudget;
+      if (right - bounds.right.min >= overflow) right -= overflow;
+      else {
+        overflow -= right - bounds.right.min;
+        right = bounds.right.min;
+        left = clamp(left - overflow, bounds.left.min, bounds.left.max);
+      }
+    }
+    return {
+      left: Math.round(left),
+      right: Math.round(right),
+      bottom: Math.round(clamp(Number(candidate.bottom) || defaults.bottom, bounds.bottom.min, bounds.bottom.max))
+    };
+  }
+
+  function layoutHandle(key) {
+    return Dom.byId({ left: 'desktop-resize-left', right: 'desktop-resize-right', bottom: 'desktop-resize-bottom' }[key]);
+  }
+
+  function syncLayoutSeparators() {
+    var layout = state.layout || normalizeLayout(defaultLayout());
+    var bounds = layoutBounds();
+    [['left', layout.left], ['right', layout.right], ['bottom', layout.bottom]].forEach(function(pair) {
+      var handle = layoutHandle(pair[0]);
+      var range = bounds[pair[0]];
+      if (!handle || !range) return;
+      handle.setAttribute('aria-valuemin', String(Math.round(range.min)));
+      handle.setAttribute('aria-valuemax', String(Math.round(range.max)));
+      handle.setAttribute('aria-valuenow', String(Math.round(pair[1])));
+    });
+  }
+
+  function applyLayout(value, persist) {
+    state.layout = normalizeLayout(value);
+    var root = document.documentElement;
+    root.style.setProperty('--desktop-left-rail', state.layout.left + 'px');
+    root.style.setProperty('--desktop-right-rail', state.layout.right + 'px');
+    root.style.setProperty('--desktop-bottom-rail', state.layout.bottom + 'px');
+    syncLayoutSeparators();
+    if (persist) Storage.setJson(LAYOUT_PREF_KEY, state.layout);
+  }
+
+  function saveLayout() {
+    if (state.layout) Storage.setJson(LAYOUT_PREF_KEY, state.layout);
+    syncSettings();
+  }
+
+  function layoutKeyFor(element) {
+    if (!element) return null;
+    return element.id === 'desktop-resize-left' ? 'left'
+      : element.id === 'desktop-resize-right' ? 'right'
+        : element.id === 'desktop-resize-bottom' ? 'bottom' : null;
+  }
+
+  function updateLayoutFromPointer(key, drag, event) {
+    var next = { left: drag.layout.left, right: drag.layout.right, bottom: drag.layout.bottom };
+    if (key === 'left') next.left = drag.layout.left + (event.clientX - drag.x);
+    if (key === 'right') next.right = drag.layout.right - (event.clientX - drag.x);
+    if (key === 'bottom') next.bottom = drag.layout.bottom - (event.clientY - drag.y);
+    applyLayout(next, false);
+  }
+
+  function startLayoutDrag(element, event) {
+    if (!state.desktop || !element || event.button !== undefined && event.button !== 0) return;
+    var key = layoutKeyFor(element);
+    if (!key || !state.layout) return;
+    event.preventDefault();
+    state.layoutDrag = { key: key, x: event.clientX, y: event.clientY, layout: { left: state.layout.left, right: state.layout.right, bottom: state.layout.bottom } };
+    document.body.classList.add('desktop-resizing');
+    document.body.dataset.resizeAxis = key === 'bottom' ? 'row' : 'col';
+    var pointerId = event.pointerId;
+    var finish = function() {
+      if (!state.layoutDrag) return;
+      state.layoutDrag = null;
+      document.body.classList.remove('desktop-resizing');
+      delete document.body.dataset.resizeAxis;
+      saveLayout();
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+    var move = function(moveEvent) {
+      if (!state.layoutDrag || moveEvent.pointerId !== pointerId) return;
+      moveEvent.preventDefault();
+      updateLayoutFromPointer(key, state.layoutDrag, moveEvent);
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', finish, { once: true });
+    window.addEventListener('pointercancel', finish, { once: true });
+  }
+
+  function adjustLayoutWithKeyboard(element, event) {
+    var key = layoutKeyFor(element);
+    if (!key || !state.layout) return;
+    var step = event.shiftKey ? 24 : 8;
+    var delta = 0;
+    if (key === 'left' && event.key === 'ArrowLeft') delta = -step;
+    if (key === 'left' && event.key === 'ArrowRight') delta = step;
+    if (key === 'right' && event.key === 'ArrowLeft') delta = step;
+    if (key === 'right' && event.key === 'ArrowRight') delta = -step;
+    if (key === 'bottom' && event.key === 'ArrowUp') delta = step;
+    if (key === 'bottom' && event.key === 'ArrowDown') delta = -step;
+    if (event.key === 'Home') delta = key === 'bottom' ? layoutBounds().bottom.min - state.layout.bottom : layoutBounds()[key].min - state.layout[key];
+    if (event.key === 'End') delta = key === 'bottom' ? layoutBounds().bottom.max - state.layout.bottom : layoutBounds()[key].max - state.layout[key];
+    if (!delta) return;
+    event.preventDefault();
+    var next = { left: state.layout.left, right: state.layout.right, bottom: state.layout.bottom };
+    next[key] += delta;
+    applyLayout(next, true);
+  }
+
+  function resetLayout() {
+    applyLayout(defaultLayout(), true);
+    Toast.show('版面配置已重置', 1800);
   }
 
   function setVisible(id, visible) {
@@ -97,6 +256,69 @@
       ? '示範資料僅供介面測試，不代表即時路況。'
       : '資料來源：TDX、THB、CWA、各縣市 CCTV。灰色資料不足，不代表順暢。');
     text('desktop-support-updated', data && data.updatedAt ? formatUpdatedAt(data.updatedAt) : '--:--:--');
+    syncDesktopNavigation();
+  }
+
+  function syncDesktopNavigation() {
+    [['desktop-nav-google', 'nav-google'], ['desktop-nav-apple', 'nav-apple']].forEach(function(pair) {
+      var button = Dom.byId(pair[0]);
+      var link = Dom.byId(pair[1]);
+      if (!button || !link) return;
+      button.disabled = link.getAttribute('aria-disabled') === 'true';
+    });
+  }
+
+  function openDesktopNavigation(linkId) {
+    syncDesktopNavigation();
+    var link = Dom.byId(linkId);
+    if (!link || link.getAttribute('aria-disabled') === 'true') return;
+    link.click();
+  }
+
+  function timelineSections(sections, limit) {
+    var source = Array.isArray(sections) ? sections : [];
+    var maximum = Math.max(2, Number(limit) || 6);
+    if (source.length <= maximum) return source.slice();
+    var selected = [];
+    for (var index = 0; index < maximum; index += 1) {
+      var sourceIndex = Math.round((index / (maximum - 1)) * (source.length - 1));
+      if (selected.indexOf(source[sourceIndex]) === -1) selected.push(source[sourceIndex]);
+    }
+    return selected;
+  }
+
+  function timelinePlaceLabel(value, fallback) {
+    var label = String(value || '').trim();
+    if (!label || /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(label)) return fallback;
+    return label.length > 9 ? label.slice(0, 9) + '…' : label;
+  }
+
+  function timelineStopLabel(section, index, total) {
+    var inputs = AppState.routeInputValues || [];
+    var route = AppState.activeRoute;
+    if (index === 0) return timelinePlaceLabel(inputs[0], route && route.dataMode === 'fixture' ? '示範起點' : '起點');
+    if (index === total - 1) return timelinePlaceLabel(inputs[inputs.length - 1], route && route.dataMode === 'fixture' ? '示範終點' : '終點');
+    return section.roadRef || section.roadName || ('路段 ' + (index + 1));
+  }
+
+  function timelineClock(minutesFromNow) {
+    var time = new Date(Date.now() + Math.max(0, Number(minutesFromNow) || 0) * 60000);
+    return String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
+  }
+
+  function weatherPresentation(weather) {
+    var value = weather || {};
+    var condition = String(value.condition || '未知');
+    var temperature = Number(value.temperatureC !== undefined ? value.temperatureC : value.temp);
+    var rainChance = Number(value.rainChance);
+    var rainy = /雨|雷|陣雨/.test(condition) || (Number.isFinite(rainChance) && rainChance >= 40);
+    var sunny = /晴/.test(condition) && !rainy;
+    var icon = rainy ? 'fa-cloud-rain' : (sunny ? 'fa-sun' : 'fa-cloud');
+    var className = rainy ? 'is-rainy' : (sunny ? 'is-sunny' : 'is-cloudy');
+    var label = Number.isFinite(temperature) ? Math.round(temperature) + '°C' : condition;
+    if (rainy && Number.isFinite(rainChance)) label += ' · ' + Math.round(rainChance) + '%';
+    var title = condition + (Number.isFinite(rainChance) ? ' · 降雨 ' + Math.round(rainChance) + '%' : '');
+    return { icon: icon, className: className, label: label, title: title };
   }
 
   function renderRouteIntelligence(data) {
@@ -112,14 +334,26 @@
       return;
     }
     panel.classList.remove('hidden');
-    var visible = sections.slice(0, 6);
+    var visible = timelineSections(sections, 6);
+    var totalKm = sections.reduce(function(maximum, section) {
+      return Math.max(maximum, Number(section.toKm) || 0);
+    }, 0);
+    var totalMinutes = Number(AppState.lastRouteInfo && AppState.lastRouteInfo.duration)
+      || Number(AppState.activeRoute && AppState.activeRoute.durationMinutes)
+      || 0;
+    stops.style.setProperty('--desktop-stop-count', String(Math.max(1, visible.length)));
+    weatherTrack.style.setProperty('--desktop-stop-count', String(Math.max(1, visible.length)));
     stops.innerHTML = visible.map(function(section, index) {
-      var road = section.roadRef || section.roadName || ('路段 ' + (index + 1));
-      var distance = Number.isFinite(Number(section.toKm)) ? Math.round(Number(section.toKm)) + ' km' : '--';
+      var road = timelineStopLabel(section, index, visible.length);
+      var sectionKm = index === 0 ? 0 : Number(section.toKm);
+      var distance = Number.isFinite(sectionKm) ? Math.round(sectionKm) + ' km' : '--';
+      var ratio = totalKm > 0 && Number.isFinite(sectionKm) ? sectionKm / totalKm : 0;
       var active = Number(section.order) === Number(state.selectedOrder) ? ' active' : '';
-      return '<button type="button" class="desktop-route-stop' + active + '" data-section-order="' + Number(section.order) + '"><strong>' + escapeHtml(road) + '</strong><span>' + escapeHtml(distance) + '</span></button>';
+      return '<button type="button" class="desktop-route-stop' + active + '" data-section-order="' + Number(section.order) + '"><strong>'
+        + escapeHtml(road) + '</strong><span class="desktop-stop-time">' + escapeHtml(timelineClock(totalMinutes * ratio))
+        + '</span><span class="desktop-stop-distance">' + escapeHtml(distance) + '</span></button>';
     }).join('');
-    band.innerHTML = visible.map(function(section) {
+    band.innerHTML = sections.map(function(section) {
       var level = section.traffic && section.traffic.level || 'unknown';
       var from = Number(section.fromKm);
       var to = Number(section.toKm);
@@ -127,10 +361,9 @@
       return '<span class="desktop-traffic-segment is-' + escapeHtml(level) + '" style="flex:' + width.toFixed(2) + '" title="' + escapeHtml(TRAFFIC_LABELS[level] || '資料不足') + '"></span>';
     }).join('');
     weatherTrack.innerHTML = visible.map(function(section) {
-      var weather = section.weather || {};
-      var condition = weather.condition || '未知';
-      var rain = Number.isFinite(Number(weather.rainChance)) ? ' · ' + Number(weather.rainChance) + '%' : '';
-      return '<span><i class="fa-solid fa-cloud-rain"></i>' + escapeHtml(condition + rain) + '</span>';
+      var weather = weatherPresentation(section.weather);
+      return '<span class="' + weather.className + '" title="' + escapeHtml(weather.title) + '"><i class="fa-solid '
+        + weather.icon + '"></i>' + escapeHtml(weather.label) + '</span>';
     }).join('');
     Dom.queryAll('.desktop-route-stop').forEach(function(button) {
       button.addEventListener('click', function() { state.selectedOrder = Number(button.dataset.sectionOrder); renderContext(); renderRouteIntelligence(data); });
@@ -370,10 +603,14 @@
   function syncViewport() {
     var next = isDesktop();
     if (next === state.desktop) {
-      if (next && state.renderer) state.renderer.resize();
+      if (next) {
+        applyLayout(state.layout || defaultLayout(), false);
+        if (state.renderer) state.renderer.resize();
+      }
       return;
     }
     state.desktop = next;
+    applyLayout(state.layout || defaultLayout(), false);
     if (!next) {
       destroyRenderer();
       document.body.classList.remove('desktop-legacy-map');
@@ -405,6 +642,7 @@
     if (bannerButton) bannerButton.setAttribute('aria-pressed', String(Boolean(bannerHidden)));
     text('desktop-map-mode-state', Storage.get(MAP_PREF_KEY, 'auto') === 'legacy' ? '傳統地圖' : '3D 地形');
     text('desktop-basemap-setting-state', state.basemap === 'satellite' ? '衛星底圖' : '深色地圖');
+    text('desktop-layout-setting-state', Storage.getJson(LAYOUT_PREF_KEY, null) ? '已自訂' : '可拖曳調整');
   }
 
   function toggleBasemap() {
@@ -420,6 +658,13 @@
       }
     }
     syncSettings();
+  }
+
+  function bindLayoutControls() {
+    Dom.onAll('.desktop-resizer', 'pointerdown', function(element, event) { startLayoutDrag(element, event); });
+    Dom.onAll('.desktop-resizer', 'keydown', function(element, event) { adjustLayoutWithKeyboard(element, event); });
+    Dom.onAll('.desktop-resizer', 'dblclick', function() { resetLayout(); });
+    Dom.onId('desktop-layout-reset', 'click', resetLayout);
   }
 
   function bindControls() {
@@ -458,9 +703,16 @@
       var popover = Dom.byId('desktop-condition-info-popover');
       if (!popover) return;
       var open = popover.classList.contains('hidden');
+      if (open) syncDesktopNavigation();
       popover.classList.toggle('hidden', !open);
+      if (!open) {
+        var appleLegs = Dom.byId('apple-leg-links');
+        if (appleLegs) appleLegs.classList.add('hidden');
+      }
       button.setAttribute('aria-expanded', String(open));
     });
+    Dom.onId('desktop-nav-google', 'click', function() { openDesktopNavigation('nav-google'); });
+    Dom.onId('desktop-nav-apple', 'click', function() { openDesktopNavigation('nav-apple'); });
     Dom.onId('desktop-clock-setting', 'click', function() {
       UiPrefsMod.setHidden('clockHidden', !UiPrefsMod.isHidden('clockHidden'));
       syncSettings();
@@ -537,6 +789,8 @@
   }
 
   function init() {
+    applyLayout(Storage.getJson(LAYOUT_PREF_KEY, defaultLayout()), false);
+    bindLayoutControls();
     bindControls();
     syncSettings();
     state.desktop = isDesktop();
@@ -593,7 +847,7 @@
 
   function goHome() {
     if (window.NavMod) NavMod.go('map');
-    ['desktop-settings-popover', 'favorites-panel', 'info-panel', 'modal', 'nearby-panel', 'route-camera-strip', 'desktop-camera-popover'].forEach(function(id) {
+    ['desktop-settings-popover', 'desktop-condition-info-popover', 'favorites-panel', 'info-panel', 'modal', 'nearby-panel', 'route-camera-strip', 'desktop-camera-popover'].forEach(function(id) {
       var element = Dom.byId(id);
       if (element) {
         element.classList.add('hidden');
@@ -602,8 +856,10 @@
     });
     var settingsButton = Dom.byId('desktop-settings-toggle');
     var cameraButton = Dom.byId('desktop-camera-toggle');
+    var conditionInfoButton = Dom.byId('desktop-condition-info-toggle');
     if (settingsButton) settingsButton.setAttribute('aria-expanded', 'false');
     if (cameraButton) cameraButton.setAttribute('aria-expanded', 'false');
+    if (conditionInfoButton) conditionInfoButton.setAttribute('aria-expanded', 'false');
     if (state.renderer) {
       if (AppState.activeRoute) state.renderer.focusRoute();
       else state.renderer.resetView();
@@ -692,6 +948,12 @@
     var max = Math.max.apply(null, valid.map(function(sample) { return sample.elevation; }));
     var range = Math.max(1, max - min);
     var total = samples[samples.length - 1].distance || 1;
+    var chartLeft = 60;
+    var chartRight = 790;
+    var chartTop = 18;
+    var chartBottom = 136;
+    var chartWidth = chartRight - chartLeft;
+    var chartHeight = chartBottom - chartTop;
     var polylines = [];
     var current = [];
     samples.forEach(function(sample) {
@@ -700,14 +962,35 @@
         current = [];
         return;
       }
-      current.push((sample.distance / total * 780 + 10).toFixed(1) + ',' + (138 - ((sample.elevation - min) / range * 112)).toFixed(1));
+      current.push((sample.distance / total * chartWidth + chartLeft).toFixed(1) + ','
+        + (chartBottom - ((sample.elevation - min) / range * chartHeight)).toFixed(1));
     });
     if (current.length > 1) polylines.push(current);
-    var markup = '<defs><linearGradient id="desktop-elevation-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f59e0b" stop-opacity=".36"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></linearGradient></defs>'
-      + '<line x1="10" y1="138" x2="790" y2="138" class="desktop-chart-axis" />';
+    var markup = '<defs>'
+      + '<linearGradient id="desktop-elevation-stroke" x1="0" x2="1" y1="0" y2="0">'
+      + '<stop offset="0" stop-color="#52b788"/><stop offset=".34" stop-color="#facc15"/>'
+      + '<stop offset=".58" stop-color="#ef5350"/><stop offset=".78" stop-color="#f59e0b"/>'
+      + '<stop offset="1" stop-color="#52b788"/></linearGradient>'
+      + '<linearGradient id="desktop-elevation-fill" x1="0" x2="0" y1="0" y2="1">'
+      + '<stop offset="0" stop-color="#f97316" stop-opacity=".28"/><stop offset="1" stop-color="#f97316" stop-opacity="0"/>'
+      + '</linearGradient></defs>';
+    [0, .33, .66, 1].forEach(function(position) {
+      var y = chartTop + chartHeight * position;
+      var value = max - range * position;
+      markup += '<line x1="' + chartLeft + '" y1="' + y.toFixed(1) + '" x2="' + chartRight + '" y2="' + y.toFixed(1) + '" class="desktop-chart-axis" />'
+        + '<text x="52" y="' + (y + 3).toFixed(1) + '" text-anchor="end" class="desktop-chart-label">' + Math.round(value).toLocaleString() + '</text>';
+    });
     polylines.forEach(function(line, index) {
+      var firstX = line[0].split(',')[0];
+      var lastX = line[line.length - 1].split(',')[0];
+      markup += '<polygon points="' + firstX + ',' + chartBottom + ' ' + line.join(' ') + ' ' + lastX + ',' + chartBottom + '" class="desktop-elevation-area"' + (index === 0 ? '' : ' opacity=".7"') + ' />';
       markup += '<polyline points="' + line.join(' ') + '" class="desktop-elevation-line"' + (index === 0 ? '' : ' opacity=".78"') + ' />';
     });
+    var peak = valid.reduce(function(best, sample) { return sample.elevation > best.elevation ? sample : best; }, valid[0]);
+    var peakX = peak.distance / total * chartWidth + chartLeft;
+    var peakY = chartBottom - ((peak.elevation - min) / range * chartHeight);
+    markup += '<circle cx="' + peakX.toFixed(1) + '" cy="' + peakY.toFixed(1) + '" r="4" class="desktop-chart-peak" />'
+      + '<text x="' + peakX.toFixed(1) + '" y="' + Math.max(11, peakY - 8).toFixed(1) + '" text-anchor="middle" class="desktop-chart-peak-label">' + Math.round(peak.elevation).toLocaleString() + ' m</text>';
     chart.innerHTML = markup;
     var maxSlope = 0;
     var windowKm = 1;
@@ -830,6 +1113,8 @@
     state: state,
     init: init,
     getRenderer: function() { return state.renderer; },
+    getLayout: function() { return state.layout ? { left: state.layout.left, right: state.layout.right, bottom: state.layout.bottom } : null; },
+    resetLayout: resetLayout,
     goHome: goHome
   };
   function bootDesktopDashboard() {
