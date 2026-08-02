@@ -33,6 +33,29 @@
     });
   }
 
+  function isTransientNetworkError(error) {
+    if (!error || error.status || error.name === 'AbortError') return false;
+    return error.name === 'TypeError'
+      || /failed to fetch|networkerror|network request failed|load failed/i.test(String(error.message || ''));
+  }
+
+  function requestJsonWithNetworkRetry(url, options, fallbackKey, errorMessage) {
+    function send() {
+      return requestJson(url, options, fallbackKey);
+    }
+    return send().catch(function(error) {
+      if (!isTransientNetworkError(error)) throw error;
+      return new Promise(function(resolve) {
+        setTimeout(resolve, 250);
+      }).then(send).catch(function(retryError) {
+        if (!isTransientNetworkError(retryError)) throw retryError;
+        var friendlyError = new Error(errorMessage || '\u7db2\u8def\u9023\u7dda\u4e0d\u7a69\u5b9a\uff0c\u8acb\u78ba\u8a8d\u7db2\u8def\u5f8c\u518d\u8a66\u4e00\u6b21\u3002');
+        friendlyError.code = 'NETWORK_UNAVAILABLE';
+        throw friendlyError;
+      });
+    });
+  }
+
   function requestJsonWithTimeout(url, options, fallbackKey, timeoutMs) {
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var requestOptions = options ? Object.assign({}, options) : {};
@@ -111,10 +134,11 @@
       }
 
       if (!geocodeRequests[key]) {
-        geocodeRequests[key] = requestJson(
+        geocodeRequests[key] = requestJsonWithNetworkRetry(
           Config.WORKER_BASE + '/v2/geocode?q=' + encodeURIComponent(String(name || '').trim()),
           null,
-          'places'
+          'places',
+          '\u5730\u9ede\u641c\u5c0b\u9023\u7dda\u4e0d\u7a69\u5b9a\uff0c\u8acb\u78ba\u8a8d\u7db2\u8def\u5f8c\u518d\u8a66\u4e00\u6b21\u3002'
         ).then(function(payload) {
           geocodeCache[key] = {
             payload: payload,
@@ -149,7 +173,7 @@
 
     createRoute: function(locations, vehicle, preferences) {
       setDataStatus('route', 'loading');
-      return requestJson(Config.WORKER_BASE + '/v2/routes', {
+      return requestJsonWithNetworkRetry(Config.WORKER_BASE + '/v2/routes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,7 +183,7 @@
           vehicle: vehicle,
           preferences: preferences || { strategy: 'balanced' }
         })
-      }, 'route').then(function(payload) {
+      }, 'route', '\u8def\u7dda\u670d\u52d9\u9023\u7dda\u4e0d\u7a69\u5b9a\uff0c\u8acb\u78ba\u8a8d\u7db2\u8def\u5f8c\u518d\u8a66\u4e00\u6b21\u3002').then(function(payload) {
         setDataStatus('route', 'ready', payload.updatedAt);
         return payload;
       }).catch(function(err) {

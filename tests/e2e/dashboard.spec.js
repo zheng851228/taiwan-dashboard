@@ -789,6 +789,61 @@ test('keeps selected place labels while routing with their local coordinates', a
   expect(geocodeRequests).toBe(0);
 });
 
+test('retries one transient geocode and route network failure', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop network retry verification only.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.__networkRetryCounts = { geocode: 0, route: 0 };
+    window.fetch = (input, options) => {
+      const url = new URL(String(input), window.location.href);
+      if (url.pathname === '/v2/geocode') {
+        window.__networkRetryCounts.geocode += 1;
+        if (window.__networkRetryCounts.geocode === 1) return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      if (url.pathname === '/v2/routes' && String(options?.method || 'GET').toUpperCase() === 'POST') {
+        window.__networkRetryCounts.route += 1;
+        if (window.__networkRetryCounts.route === 1) return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      return originalFetch(input, options);
+    };
+  });
+  await openRoutePlanner(page);
+  await page.locator('#js-route-start').fill('台中車站');
+  await page.locator('#js-route-end').fill('桃園車站');
+  await page.locator('#js-route-btn').click();
+
+  await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  await expect(page.locator('#js-route-status')).not.toContainText('Failed to fetch');
+  await expect.poll(() => page.evaluate(() => window.__networkRetryCounts)).toEqual({ geocode: 3, route: 2 });
+});
+
+test('replaces a repeated route network failure with a Chinese recovery message', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop network failure UX verification only.');
+  await page.goto('/?worker=http://127.0.0.1:8787');
+  await page.evaluate(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.__routeFailureAttempts = 0;
+    window.fetch = (input, options) => {
+      const url = new URL(String(input), window.location.href);
+      if (url.pathname === '/v2/routes' && String(options?.method || 'GET').toUpperCase() === 'POST') {
+        window.__routeFailureAttempts += 1;
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
+      return originalFetch(input, options);
+    };
+  });
+  await openRoutePlanner(page);
+  await page.locator('#js-route-start').fill('24.1371092,120.6868719');
+  await page.locator('#js-route-end').fill('24.9893416,121.3135656');
+  await page.locator('#js-route-btn').click();
+
+  await expect(page.locator('#js-route-status')).toContainText('路線服務連線不穩定');
+  await expect(page.locator('#js-route-status')).not.toContainText('Failed to fetch');
+  await expect.poll(() => page.evaluate(() => window.__routeFailureAttempts)).toBe(2);
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
+});
+
 test('keeps a cleared route empty when an older conditions request finishes', async ({ page }) => {
   await page.goto('/?worker=http://127.0.0.1:8787');
   await page.evaluate(() => {
