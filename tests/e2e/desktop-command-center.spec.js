@@ -166,8 +166,10 @@ test('desktop workspace splitters resize and persist the three command-center re
   await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getLayout())).toEqual(initial.layout);
 });
 
-test('v39 lower intelligence rail matches the approved timeline anatomy', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v39 verification only.');
+test('v40 lower intelligence rail interactions remain error-free', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop v40 verification only.');
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
   let mapTilerRequestCount = 0;
   let satelliteMapRequestCount = 0;
   page.on('request', request => {
@@ -211,12 +213,16 @@ test('v39 lower intelligence rail matches the approved timeline anatomy', async 
   expect(lowerRail.elevationHeading).toContain('海拔高度（m）');
   await page.locator('#desktop-condition-info-toggle').click();
   await expect(page.locator('#desktop-condition-info-popover')).toBeVisible();
+  await expect(page.locator('#desktop-condition-info-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#desktop-map-basemap')).toHaveText('底圖');
   await page.locator('#desktop-map-basemap').click();
   await expect(page.locator('#desktop-basemap-setting-state')).toHaveText('深色地圖');
   await page.locator('#desktop-playback-toggle').click();
   await expect.poll(() => page.locator('#desktop-playback-distance').textContent()).not.toBe('0 km');
   await page.locator('#desktop-playback-toggle').click();
+  await page.locator('#desktop-playback-range').fill('500');
+  await page.locator('#desktop-playback-speed').selectOption('2');
+  await expect(page.locator('#desktop-playback-distance')).not.toHaveText(/^0(?:\.0)? km/);
   const keyConfigured = await page.evaluate(() => Boolean(window.TWMapProviderConfig && window.TWMapProviderConfig.key));
   if (keyConfigured) {
     expect(mapTilerRequestCount).toBeGreaterThan(0);
@@ -224,6 +230,7 @@ test('v39 lower intelligence rail matches the approved timeline anatomy', async 
   } else {
     expect(mapTilerRequestCount).toBe(0);
   }
+  expect(pageErrors).toEqual([]);
 });
 
 test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
