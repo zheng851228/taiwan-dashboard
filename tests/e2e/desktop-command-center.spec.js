@@ -488,3 +488,21 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
   await expect(page.locator('.desktop-resizer')).toHaveCount(3);
   await expect(page.locator('.desktop-resizer').first()).toBeHidden();
 });
+
+test('missing Tailwind shell styles show a recovery screen instead of overlapping panels', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop shell recovery verification only.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.route('**/css/tailwind.generated.css?v=42', route => route.abort());
+  await page.goto(WORKER);
+
+  const recovery = page.locator('#tailwind-style-recovery');
+  await expect(recovery).toBeVisible();
+  await expect(recovery).toContainText('介面樣式正在更新');
+  await expect(recovery.getByRole('link', { name: '重新載入' })).toBeVisible();
+  const bounds = await recovery.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds.x).toBeLessThanOrEqual(1);
+  expect(bounds.y).toBeLessThanOrEqual(1);
+  expect(bounds.width).toBeGreaterThanOrEqual(1534);
+  expect(bounds.height).toBeGreaterThanOrEqual(1022);
+});

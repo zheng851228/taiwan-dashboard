@@ -12,6 +12,9 @@
       --ui-alert: #fbbf24;
     }
     body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC', 'Segoe UI', sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden; background: #060d1f; }
+    /* If this stylesheet is missing, the inline recovery card in index.html
+       remains visible and covers the unstyled shell. */
+    .app-style-sentinel { display: none !important; }
     input, textarea, select { font-size: 16px !important; }  /* 防 iOS Safari 自動縮放 */
     .pg { display: none; animation: fadeIn 0.3s ease-out; }
     .pg.active { display: block; position: absolute; inset: 0; }

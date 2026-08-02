@@ -2,6 +2,12 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-03 — PWA v42 shell style recovery
+
+- 核心 CSS 與 JavaScript 資源使用同一 v42 URL 版本，避免舊 Service Worker 將新版 HTML 與舊版介面資源混合。
+- Tailwind 或主樣式表未完整載入時，以獨立的修復畫面覆蓋未排版內容，不再顯示整頁文字與面板互相重疊。
+- Service Worker 清除 v41 shell；不改 Worker endpoint、API schema、路線規則、secret 或 production routing。
+
 ## 2026-08-03 — PWA v41 search network recovery
 
 - 地點解析與路線建立遇到一次性的瀏覽器網路中斷時，前端會各自自動重試一次；HTTP 4xx、429 與 5xx 仍保留原始狀態，不做盲目重試。
