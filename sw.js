@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v41";
+const CACHE_VERSION = "v42";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -22,17 +22,17 @@ const SHELL_URLS = [
   "./assets/vendor/fontawesome/webfonts/fa-solid-900.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
-  "./css/tailwind.generated.css",
-  "./css/style.css?v=41",
-  "./js/core.js",
-  "./js/services.js",
-  "./js/data.js",
-  "./js/main-ui.js",
-  "./js/enhancements.js",
-  "./js/route-conditions.js",
-  "./js/ride-tools.js",
-  "./js/desktop-bootstrap.js",
-  "./js/pwa.js"
+  "./css/tailwind.generated.css?v=42",
+  "./css/style.css?v=42",
+  "./js/core.js?v=42",
+  "./js/services.js?v=42",
+  "./js/data.js?v=42",
+  "./js/main-ui.js?v=42",
+  "./js/enhancements.js?v=42",
+  "./js/route-conditions.js?v=42",
+  "./js/ride-tools.js?v=42",
+  "./js/desktop-bootstrap.js?v=42",
+  "./js/pwa.js?v=42"
 ];
 
 const API_PATTERNS = [

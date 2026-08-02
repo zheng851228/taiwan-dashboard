@@ -36,9 +36,9 @@
 
   function activateDesktopModules() {
     if (!window.matchMedia || !window.matchMedia(DESKTOP_QUERY).matches || loading) return;
-    loading = loadScript('./js/map-provider-config.js')
-      .then(function() { return loadScript('./js/maplibre-renderer.js'); })
-      .then(function() { return loadScript('./js/desktop-dashboard.js'); })
+    loading = loadScript('./js/map-provider-config.js?v=42')
+      .then(function() { return loadScript('./js/maplibre-renderer.js?v=42'); })
+      .then(function() { return loadScript('./js/desktop-dashboard.js?v=42'); })
       .catch(function() { showLeafletFallback(); });
   }
 
