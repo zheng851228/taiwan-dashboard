@@ -23,6 +23,10 @@ test('desktop command center keeps the initial map focused and expands on a read
 
   await expect(page.locator('#desktop-map')).toBeVisible();
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+  await expect(page.locator('#desktop-map-2d')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#desktop-map-3d')).not.toHaveClass(/active/);
+  await expect(page.locator('#desktop-camera-toggle')).toBeDisabled();
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#desktop-left-insights')).toBeVisible();
   await expect(page.locator('#desktop-vehicle-tabs')).toBeVisible();
@@ -45,10 +49,31 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-elevation-panel')).toBeVisible({ timeout: 8000 }).catch(() => {});
   await expect(page.locator('.bottom-navigation')).toBeHidden();
   await expect(page.locator('#desktop-event-construction, .desktop-event-construction').last()).toBeVisible();
+  const cameraMarkers = page.locator('.desktop-cctv-marker');
+  await expect(cameraMarkers.first()).toBeVisible();
+  await expect(cameraMarkers.first()).toHaveAttribute('aria-label', /沿途 CCTV/);
+  const clickableCameraIndex = await cameraMarkers.evaluateAll(nodes => {
+    const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom || 0;
+    const mapRect = document.querySelector('#desktop-map')?.getBoundingClientRect();
+    return nodes.findIndex(node => {
+      const rect = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return mapRect && (hit === node || node.contains(hit))
+        && rect.top >= Math.max(headerBottom, mapRect.top) + 4
+        && rect.bottom <= mapRect.bottom - 4
+        && rect.left >= mapRect.left + 4
+        && rect.right <= mapRect.right - 4;
+    });
+  });
+  expect(clickableCameraIndex).toBeGreaterThanOrEqual(0);
+  await cameraMarkers.nth(clickableCameraIndex).click();
+  await expect(page.locator('#info-panel')).toBeVisible();
+  await page.locator('#info-close').click();
 
+  await page.locator('#desktop-map-3d').click();
+  await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+  await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
   await page.locator('#desktop-map-2d').click();
-  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
-  await expect(page.locator('#desktop-camera-toggle')).toBeDisabled();
   await page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]').click();
   await expect(page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.route-mode-btn[data-plate="yellow"]')).toHaveClass(/active/);
@@ -253,6 +278,12 @@ test('2D and 3D controls can recover from the traditional map fallback', async (
   await page.locator('#desktop-map-3d').click();
   await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
   await expect(page.locator('#desktop-map-2d')).not.toHaveClass(/active/);
+  expect(await page.evaluate(() => localStorage.getItem('tw_desktop_terrain_mode_v1'))).toBe('3d');
+
+  await page.evaluate(() => localStorage.removeItem('tw_desktop_terrain_mode_v1'));
+  await page.reload();
+  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/, { timeout: 12000 });
+  await expect(page.locator('#desktop-map-3d')).not.toHaveClass(/active/);
 });
 
 test('camera presets and brand home preserve the active route', async ({ page }, testInfo) => {
@@ -261,6 +292,7 @@ test('camera presets and brand home preserve the active route', async ({ page },
   await page.addInitScript(() => localStorage.removeItem('tw_desktop_camera_preset_v1'));
   await page.goto(WORKER);
   await buildFixtureRoute(page);
+  await page.locator('#desktop-map-3d').click();
 
   await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
   await page.locator('#desktop-camera-toggle').click();
@@ -308,6 +340,7 @@ test('camera custom state is not persisted and reset returns to the full route',
   await page.addInitScript(() => localStorage.removeItem('tw_desktop_camera_preset_v1'));
   await page.goto(WORKER);
   await buildFixtureRoute(page);
+  await page.locator('#desktop-map-3d').click();
 
   const camera = page.locator('#desktop-camera-toggle');
   await expect(camera).toBeEnabled();
@@ -337,6 +370,7 @@ test('reduced motion applies camera presets without animation', async ({ page },
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(WORKER);
   await buildFixtureRoute(page);
+  await page.locator('#desktop-map-3d').click();
   await page.locator('#desktop-camera-toggle').click();
   await page.locator('.desktop-camera-preset[data-camera-preset="along"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('沿路');

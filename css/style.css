@@ -2915,6 +2915,9 @@ body.light .condition-road-event-icon {
 
   .desktop-map-marker { display: inline-flex; align-items: center; justify-content: center; width: 1.65rem; height: 1.65rem; padding: 0; color: #07111b; background: var(--marker-color); border: 2px solid rgba(255,255,255,0.9); border-radius: 50%; box-shadow: 0 2px 9px rgba(0,0,0,0.5); font-size: .72rem; font-weight: 900; cursor: pointer; }
   .desktop-map-marker:hover { transform: scale(1.12); }
+  .desktop-cctv-marker { z-index: 3; width: 1.8rem; height: 1.8rem; color: #f8fafc; background: rgba(7,17,27,.94); border-color: #e2e8f0; box-shadow: 0 0 0 2px rgba(15,23,42,.5), 0 3px 10px rgba(0,0,0,.65); }
+  .desktop-cctv-marker i { font-size: .72rem; }
+  .desktop-cctv-marker:focus-visible { outline: 2px solid #52b788; outline-offset: 2px; }
   .desktop-cursor-marker { width: 2rem; height: 2rem; color: #07111b; background: #f8fafc; border-color: #52b788; box-shadow: 0 0 0 5px rgba(82,183,136,0.2), 0 2px 10px rgba(0,0,0,0.55); }
   .desktop-cursor-marker i { font-size: .8rem; }
 
