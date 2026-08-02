@@ -162,13 +162,14 @@
   }
 
   function createRenderer(options) {
+    var initialTerrainMode = options.terrainMode === '3d' ? '3d' : '2d';
     var renderer = {
       map: null,
       module: null,
       markers: [],
       placeMarkers: [],
       terrainTimer: null,
-      mode: '3d',
+      mode: initialTerrainMode,
       routeCoords: [],
       selectedOrder: null,
       currentPreset: 'solid',
@@ -239,6 +240,7 @@
               id: 'hillshade',
               type: 'hillshade',
               source: 'hillshadeSource',
+              layout: { visibility: self.mode === '3d' ? 'visible' : 'none' },
               paint: {
                 'hillshade-shadow-color': '#0b1f2a',
                 'hillshade-highlight-color': '#b8d5c5',
@@ -251,21 +253,20 @@
             container: options.container,
             center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]],
             zoom: Config.MAP_ZOOM,
-            pitch: 58,
-            bearing: -12,
+            pitch: self.mode === '3d' ? 58 : 0,
+            bearing: self.mode === '3d' ? -12 : 0,
             maxPitch: 85,
             bearingSnap: 7,
             touchPitch: true,
             touchZoomRotate: true,
             pitchWithRotate: true,
             attributionControl: true,
-            style: {
+            style: Object.assign({
               version: 8,
               sources: sources,
               layers: layers,
-              terrain: { source: 'terrainSource', exaggeration: 1 },
               sky: {}
-            }
+            }, self.mode === '3d' ? { terrain: { source: 'terrainSource', exaggeration: 1 } } : {})
           });
           self.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
           self.map.on('moveend', function() {
@@ -348,19 +349,12 @@
         map.addLayer({ id: 'desktop-section-core', type: 'line', source: 'desktop-sections', paint: { 'line-color': ['match', ['get', 'level'], 'clear', TRAFFIC_COLORS.clear, 'slow', TRAFFIC_COLORS.slow, 'congested', TRAFFIC_COLORS.congested, TRAFFIC_COLORS.unknown], 'line-width': 6, 'line-opacity': 0.98 } });
         map.addLayer({ id: 'desktop-event-cue', type: 'line', source: 'desktop-events', paint: { 'line-color': ['get', 'color'], 'line-width': 8, 'line-opacity': 0.96, 'line-dasharray': [1.5, 1] } });
         map.addLayer({ id: 'desktop-weather', type: 'circle', source: 'desktop-weather', paint: { 'circle-radius': 8, 'circle-color': '#38bdf8', 'circle-opacity': 0.9, 'circle-stroke-color': '#e0f2fe', 'circle-stroke-width': 1 } });
-        map.addLayer({ id: 'desktop-cameras', type: 'circle', source: 'desktop-cameras', paint: { 'circle-radius': 5, 'circle-color': '#f8fafc', 'circle-opacity': 0.9, 'circle-stroke-color': '#475569', 'circle-stroke-width': 2 } });
         var self = this;
         map.on('click', 'desktop-section-core', function(event) {
           var feature = event.features && event.features[0];
           if (feature) Bus.emit('condition:select', Number(feature.properties.order));
         });
-        map.on('click', 'desktop-cameras', function(event) {
-          var feature = event.features && event.features[0];
-          var id = feature && feature.properties && feature.properties.id;
-          var cam = self.cameraById && self.cameraById[id];
-          if (cam && window.InfoMod) InfoMod.open(cam);
-        });
-        ['desktop-section-core', 'desktop-cameras'].forEach(function(layer) {
+        ['desktop-section-core'].forEach(function(layer) {
           map.on('mouseenter', layer, function() { map.getCanvas().style.cursor = 'pointer'; });
           map.on('mouseleave', layer, function() { map.getCanvas().style.cursor = ''; });
         });
@@ -483,10 +477,30 @@
         var self = this;
         var features = [];
         this.cameraById = {};
+        this.markers = this.markers.filter(function(marker) {
+          var element = marker.getElement && marker.getElement();
+          if (element && element.classList.contains('desktop-cctv-marker')) {
+            marker.remove();
+            return false;
+          }
+          return true;
+        });
         (cams || []).forEach(function(cam) {
           if (!Number.isFinite(Number(cam.lat)) || !Number.isFinite(Number(cam.lng))) return;
           self.cameraById[cam.id] = cam;
           features.push({ type: 'Feature', properties: { id: cam.id }, geometry: { type: 'Point', coordinates: [Number(cam.lng), Number(cam.lat)] } });
+          if (self.module && self.map) {
+            var element = markerElement('desktop-cctv-marker', '沿途 CCTV：' + (cam.name || '未命名攝影機'), '#07111b');
+            element.innerHTML = '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
+            element.title = cam.name || '沿途 CCTV';
+            element.addEventListener('click', function(event) {
+              event.stopPropagation();
+              if (window.InfoMod) InfoMod.open(cam);
+            });
+            self.markers.push(new self.module.Marker({ element: element, anchor: 'center' })
+              .setLngLat([Number(cam.lng), Number(cam.lat)])
+              .addTo(self.map));
+          }
         });
         this._setSourceData('desktop-cameras', { type: 'FeatureCollection', features: features });
       },

@@ -5,6 +5,7 @@
 
   var DESKTOP_BREAKPOINT = '(min-width: 1200px)';
   var MAP_PREF_KEY = 'tw_desktop_map_renderer_v1';
+  var TERRAIN_PREF_KEY = 'tw_desktop_terrain_mode_v1';
   var BASEMAP_PREF_KEY = 'tw_desktop_basemap_v1';
   var CAMERA_PREF_KEY = 'tw_desktop_camera_preset_v1';
   var LAYOUT_PREF_KEY = 'tw_desktop_layout_v1';
@@ -27,6 +28,7 @@
     playback: { playing: false, distance: 0, lastTime: 0, raf: null, speed: 1 },
     elevation: null,
     pendingTerrainMode: null,
+    terrainMode: Storage.get(TERRAIN_PREF_KEY, '2d') === '3d' ? '3d' : '2d',
     cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid'),
     basemap: Storage.get(BASEMAP_PREF_KEY, 'satellite') === 'satellite' ? 'satellite' : 'dark',
     cctvIndex: 0,
@@ -374,7 +376,7 @@
     return incident && (incident.title || incident.kind || '道路狀況') || '道路狀況';
   }
 
-  function renderContext() {
+  function renderContext(focusMap) {
     var section = state.sections.find(function(item) { return Number(item.order) === Number(state.selectedOrder); });
     if (!section) section = state.sections[0];
     var empty = Dom.byId('desktop-context-empty');
@@ -405,7 +407,7 @@
       }).join('') || '<div class="desktop-context-ok"><i class="fa-solid fa-circle-info"></i><span>目前選取路段沒有可定位道路事件</span></div>';
     }
     state.cctvIndex = 0;
-    if (state.renderer) state.renderer.focusSection(Number(section.order));
+    if (focusMap !== false && state.renderer) state.renderer.focusSection(Number(section.order));
     renderCctv();
   }
 
@@ -458,9 +460,12 @@
       if (state.selectedOrder === null && state.sections.length) state.selectedOrder = state.sections[0].order;
       reportConditions(data);
       renderRouteIntelligence(data);
-      renderContext();
+      renderContext(false);
       renderCctv();
       if (state.renderer) {
+        state.renderer.resize();
+        var route = routeCoordinates();
+        if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
         state.renderer.drawConditionSections(state.sections);
         state.renderer.drawCameras(RouteMod.filteredCams || []);
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
@@ -476,8 +481,23 @@
     if (legacyMap) legacyMap.style.display = legacy || !state.desktop ? 'block' : 'none';
     if (legacy && MapMod.map && MapMod.map.invalidateSize) window.setTimeout(function() { MapMod.map.invalidateSize(); }, 80);
     var setting = Dom.byId('desktop-map-mode-state');
-    if (setting) setting.textContent = legacy ? '傳統地圖' : '3D 地形';
+    if (setting) setting.textContent = legacy ? '傳統地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖');
     syncCameraControls();
+  }
+
+  function syncTerrainControls() {
+    var mode = state.renderer && state.renderer.mode || state.pendingTerrainMode || state.terrainMode;
+    var twoD = Dom.byId('desktop-map-2d');
+    var threeD = Dom.byId('desktop-map-3d');
+    if (twoD) {
+      twoD.classList.toggle('active', mode === '2d');
+      twoD.setAttribute('aria-pressed', String(mode === '2d'));
+    }
+    if (threeD) {
+      threeD.classList.toggle('active', mode === '3d');
+      threeD.setAttribute('aria-pressed', String(mode === '3d'));
+    }
+    if (Storage.get(MAP_PREF_KEY, 'auto') !== 'legacy') text('desktop-map-mode-state', mode === '3d' ? '3D 地形' : '2D 地圖');
   }
 
   function cameraLabel(preset) {
@@ -555,9 +575,12 @@
     var renderer = MapRenderer.create({
       container: 'desktop-map',
       basemap: state.basemap,
+      terrainMode: state.pendingTerrainMode || state.terrainMode,
       onReady: function(instance) {
         state.renderer = instance;
-        state.renderer.setTerrainMode(state.pendingTerrainMode || '3d');
+        state.terrainMode = state.pendingTerrainMode || state.terrainMode;
+        state.renderer.setTerrainMode(state.terrainMode);
+        Storage.set(TERRAIN_PREF_KEY, state.terrainMode);
         state.pendingTerrainMode = null;
         var route = routeCoordinates();
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
@@ -565,15 +588,17 @@
         Storage.set(BASEMAP_PREF_KEY, state.basemap);
         updateDesktopView(AppState.routeConditions);
         DesktopElevationMod.refresh();
+        syncTerrainControls();
         syncCameraControls();
         if (state.renderer.mode === '3d') state.renderer.setCameraPreset(state.cameraPreset, { duration: 0, sectionOrder: state.selectedOrder });
       },
       onStatus: function(status) {
         if (status === 'terrain-unavailable') {
+          state.terrainMode = '2d';
+          Storage.set(TERRAIN_PREF_KEY, '2d');
           var note = Dom.byId('desktop-source-note');
           if (note) note.textContent = '3D 地形暫時無法載入，已切換 2D；路況資料仍可使用。';
-          var modeState = Dom.byId('desktop-map-mode-state');
-          if (modeState) modeState.textContent = '2D 地圖';
+          syncTerrainControls();
           syncCameraControls();
         }
         if (status === 'basemap-unavailable') {
@@ -640,7 +665,7 @@
     var bannerButton = Dom.byId('desktop-banner-setting');
     if (clockButton) clockButton.setAttribute('aria-pressed', String(Boolean(clockHidden)));
     if (bannerButton) bannerButton.setAttribute('aria-pressed', String(Boolean(bannerHidden)));
-    text('desktop-map-mode-state', Storage.get(MAP_PREF_KEY, 'auto') === 'legacy' ? '傳統地圖' : '3D 地形');
+    text('desktop-map-mode-state', Storage.get(MAP_PREF_KEY, 'auto') === 'legacy' ? '傳統地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖'));
     text('desktop-basemap-setting-state', state.basemap === 'satellite' ? '衛星底圖' : '深色地圖');
     text('desktop-layout-setting-state', Storage.getJson(LAYOUT_PREF_KEY, null) ? '已自訂' : '可拖曳調整');
   }
@@ -733,6 +758,8 @@
     Dom.onId('desktop-basemap-setting', 'click', toggleBasemap);
     Dom.onId('desktop-map-basemap', 'click', toggleBasemap);
     Dom.onId('desktop-map-2d', 'click', function() {
+      state.terrainMode = '2d';
+      Storage.set(TERRAIN_PREF_KEY, '2d');
       state.pendingTerrainMode = '2d';
       if (!state.renderer) {
         Storage.set(MAP_PREF_KEY, 'auto');
@@ -741,13 +768,13 @@
         state.renderer.setTerrainMode('2d');
         state.pendingTerrainMode = null;
       }
+      syncTerrainControls();
       syncCameraControls();
-      Dom.byId('desktop-map-2d').classList.add('active');
-      Dom.byId('desktop-map-3d').classList.remove('active');
-      text('desktop-map-mode-state', '2D 地圖');
       if (window.DesktopElevationMod) DesktopElevationMod.refresh();
     });
     Dom.onId('desktop-map-3d', 'click', function() {
+      state.terrainMode = '3d';
+      Storage.set(TERRAIN_PREF_KEY, '3d');
       state.pendingTerrainMode = '3d';
       if (!state.renderer) {
         Storage.set(MAP_PREF_KEY, 'auto');
@@ -757,10 +784,8 @@
         state.pendingTerrainMode = null;
         setCameraPreset(state.cameraPreset || 'solid');
       }
+      syncTerrainControls();
       syncCameraControls();
-      Dom.byId('desktop-map-3d').classList.add('active');
-      Dom.byId('desktop-map-2d').classList.remove('active');
-      text('desktop-map-mode-state', '3D 地形');
       if (window.DesktopElevationMod) DesktopElevationMod.refresh();
     });
     Dom.onId('desktop-map-legacy', 'click', function() {
@@ -842,6 +867,7 @@
     });
     Bus.on('route-ui:state', syncCameraControls);
     syncHeader();
+    syncTerrainControls();
     syncCameraControls();
   }
 

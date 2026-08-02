@@ -2,6 +2,17 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-03 — PWA v41 search network recovery
+
+- 地點解析與路線建立遇到一次性的瀏覽器網路中斷時，前端會各自自動重試一次；HTTP 4xx、429 與 5xx 仍保留原始狀態，不做盲目重試。
+- 連續兩次網路失敗改顯示可操作的中文訊息，不再把 `Failed to fetch` 原樣顯示給使用者。
+- 桌面版的地點搜尋建議改為推開表單內容，不再蓋住或擋下「建立安全路線」按鈕。
+- 桌面地圖新使用者預設以 2D 開啟，使用者主動切換 3D 後才載入地形視角，並保留最後選擇。
+- 沿線 CCTV 從難以辨識的白點改為可點擊的攝影機圖示，點擊後可開啟該支現場影像資訊。
+- 路線首次完成、下方時間軸展開後重新以可用地圖高度計算全線取景，不再把其他 CCTV 移出畫面；使用者主動選擇路段時才局部聚焦。
+- 新增台中車站至桃園車站的 geocode／route 網路重試與持續失敗回歸測試；不改 Worker、API schema 或路線安全規則。
+- Service Worker 清除 v40 shell，發布 PWA v41。
+
 ## 2026-08-03 — PWA v40 desktop interaction fixes
 
 - 修正「資料說明」開啟時誤把 click event 當成按鈕元素，避免公開桌面版出現 `setAttribute` 例外；`aria-expanded` 現在會正確同步。

@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/tailwind.generated.css" />
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=40" />
+  <link rel="stylesheet" href="css/style.css?v=41" />
 </head>
 <body class="text-slate-100" data-route-state="empty">
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
@@ -126,7 +126,7 @@
         <span>路線完成提示</span><span id="desktop-banner-setting-state">顯示中</span>
       </button>
       <button id="desktop-map-mode-setting" type="button" class="desktop-settings-row">
-        <span>桌面地圖</span><span id="desktop-map-mode-state">3D 地形</span>
+        <span>桌面地圖</span><span id="desktop-map-mode-state">2D 地圖</span>
       </button>
       <button id="desktop-basemap-setting" type="button" class="desktop-settings-row">
         <span>底圖來源</span><span id="desktop-basemap-setting-state">深色地圖</span>
@@ -143,7 +143,7 @@
 
 <section id="pg-map" class="pg active" style="position:absolute;inset:0;">
   <div id="map"></div>
-  <div id="desktop-map" aria-label="桌面 3D 地形路況地圖"></div>
+  <div id="desktop-map" aria-label="桌面沿途路況地圖"></div>
 
   <div class="map-top-panel absolute top-[calc(var(--safe-top)+3rem)] left-4 right-4 z-[500] max-w-lg">
     <div class="desktop-route-panel-heading desktop-only-panel"><span>1</span><h2>路線輸入</h2></div>
@@ -430,8 +430,8 @@
   </aside>
 
   <div id="desktop-map-tools" class="desktop-map-tools" role="group" aria-label="地圖檢視模式">
-    <button id="desktop-map-2d" type="button">2D 地圖</button>
-    <button id="desktop-map-3d" type="button" class="active">3D 地形</button>
+    <button id="desktop-map-2d" type="button" class="active">2D 地圖</button>
+    <button id="desktop-map-3d" type="button">3D 地形</button>
     <button id="desktop-map-basemap" type="button" title="切換衛星／深色底圖">底圖</button>
     <button id="desktop-camera-toggle" type="button" aria-expanded="false" aria-controls="desktop-camera-popover">視角</button>
     <div id="desktop-camera-popover" class="desktop-camera-popover hidden" role="menu" aria-label="3D 視角選擇">
