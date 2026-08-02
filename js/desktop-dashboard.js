@@ -699,7 +699,7 @@
       state.cctvIndex = (state.cctvIndex + 1) % count;
       renderCctv();
     });
-    Dom.onId('desktop-condition-info-toggle', 'click', function(button) {
+    Dom.onId('desktop-condition-info-toggle', 'click', function(event) {
       var popover = Dom.byId('desktop-condition-info-popover');
       if (!popover) return;
       var open = popover.classList.contains('hidden');
@@ -709,7 +709,7 @@
         var appleLegs = Dom.byId('apple-leg-links');
         if (appleLegs) appleLegs.classList.add('hidden');
       }
-      button.setAttribute('aria-expanded', String(open));
+      event.currentTarget.setAttribute('aria-expanded', String(open));
     });
     Dom.onId('desktop-nav-google', 'click', function() { openDesktopNavigation('nav-google'); });
     Dom.onId('desktop-nav-apple', 'click', function() { openDesktopNavigation('nav-apple'); });
@@ -1095,12 +1095,12 @@
 
   function bindPlayback() {
     Dom.onId('desktop-playback-toggle', 'click', function() { DesktopElevationMod.toggle(); });
-    Dom.onId('desktop-playback-range', 'input', function(input) {
+    Dom.onId('desktop-playback-range', 'input', function(event) {
       var points = routeCoordinates();
       var cumulative = routeCumulative(points);
-      DesktopElevationMod.setDistance((Number(input.value) / 1000) * (cumulative[cumulative.length - 1] || 0));
+      DesktopElevationMod.setDistance((Number(event.currentTarget.value) / 1000) * (cumulative[cumulative.length - 1] || 0));
     });
-    Dom.onId('desktop-playback-speed', 'change', function(select) { state.playback.speed = Number(select.value) || 1; });
+    Dom.onId('desktop-playback-speed', 'change', function(event) { state.playback.speed = Number(event.currentTarget.value) || 1; });
     document.addEventListener('visibilitychange', function() { if (document.visibilityState !== 'visible') DesktopElevationMod.stop(); });
     if (window.matchMedia) {
       var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');

@@ -2,6 +2,13 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-03 — PWA v40 desktop interaction fixes
+
+- 修正「資料說明」開啟時誤把 click event 當成按鈕元素，避免公開桌面版出現 `setAttribute` 例外；`aria-expanded` 現在會正確同步。
+- 修正 MapLibre 模擬游標首次播放時尚未設定座標就加入地圖的例外，並同步修正進度拖曳與倍速選單的 event 取值。
+- 新增桌面互動回歸檢查，要求資料說明、播放、拖曳與倍速切換皆不得產生 page error；不改 Worker、API 或路況語意。
+- Service Worker 清除 v39 shell，發布 PWA v40。
+
 ## 2026-08-02 — PWA v39 adjustable desktop workspace
 
 - 桌面主畫面新增左欄、右欄與下方資訊區的滑鼠拖曳分隔線；支援鍵盤方向鍵、Home／End、雙擊重置與安全範圍限制。

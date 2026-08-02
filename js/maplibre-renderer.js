@@ -495,7 +495,9 @@
         if (!this.cursorMarker) {
           var element = markerElement('desktop-cursor-marker', '模擬位置', '#f8fafc');
           element.innerHTML = '<span><i class="fa-solid fa-motorcycle"></i></span>';
-          this.cursorMarker = new this.module.Marker({ element: element, anchor: 'center' }).addTo(this.map);
+          this.cursorMarker = new this.module.Marker({ element: element, anchor: 'center' });
+          this.cursorMarker.setLngLat([Number(point[1]), Number(point[0])]).addTo(this.map);
+          return;
         }
         this.cursorMarker.setLngLat([Number(point[1]), Number(point[0])]);
       },
