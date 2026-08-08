@@ -86,7 +86,7 @@ describe('MapLibre camera overlay seam', () => {
     const { window, infoOpen } = await loadCameraLayer();
     const renderer = window.MapRenderer.create({});
     const valid = { id: 'cam-1', name: '測試攝影機', lat: 24.15, lng: 120.67 };
-    const invalid = { id: 'cam-bad', name: '缺座標', lat: null, lng: 120.7 };
+    const invalid = { id: 'cam-bad', name: '缺座標', lat: 'not-a-number', lng: 120.7 };
 
     const features = renderer.drawCameras([valid, invalid]);
 
