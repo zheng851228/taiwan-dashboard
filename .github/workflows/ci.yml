@@ -34,3 +34,27 @@ jobs:
 
       - name: Run project checks
         run: npm run check
+
+  desktop-layout-e2e:
+    name: Desktop layout browser regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chrome
+        run: npx playwright install --with-deps chrome
+
+      - name: Run desktop layout regression
+        run: npm run test:e2e:desktop-layout
