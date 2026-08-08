@@ -46,17 +46,11 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/route-conditions.js` | Traffic/weather/event condition presentation |
 | `js/ride-tools.js` | Rider utility features |
 | `js/maplibre-renderer.js` | MapLibre rendering and route overlays |
-| `js/desktop-dashboard.js` | Desktop command-center behavior |
-| `js/desktop-layout.js` | Desktop rail sizing, resize controls, keyboard resizing, reset and persisted layout state |
+| `js/desktop-dashboard.js` | Desktop command-center orchestration |
+| `js/desktop-layout.js` | Desktop rail sizing, resizing, persistence and reset behavior |
 | `js/pwa.js` | Installation/update/offline lifecycle |
 
 Several of these modules are now large enough that new features should not automatically be appended to them.
-
-### Desktop layout migration seam
-
-The first extraction step is now in place through `js/desktop-layout.js`. It loads after `desktop-dashboard.js`, replaces the resize controls to detach the legacy listeners, and writes the normalized layout back to `DesktopDashboardMod.state.layout`.
-
-This is intentionally a compatibility seam rather than a large rewrite. Existing viewport synchronization can continue using the shared layout state while the old in-file layout implementation is removed in a later cleanup pass. Route rules, Worker contracts, traffic/weather interpretation, and map rendering are not part of this extraction.
 
 ## Incremental refactor target
 
@@ -120,7 +114,7 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 
 ## Suggested migration order
 
-1. **Desktop layout utilities** — migration seam established in PR #35; remove the legacy in-file implementation after browser regression coverage confirms parity.
+1. **Desktop layout utilities** — `js/desktop-layout.js` now owns rail sizing, normalization, pointer/keyboard resizing, persistence, and reset. Browser regression coverage lives in `tests/e2e/desktop-layout.spec.js`. Remove the legacy in-file implementation from `desktop-dashboard.js` only after this focused browser gate is green.
 2. **Map layers** — split incident/camera/route overlay concerns from the renderer while preserving a stable renderer facade.
 3. **Route condition presentation** — separate formatting/view-model helpers from DOM rendering.
 4. **Main route UI** — split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
@@ -132,8 +126,11 @@ Every structural refactor should keep these gates green:
 
 ```bash
 npm run check
+npm run test:e2e:desktop-layout
 npm run test:e2e
 ```
+
+The focused desktop-layout suite covers pointer-independent keyboard resizing, ARIA state, persistence across reloads, bounds, and reset behavior. The full E2E suite remains the broader interaction gate.
 
 For routing/provider changes, also run the relevant fixture and live route audits before production deployment.
 
