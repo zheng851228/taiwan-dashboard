@@ -39,6 +39,7 @@
     loading = loadScript('./js/map-provider-config.js?v=42')
       .then(function() { return loadScript('./js/maplibre-renderer.js?v=42'); })
       .then(function() { return loadScript('./js/desktop-dashboard.js?v=42'); })
+      .then(function() { return loadScript('./js/desktop-layout.js?v=43'); })
       .catch(function() { showLeafletFallback(); });
   }
 
