@@ -137,6 +137,11 @@
     return defaultLayout();
   }
 
+  function getLayout() {
+    var layout = currentLayout();
+    return { left: layout.left, right: layout.right, bottom: layout.bottom };
+  }
+
   function layoutKeyFor(element) {
     if (!element) return null;
     if (element.id === 'desktop-resize-left') return 'left';
@@ -273,10 +278,8 @@
     init: init,
     apply: applyLayout,
     reset: resetLayout,
-    get: function() {
-      var layout = currentLayout();
-      return { left: layout.left, right: layout.right, bottom: layout.bottom };
-    },
+    get: getLayout,
+    getLayout: getLayout,
     normalize: normalizeLayout,
     bounds: layoutBounds
   };
