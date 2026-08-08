@@ -45,7 +45,9 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/enhancements.js` | Cross-cutting interaction enhancements |
 | `js/route-conditions.js` | Traffic/weather/event condition presentation |
 | `js/ride-tools.js` | Rider utility features |
-| `js/maplibre-renderer.js` | MapLibre rendering and route overlays |
+| `js/maplibre-renderer.js` | MapLibre map lifecycle, terrain/basemap orchestration and remaining overlay facade |
+| `js/maplibre-route-layer.js` | Route GeoJSON, route coordinate state and fitBounds compatibility seam |
+| `js/maplibre-camera-layer.js` | CCTV GeoJSON, marker lifecycle and camera interaction compatibility seam |
 | `js/desktop-dashboard.js` | Desktop command-center orchestration |
 | `js/desktop-layout.js` | Desktop rail sizing, resizing, persistence and reset behavior |
 | `js/pwa.js` | Installation/update/offline lifecycle |
@@ -115,7 +117,7 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 ## Suggested migration order
 
 1. **Desktop layout utilities — complete.** `js/desktop-layout.js` is now the single implementation for rail sizing, normalization, pointer/keyboard resizing, persistence, reset, CSS variables, and ARIA separator state. The duplicate implementation was removed from `desktop-dashboard.js` after the focused Chromium regression gate passed.
-2. **Map layers — next.** Split incident/camera/route overlay concerns from the renderer while preserving a stable renderer facade. Start with the most self-contained overlay and add a focused rendering test before extraction.
+2. **Map layers — in progress.** `js/maplibre-camera-layer.js` now owns CCTV marker/GeoJSON behavior for new renderer instances, and `js/maplibre-route-layer.js` owns the route GeoJSON plus fitBounds behavior behind the same public renderer API. Focused Vitest and Chromium regressions protect both seams. Incident/weather/section rendering remains in `maplibre-renderer.js` until a similarly narrow test seam is established.
 3. **Route condition presentation.** Separate formatting/view-model helpers from DOM rendering.
 4. **Main route UI.** Split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
 5. **Shared globals.** Only then reduce global state and tighten module dependencies.
@@ -126,11 +128,11 @@ Every structural refactor should keep these gates green:
 
 ```bash
 npm run check
-npm run test:e2e:desktop-layout
+npm run test:e2e:desktop-refactor
 npm run test:e2e
 ```
 
-The focused desktop-layout suite covers keyboard resizing, ARIA state, persistence across reloads, bounds, and reset behavior. Existing command-center coverage continues to exercise pointer resizing. The full E2E suite remains the broader interaction gate.
+The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, plus live MapLibre route-source state and clickable CCTV markers against the fixture Worker. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
 For routing/provider changes, also run the relevant fixture and live route audits before production deployment.
 
