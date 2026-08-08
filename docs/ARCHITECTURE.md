@@ -114,11 +114,11 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 
 ## Suggested migration order
 
-1. **Desktop layout utilities** — `js/desktop-layout.js` now owns rail sizing, normalization, pointer/keyboard resizing, persistence, and reset. Browser regression coverage lives in `tests/e2e/desktop-layout.spec.js`. Remove the legacy in-file implementation from `desktop-dashboard.js` only after this focused browser gate is green.
-2. **Map layers** — split incident/camera/route overlay concerns from the renderer while preserving a stable renderer facade.
-3. **Route condition presentation** — separate formatting/view-model helpers from DOM rendering.
-4. **Main route UI** — split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
-5. **Shared globals** — only then reduce global state and tighten module dependencies.
+1. **Desktop layout utilities — complete.** `js/desktop-layout.js` is now the single implementation for rail sizing, normalization, pointer/keyboard resizing, persistence, reset, CSS variables, and ARIA separator state. The duplicate implementation was removed from `desktop-dashboard.js` after the focused Chromium regression gate passed.
+2. **Map layers — next.** Split incident/camera/route overlay concerns from the renderer while preserving a stable renderer facade. Start with the most self-contained overlay and add a focused rendering test before extraction.
+3. **Route condition presentation.** Separate formatting/view-model helpers from DOM rendering.
+4. **Main route UI.** Split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
+5. **Shared globals.** Only then reduce global state and tighten module dependencies.
 
 ## Validation gates
 
@@ -130,7 +130,7 @@ npm run test:e2e:desktop-layout
 npm run test:e2e
 ```
 
-The focused desktop-layout suite covers pointer-independent keyboard resizing, ARIA state, persistence across reloads, bounds, and reset behavior. The full E2E suite remains the broader interaction gate.
+The focused desktop-layout suite covers keyboard resizing, ARIA state, persistence across reloads, bounds, and reset behavior. Existing command-center coverage continues to exercise pointer resizing. The full E2E suite remains the broader interaction gate.
 
 For routing/provider changes, also run the relevant fixture and live route audits before production deployment.
 
