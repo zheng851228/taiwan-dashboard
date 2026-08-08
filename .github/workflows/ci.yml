@@ -35,8 +35,8 @@ jobs:
       - name: Run project checks
         run: npm run check
 
-  desktop-layout-e2e:
-    name: Desktop layout browser regression
+  desktop-refactor-e2e:
+    name: Desktop refactor browser regression
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -56,5 +56,5 @@ jobs:
       - name: Install Playwright Chrome
         run: npx playwright install --with-deps chrome
 
-      - name: Run desktop layout regression
-        run: npm run test:e2e:desktop-layout
+      - name: Run focused desktop regression
+        run: npm run test:e2e:desktop-refactor
