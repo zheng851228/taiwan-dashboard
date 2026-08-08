@@ -15,6 +15,7 @@ node --check js/enhancements.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
+node --check js/maplibre-route-layer.js
 node --check js/maplibre-camera-layer.js
 node --check js/desktop-dashboard.js
 node --check js/desktop-layout.js
@@ -47,6 +48,7 @@ grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-conditions.js' index.html
 grep -q 'js/ride-tools.js' index.html
 grep -q 'js/desktop-bootstrap.js' index.html
+grep -q 'js/maplibre-route-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-camera-layer.js' js/desktop-bootstrap.js
 grep -q 'js/desktop-layout.js' js/desktop-bootstrap.js
 grep -q 'js/pwa.js' index.html
