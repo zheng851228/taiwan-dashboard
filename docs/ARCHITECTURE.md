@@ -47,9 +47,16 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/ride-tools.js` | Rider utility features |
 | `js/maplibre-renderer.js` | MapLibre rendering and route overlays |
 | `js/desktop-dashboard.js` | Desktop command-center behavior |
+| `js/desktop-layout.js` | Desktop rail sizing, resize controls, keyboard resizing, reset and persisted layout state |
 | `js/pwa.js` | Installation/update/offline lifecycle |
 
 Several of these modules are now large enough that new features should not automatically be appended to them.
+
+### Desktop layout migration seam
+
+The first extraction step is now in place through `js/desktop-layout.js`. It loads after `desktop-dashboard.js`, replaces the resize controls to detach the legacy listeners, and writes the normalized layout back to `DesktopDashboardMod.state.layout`.
+
+This is intentionally a compatibility seam rather than a large rewrite. Existing viewport synchronization can continue using the shared layout state while the old in-file layout implementation is removed in a later cleanup pass. Route rules, Worker contracts, traffic/weather interpretation, and map rendering are not part of this extraction.
 
 ## Incremental refactor target
 
@@ -113,7 +120,7 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 
 ## Suggested migration order
 
-1. **Desktop layout utilities** — extract resizing/preferences from `desktop-dashboard.js` because they are client-only and relatively isolated.
+1. **Desktop layout utilities** — migration seam established in PR #35; remove the legacy in-file implementation after browser regression coverage confirms parity.
 2. **Map layers** — split incident/camera/route overlay concerns from the renderer while preserving a stable renderer facade.
 3. **Route condition presentation** — separate formatting/view-model helpers from DOM rendering.
 4. **Main route UI** — split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
