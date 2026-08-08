@@ -24,16 +24,27 @@ test('extracted MapLibre route overlay keeps route source and fitted state intac
       && window.DesktopDashboardMod.getRenderer().routeLayerInstalled
   ))).toBe(true);
 
+  await page.evaluate(() => {
+    const renderer = window.DesktopDashboardMod.getRenderer();
+    const originalSetSourceData = renderer._setSourceData.bind(renderer);
+    renderer.__routeSourceWrites = [];
+    renderer._setSourceData = function(id, data) {
+      if (id === 'desktop-route') renderer.__routeSourceWrites.push(data);
+      return originalSetSourceData(id, data);
+    };
+  });
+
   await buildFixtureRoute(page);
 
   const state = await page.evaluate(() => {
     const renderer = window.DesktopDashboardMod.getRenderer();
-    const source = renderer && renderer.map && renderer.map.getSource('desktop-route');
-    const data = source && source._data;
+    const writes = renderer.__routeSourceWrites || [];
+    const data = writes[writes.length - 1];
     const feature = data && data.features && data.features[0];
     return {
       routeCoords: renderer && renderer.routeCoords ? renderer.routeCoords.length : 0,
       routeFitApplied: Boolean(renderer && renderer.routeFitApplied),
+      sourceExists: Boolean(renderer && renderer.map && renderer.map.getSource('desktop-route')),
       sourceFeatureCount: data && data.features ? data.features.length : 0,
       geometryPointCount: feature && feature.geometry && feature.geometry.coordinates
         ? feature.geometry.coordinates.length
@@ -43,6 +54,7 @@ test('extracted MapLibre route overlay keeps route source and fitted state intac
 
   expect(state.routeCoords).toBeGreaterThan(1);
   expect(state.routeFitApplied).toBe(true);
+  expect(state.sourceExists).toBe(true);
   expect(state.sourceFeatureCount).toBe(1);
   expect(state.geometryPointCount).toBeGreaterThan(1);
 });
