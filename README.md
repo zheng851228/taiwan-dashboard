@@ -1,8 +1,20 @@
 # Taiwan Dashboard
 
+[Live Demo](https://zheng851228.github.io/taiwan-dashboard/) · [Architecture](docs/ARCHITECTURE.md) · [Validation](#驗證)
+
 給台灣機車騎士在出發前或途中停靠時使用的沿途天氣與路況助手。系統會先依白牌、黃牌、紅牌驗證路線，再依騎乘順序整理官方交通、氣象、道路事件與 CCTV 現場畫面。
 
 本專案不是騎乘中的持續導航，也不保證取代現場標誌或法規。灰色路段代表資料不足，不代表順暢；攝影機只提供現場畫面，不使用 AI 自動判定塞車或降雨。
+
+## 工程亮點
+
+- **機車路權驗證**：白牌使用 Valhalla `motor_scooter`，黃牌與紅牌使用 `motorcycle`，並以道路名稱、road class、way ID 與 shape index 進一步檢查禁行路段。
+- **保守失敗策略**：資料缺失、過期、格式錯誤或道路資格無法確認時維持 `unknown` / `partial`，不把未知狀態當成順暢或安全。
+- **多來源資料整合**：整合 TDX、THB、CWA、CCTV 與 Valhalla，透過 Cloudflare Worker 統一代理、正規化與快取。
+- **長距離路線處理**：多停靠與長距離路線可分段取得道路屬性，再還原為同一組全程 shape index。
+- **PWA 與離線殼層**：可安裝到 iPhone 主畫面；離線時保留收藏與最後成功路線，且明確標示非即時內容。
+- **桌面 / 行動分流**：MapLibre 桌面模組採動態載入，避免把桌面地圖資源塞進行動 PWA shell；桌面 rail resizing 已抽到 `js/desktop-layout.js` 作為第一個模組化 migration seam。
+- **測試與稽核**：Vitest、Playwright、fixture Worker、全台 live route audit 與 GitHub Actions CI。
 
 ## 功能
 
@@ -17,18 +29,26 @@
 - Google Maps 保留停靠點順序；Apple Maps 官方 Map Links 只支援兩點，因此多停靠點會依原始順序提供分段連結。
 - 收藏與最後成功路線快照存在 `localStorage`；PWA 提供可安裝、可更新的離線殼層，離線內容會明確標示為非即時。
 
-## 安裝到 iPhone 主畫面
+## 技術棧
 
-1. 使用 Safari 開啟 <https://zheng851228.github.io/taiwan-dashboard/>。
-2. 點 Safari 工具列的分享按鈕。
-3. 選擇「加入主畫面」，再按「加入」。
-
-從主畫面開啟後會以獨立 Web App 顯示。網站發布新版時不需重新安裝，畫面會提示使用者執行更新。即時路況、天氣、地圖圖磚與影像仍需網路；離線時只顯示已保存路線與收藏。
+- Frontend：HTML、CSS、Vanilla JavaScript、Tailwind CSS、Leaflet、MapLibre GL
+- Backend / Edge：Cloudflare Workers、KV
+- Routing：Valhalla
+- Data：TDX、交通部公路局 THB、中央氣象署 CWA、公開 CCTV
+- Testing：Vitest、Playwright、fixture Worker、live route audit
+- Delivery：GitHub Pages、GitHub Actions、Cloudflare
 
 ## 架構
 
 ```text
 Static HTML/CSS/JS
+        |
+        | desktop only
+        +--> desktop-bootstrap.js
+        |      |-- map-provider-config.js
+        |      |-- maplibre-renderer.js
+        |      |-- desktop-dashboard.js
+        |      `-- desktop-layout.js
         |
         v
 Cloudflare Worker /v2
@@ -40,9 +60,42 @@ Cloudflare Worker /v2
 ```
 
 前端不保存 CWA 或 TDX 金鑰，也不直接呼叫第三方資料服務。短網址展開只允許 Google Maps 與 Apple Maps 網域。
-Staging 的 conditions 熱路徑只讀由本機／CI 預處理的 KV 快照，不在 Worker 內解析全台 THB XML。快照的
-`generatedAt` 只代表產生時間，交通與氣象仍各自使用官方 `observedAt` 驗證時效；缺少、過期或格式錯誤時維持
-`partial` 與灰色 `unknown`，不會回頭直打上游或標成順暢。
+
+Staging 的 conditions 熱路徑只讀由本機／CI 預處理的 KV 快照，不在 Worker 內解析全台 THB XML。快照的 `generatedAt` 只代表產生時間，交通與氣象仍各自使用官方 `observedAt` 驗證時效；缺少、過期或格式錯誤時維持 `partial` 與灰色 `unknown`，不會回頭直打上游或標成順暢。
+
+更完整的模組責任與重構方向見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+
+## 專案結構
+
+```text
+.
+├── index.html
+├── css/
+├── js/
+│   ├── core.js
+│   ├── services.js
+│   ├── data.js
+│   ├── main-ui.js
+│   ├── route-conditions.js
+│   ├── ride-tools.js
+│   ├── desktop-bootstrap.js
+│   ├── desktop-dashboard.js
+│   ├── desktop-layout.js
+│   ├── maplibre-renderer.js
+│   └── pwa.js
+├── worker/
+├── tests/
+├── scripts/
+└── .github/workflows/
+```
+
+## 安裝到 iPhone 主畫面
+
+1. 使用 Safari 開啟 <https://zheng851228.github.io/taiwan-dashboard/>。
+2. 點 Safari 工具列的分享按鈕。
+3. 選擇「加入主畫面」，再按「加入」。
+
+從主畫面開啟後會以獨立 Web App 顯示。網站發布新版時不需重新安裝，畫面會提示使用者執行更新。即時路況、天氣、地圖圖磚與影像仍需網路；離線時只顯示已保存路線與收藏。
 
 ## 開始使用
 
@@ -120,8 +173,7 @@ TDX_CLIENT_SECRET="ROTATED_VALUE"
 
 ### Staging provider snapshot
 
-`env.staging` 使用 `PROVIDER_SNAPSHOT_MODE=kv`；production 尚未啟用。先從被 Git 忽略的
-`worker/.dev.vars` 讀取憑證，在本機抓取並正規化公開資料，再把不含憑證的 immutable slot 寫入 staging KV：
+`env.staging` 使用 `PROVIDER_SNAPSHOT_MODE=kv`；production 尚未啟用。先從被 Git 忽略的 `worker/.dev.vars` 讀取憑證，在本機抓取並正規化公開資料，再把不含憑證的 immutable slot 寫入 staging KV：
 
 ```bash
 npm run worker:snapshot:build
@@ -134,9 +186,7 @@ npm run worker:snapshot:upload:staging
 - 六小時攝影機格網，以及可直接回傳的 `/v2/cams` JSON。
 - 十五分鐘縣市氣象 `/v2/weather` JSON。
 
-每個 slot 都有到期時間；Worker 先讀目前 slot，KV 尚未同步時再讀前一 slot。交通快照超過十五分鐘即不可用，
-攝影機硬上限十二小時，且個別交通觀測仍必須在十分鐘內。此命令只更新 staging namespace，不會部署或修改
-production。正式自動排程與 production snapshot 必須另行批准。
+每個 slot 都有到期時間；Worker 先讀目前 slot，KV 尚未同步時再讀前一 slot。交通快照超過十五分鐘即不可用，攝影機硬上限十二小時，且個別交通觀測仍必須在十分鐘內。此命令只更新 staging namespace，不會部署或修改 production。正式自動排程與 production snapshot 必須另行批准。
 
 先 dry-run，再明確指定 production environment 部署；禁止省略 `--env production`，避免誤碰 root Worker：
 
@@ -172,6 +222,8 @@ npm run worker:deploy -- --env production --strict --secrets-file worker/.dev.va
 npm run check
 npm run test:e2e
 ```
+
+`npm run check` 會執行前端與 Worker syntax checks、靜態資產檢查與 Vitest。GitHub Actions 會在 pull request 與 `main` push 自動執行這個 gate。
 
 Vitest 覆蓋牌照規則、國道與快速道路、國 3 甲例外、方向性限制、資料時效、VD 方向匹配、壅塞分級與 Worker fixture API。Playwright 設定包含桌面、iPhone、Android 與小平板。
 

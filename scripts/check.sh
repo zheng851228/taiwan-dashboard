@@ -15,7 +15,12 @@ node --check js/enhancements.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
+node --check js/maplibre-route-layer.js
+node --check js/maplibre-camera-layer.js
+node --check js/maplibre-condition-layer.js
 node --check js/desktop-dashboard.js
+node --check js/desktop-layout.js
+node --check js/desktop-bootstrap.js
 node --check js/map-provider-config.js
 node --check js/pwa.js
 node --check sw.js
@@ -43,6 +48,11 @@ grep -q 'js/main-ui.js' index.html
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-conditions.js' index.html
 grep -q 'js/ride-tools.js' index.html
+grep -q 'js/desktop-bootstrap.js' index.html
+grep -q 'js/maplibre-route-layer.js' js/desktop-bootstrap.js
+grep -q 'js/maplibre-camera-layer.js' js/desktop-bootstrap.js
+grep -q 'js/maplibre-condition-layer.js' js/desktop-bootstrap.js
+grep -q 'js/desktop-layout.js' js/desktop-bootstrap.js
 grep -q 'js/pwa.js' index.html
 grep -q 'manifest.json' index.html
 grep -q 'apple-touch-icon.png' index.html
