@@ -17,7 +17,6 @@ async function readLayout(page) {
 test.describe('desktop layout controller', () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop layout verification only.');
-    await page.addInitScript(key => localStorage.removeItem(key), LAYOUT_KEY);
   });
 
   test('keyboard resizing updates ARIA state and persists after reload', async ({ page }) => {
