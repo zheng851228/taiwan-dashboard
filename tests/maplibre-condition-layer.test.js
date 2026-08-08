@@ -76,9 +76,13 @@ describe('MapLibre condition overlay seam', () => {
     expect(result.events[0].properties.kind).toBe('construction');
     expect(result.weather).toHaveLength(1);
     expect(result.eventMarkerCount).toBe(1);
-    expect(renderer._setSourceData).toHaveBeenCalledWith('desktop-sections', expect.objectContaining({ features: expect.any(Array) }));
-    expect(renderer._setSourceData).toHaveBeenCalledWith('desktop-events', expect.objectContaining({ features: expect.any(Array) }));
-    expect(renderer._setSourceData).toHaveBeenCalledWith('desktop-weather', expect.objectContaining({ features: expect.any(Array) }));
+
+    const writes = renderer._setSourceData.mock.calls.map(([id, data]) => ({ id, featureCount: data.features.length }));
+    expect(writes).toEqual([
+      { id: 'desktop-sections', featureCount: 1 },
+      { id: 'desktop-events', featureCount: 1 },
+      { id: 'desktop-weather', featureCount: 1 }
+    ]);
     expect(renderer.routeCoords.length).toBeGreaterThan(1);
     expect(renderer.routeFitApplied).toBe(true);
     expect(renderer.map.fitBounds).toHaveBeenCalledOnce();
