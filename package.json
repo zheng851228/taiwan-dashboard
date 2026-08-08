@@ -8,6 +8,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:desktop-layout": "playwright test tests/e2e/desktop-layout.spec.js --project=desktop-chromium",
     "test:routes:live": "node scripts/audit-taiwan-routes.mjs",
     "build": "npm run build:css",
     "build:css": "tailwindcss -i ./css/tailwind.input.css -o ./css/tailwind.generated.css --minify",
