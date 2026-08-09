@@ -161,6 +161,9 @@
   }
 
   function roadEventPresentation(incident) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.roadEventPresentation) {
+      return RouteConditionViewModel.roadEventPresentation(incident);
+    }
     incident = incident || {};
     var kind = inferRoadEventKind(incident);
     var impact = inferRoadEventImpact(incident);
@@ -182,15 +185,16 @@
       priority: kindMeta.priority + impactMeta.priority - (status === 'scheduled' ? 5 : 0)
     };
   }
-
   function primaryRoadEvent(incidents) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.primaryRoadEvent) {
+      return RouteConditionViewModel.primaryRoadEvent(incidents);
+    }
     return (incidents || []).map(function(incident) {
       return { incident: incident, presentation: roadEventPresentation(incident) };
     }).sort(function(a, b) {
       return b.presentation.priority - a.presentation.priority;
     })[0] || null;
   }
-
   function roadEventLocationIsApproximate(incident) {
     return Boolean(incident && incident.locationApproximate)
       || !incident
@@ -201,6 +205,9 @@
   }
 
   function summarizeRoadEvents(sections) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.summarizeRoadEvents) {
+      return RouteConditionViewModel.summarizeRoadEvents(sections);
+    }
     var unique = new Map();
     var affectedSections = 0;
     (sections || []).forEach(function(section) {
@@ -233,7 +240,6 @@
     });
     return summary;
   }
-
   function roadEventCoverageText(coverage) {
     if (!coverage || !Array.isArray(coverage.requestedScopes)) {
       return '\u9053\u8def\u4e8b\u4ef6\u4f86\u6e90\u672a\u56de\u5831\u6db5\u84cb\u7bc4\u570d\uff1b\u672a\u5c07\u7f3a\u5c11\u8cc7\u6599\u8996\u70ba\u300c\u6cbf\u9014\u7121\u4e8b\u4ef6\u300d\u3002';
@@ -326,6 +332,9 @@
   }
 
   function buildAlerts(sections) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.buildAlerts) {
+      return RouteConditionViewModel.buildAlerts(sections);
+    }
     var alerts = [];
     sections.forEach(function(section) {
       var traffic = section.traffic || {};
@@ -368,7 +377,6 @@
       return b.priority - a.priority || Number(a.order) - Number(b.order);
     }).slice(0, 6);
   }
-
   function renderAlerts(sections) {
     var wrap = Dom.byId('condition-alerts');
     if (!wrap) return;
