@@ -12,6 +12,7 @@ node --check js/services.js
 node --check js/data.js
 node --check js/main-ui.js
 node --check js/enhancements.js
+node --check js/route-condition-view-model.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
