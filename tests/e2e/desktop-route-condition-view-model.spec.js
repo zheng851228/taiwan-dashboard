@@ -14,25 +14,21 @@ test('route-condition runtime delegates presentation decisions to the extracted 
   ))).toBe(true);
 
   const result = await page.evaluate(() => {
-    const construction = window.getRoadEventPresentation({
-      title: '道路施工，封閉外側車道',
+    const laneWork = {
+      title: '施工，占用外側車道',
       lat: 24.12,
       lng: 120.67,
       status: 'active'
-    });
+    };
+    const construction = window.getRoadEventPresentation(laneWork);
     const primary = window.getPrimaryRoadEvent([
-      { title: '道路施工，封閉外側車道', lat: 24.12, lng: 120.67, status: 'active' },
+      laneWork,
       { title: '全線封閉預告', description: '道路全線封閉', lat: 24.13, lng: 120.68, status: 'scheduled' }
     ]);
     return {
       construction,
       primary: primary && primary.presentation,
-      direct: window.RouteConditionViewModel.roadEventPresentation({
-        title: '道路施工，封閉外側車道',
-        lat: 24.12,
-        lng: 120.67,
-        status: 'active'
-      })
+      direct: window.RouteConditionViewModel.roadEventPresentation(laneWork)
     };
   });
 
