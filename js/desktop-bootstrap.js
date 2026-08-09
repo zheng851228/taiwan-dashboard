@@ -36,8 +36,7 @@
 
   function activateDesktopModules() {
     if (!window.matchMedia || !window.matchMedia(DESKTOP_QUERY).matches || loading) return;
-    loading = loadScript('./js/route-condition-view-model.js?v=43')
-      .then(function() { return loadScript('./js/route-condition-parity.js?v=43'); })
+    loading = loadScript('./js/route-condition-parity.js?v=43')
       .then(function() { return loadScript('./js/map-provider-config.js?v=42'); })
       .then(function() { return loadScript('./js/maplibre-renderer.js?v=42'); })
       .then(function() { return loadScript('./js/maplibre-route-layer.js?v=43'); })
