@@ -43,11 +43,13 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/data.js` | Client-side data helpers |
 | `js/main-ui.js` | Primary route-search and route-result UI |
 | `js/enhancements.js` | Cross-cutting interaction enhancements |
-| `js/route-conditions.js` | Traffic/weather/event condition presentation |
+| `js/route-conditions.js` | Traffic/weather/event condition DOM rendering and interaction |
+| `js/route-condition-view-model.js` | Pure road-event classification, impact, presentation, summaries and alert ordering |
+| `js/route-condition-parity.js` | Runtime shadow comparison between legacy route-condition presentation helpers and the extracted view model |
 | `js/ride-tools.js` | Rider utility features |
-| `js/maplibre-renderer.js` | MapLibre map lifecycle, terrain/basemap orchestration and remaining overlay facade |
-| `js/maplibre-route-layer.js` | Route GeoJSON, route coordinate state and fitBounds compatibility seam |
-| `js/maplibre-camera-layer.js` | CCTV GeoJSON, marker lifecycle and camera interaction compatibility seam |
+| `js/maplibre-renderer.js` | MapLibre lifecycle, shared layer/source setup, terrain/basemap and camera orchestration |
+| `js/maplibre-route-layer.js` | Route GeoJSON, route coordinate state and fitBounds behavior |
+| `js/maplibre-camera-layer.js` | CCTV GeoJSON, marker lifecycle and camera interaction |
 | `js/maplibre-condition-layer.js` | Traffic section GeoJSON, incident cues/markers, rainy-weather points and condition fallback fitting |
 | `js/desktop-dashboard.js` | Desktop command-center orchestration |
 | `js/desktop-layout.js` | Desktop rail sizing, resizing, persistence and reset behavior |
@@ -118,8 +120,8 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 ## Suggested migration order
 
 1. **Desktop layout utilities — complete.** `js/desktop-layout.js` is now the single implementation for rail sizing, normalization, pointer/keyboard resizing, persistence, reset, CSS variables, and ARIA separator state. The duplicate implementation was removed from `desktop-dashboard.js` after the focused Chromium regression gate passed.
-2. **Map layers — in progress.** `js/maplibre-camera-layer.js` owns CCTV marker/GeoJSON behavior, `js/maplibre-route-layer.js` owns route GeoJSON plus fitBounds behavior, and `js/maplibre-condition-layer.js` now owns section/event/weather rendering plus event marker selection behind the same public renderer API. Focused Vitest and Chromium regressions protect all three seams. Legacy implementations may remain temporarily inside `maplibre-renderer.js` until the compatibility layer has been proven stable enough for deletion.
-3. **Route condition presentation.** Separate formatting/view-model helpers from DOM rendering.
+2. **Map layers — complete for the first extraction pass.** `js/maplibre-camera-layer.js` owns CCTV marker/GeoJSON behavior, `js/maplibre-route-layer.js` owns route GeoJSON plus fitBounds behavior, and `js/maplibre-condition-layer.js` owns section/event/weather rendering plus event marker selection. The duplicate route/camera/condition implementations were removed from `maplibre-renderer.js` after focused Vitest and Chromium gates passed.
+3. **Route condition presentation — in progress.** `js/route-condition-view-model.js` now contains pure road-event classification, impact, presentation, primary-event selection, summary and alert ordering logic. `js/route-condition-parity.js` shadow-compares the extracted model with the legacy helpers in real Chromium and fails the focused regression if presentation or primary-event output drifts. The DOM renderer still uses its existing internal helpers until a safe partial-edit path is available; duplication should only be deleted after runtime delegation is proven.
 4. **Main route UI.** Split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
 5. **Shared globals.** Only then reduce global state and tighten module dependencies.
 
@@ -133,7 +135,7 @@ npm run test:e2e:desktop-refactor
 npm run test:e2e
 ```
 
-The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, and synthetic condition rendering for traffic sections, incident cues/markers, rainy-weather points, condition selection, and fallback route fitting. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
+The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, and route-condition view-model parity against the legacy presentation helpers. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
 For routing/provider changes, also run the relevant fixture and live route audits before production deployment.
 
