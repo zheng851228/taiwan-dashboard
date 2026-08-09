@@ -13,7 +13,6 @@ node --check js/data.js
 node --check js/main-ui.js
 node --check js/enhancements.js
 node --check js/route-condition-view-model.js
-node --check js/route-condition-parity.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
@@ -50,18 +49,23 @@ grep -q 'js/main-ui.js' index.html
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-conditions.js' index.html
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const vm=s.indexOf('js/route-condition-view-model.js'); const ui=s.indexOf('js/route-conditions.js'); if(vm < 0 || ui < 0 || vm > ui) throw new Error('route-condition view model must load before route-conditions');"
+grep -q 'RouteConditionViewModel.roadEventPresentation' js/route-conditions.js
+grep -q 'RouteConditionViewModel.primaryRoadEvent' js/route-conditions.js
+grep -q 'RouteConditionViewModel.summarizeRoadEvents' js/route-conditions.js
+grep -q 'RouteConditionViewModel.buildAlerts' js/route-conditions.js
+! grep -q 'ROAD_EVENT_KINDS' js/route-conditions.js
+! grep -q 'inferRoadEventKind' js/route-conditions.js
 grep -q 'js/ride-tools.js' index.html
 grep -q 'js/desktop-bootstrap.js' index.html
-grep -q 'js/route-condition-parity.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-route-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-camera-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-condition-layer.js' js/desktop-bootstrap.js
 grep -q 'js/desktop-layout.js' js/desktop-bootstrap.js
 grep -q 'js/pwa.js' index.html
-node -e "const fs=require('fs');const s=fs.readFileSync('index.html','utf8');if(s.indexOf('js/route-condition-view-model.js')>s.indexOf('js/route-conditions.js'))process.exit(1)"
 grep -q 'manifest.json' index.html
 grep -q 'apple-touch-icon.png' index.html
-! grep -Eq '(unpkg|cdnjs|fonts\\.googleapis)\\.com' index.html
+! grep -Eq '(unpkg|cdnjs|fonts\.googleapis)\.com' index.html
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
