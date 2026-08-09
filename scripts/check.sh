@@ -48,16 +48,17 @@ grep -q 'js/services.js' index.html
 grep -q 'js/data.js' index.html
 grep -q 'js/main-ui.js' index.html
 grep -q 'js/enhancements.js' index.html
+grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-conditions.js' index.html
 grep -q 'js/ride-tools.js' index.html
 grep -q 'js/desktop-bootstrap.js' index.html
-grep -q 'js/route-condition-view-model.js' js/desktop-bootstrap.js
 grep -q 'js/route-condition-parity.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-route-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-camera-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-condition-layer.js' js/desktop-bootstrap.js
 grep -q 'js/desktop-layout.js' js/desktop-bootstrap.js
 grep -q 'js/pwa.js' index.html
+node -e "const fs=require('fs');const s=fs.readFileSync('index.html','utf8');if(s.indexOf('js/route-condition-view-model.js')>s.indexOf('js/route-conditions.js'))process.exit(1)"
 grep -q 'manifest.json' index.html
 grep -q 'apple-touch-icon.png' index.html
 ! grep -Eq '(unpkg|cdnjs|fonts\\.googleapis)\\.com' index.html
