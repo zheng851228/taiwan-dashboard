@@ -13,6 +13,7 @@ node --check js/data.js
 node --check js/main-ui.js
 node --check js/enhancements.js
 node --check js/route-condition-view-model.js
+node --check js/route-condition-parity.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
@@ -50,6 +51,8 @@ grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-conditions.js' index.html
 grep -q 'js/ride-tools.js' index.html
 grep -q 'js/desktop-bootstrap.js' index.html
+grep -q 'js/route-condition-view-model.js' js/desktop-bootstrap.js
+grep -q 'js/route-condition-parity.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-route-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-camera-layer.js' js/desktop-bootstrap.js
 grep -q 'js/maplibre-condition-layer.js' js/desktop-bootstrap.js
