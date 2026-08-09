@@ -136,6 +136,8 @@ npm run test:e2e
 
 The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, and route-condition runtime delegation to the extracted view model. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
+The route-condition runtime integration fixture deliberately uses unambiguous lane-closure wording (`施工，占用外側車道`) so it tests delegation rather than overlapping text-classification heuristics.
+
 For routing/provider changes, also run the relevant fixture and live route audits before production deployment.
 
 ## Framework migration
