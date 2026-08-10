@@ -9,7 +9,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:desktop-layout": "playwright test tests/e2e/desktop-layout.spec.js --project=desktop-chromium",
-    "test:e2e:desktop-refactor": "playwright test tests/e2e/desktop-layout.spec.js tests/e2e/desktop-camera-layer.spec.js tests/e2e/desktop-route-layer.spec.js tests/e2e/desktop-condition-layer.spec.js tests/e2e/desktop-route-condition-view-model.spec.js tests/e2e/desktop-route-search-model.spec.js tests/e2e/desktop-route-summary-model.spec.js tests/e2e/desktop-route-navigation-model.spec.js tests/e2e/desktop-browser-global-surface.spec.js tests/e2e/desktop-route-camera-state.spec.js tests/e2e/desktop-route-vehicle-state.spec.js --project=desktop-chromium",
+    "test:e2e:desktop-refactor": "playwright test tests/e2e/desktop-layout.spec.js tests/e2e/desktop-camera-layer.spec.js tests/e2e/desktop-route-layer.spec.js tests/e2e/desktop-condition-layer.spec.js tests/e2e/desktop-route-condition-view-model.spec.js tests/e2e/desktop-route-search-model.spec.js tests/e2e/desktop-route-summary-model.spec.js tests/e2e/desktop-route-navigation-model.spec.js tests/e2e/desktop-browser-global-surface.spec.js tests/e2e/desktop-route-camera-state.spec.js tests/e2e/desktop-route-vehicle-state.spec.js tests/e2e/desktop-navigation-request.spec.js --project=desktop-chromium",
     "test:routes:live": "node scripts/audit-taiwan-routes.mjs",
     "build": "npm run build:css",
     "build:css": "tailwindcss -i ./css/tailwind.input.css -o ./css/tailwind.generated.css --minify",
