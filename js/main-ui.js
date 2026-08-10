@@ -232,6 +232,7 @@
     map: null, tileLayer: null, markers: [], placeLabelMarkers: [], routeLayer: null,
     routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [], routeIncidentLayers: [],
     startEndMarkers: [], _canvas: null, _camData: [], _markerSignature: '',
+    _nearbyMarker: null, _nearbyCircle: null,
     init: function() {
       MapMod.map = L.map('map', {
         center: Config.MAP_CENTER, zoom: Config.MAP_ZOOM,
@@ -249,6 +250,49 @@
         }
         if (action === 'focus-route') {
           MapMod.focusRoute();
+          return;
+        }
+        if (action === 'nearby-overlay-upsert') {
+          var nearbyCenter = request && request.center;
+          var nearbyLat = Array.isArray(nearbyCenter) ? Number(nearbyCenter[0]) : NaN;
+          var nearbyLng = Array.isArray(nearbyCenter) ? Number(nearbyCenter[1]) : NaN;
+          var radiusMeters = Number(request && request.radiusMeters);
+          if (!MapMod.map || !Number.isFinite(nearbyLat) || !Number.isFinite(nearbyLng)) return;
+          if (MapMod._nearbyMarker) MapMod.map.removeLayer(MapMod._nearbyMarker);
+          if (MapMod._nearbyCircle) MapMod.map.removeLayer(MapMod._nearbyCircle);
+          var nearbyIcon = L.divIcon({
+            className: '',
+            html: '<div style="position:relative;width:20px;height:20px">'
+              + '<div style="position:absolute;inset:0;border-radius:50%;background:#3b82f6;opacity:0.3;animation:ping 1.5s ease-in-out infinite"></div>'
+              + '<div style="position:absolute;inset:3px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 0 8px #3b82f6"></div>'
+              + '</div>',
+            iconSize: [20,20], iconAnchor: [10,10]
+          });
+          MapMod._nearbyMarker = L.marker([nearbyLat, nearbyLng], { icon: nearbyIcon })
+            .addTo(MapMod.map).bindTooltip('📍 我的位置', { direction:'top', permanent: false });
+          MapMod._nearbyCircle = L.circle([nearbyLat, nearbyLng], {
+            radius: Number.isFinite(radiusMeters) ? Math.max(0, radiusMeters) : 0,
+            color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.05, weight: 1.5, dashArray: '6,4'
+          }).addTo(MapMod.map);
+          return;
+        }
+        if (action === 'nearby-overlay-radius') {
+          var nextRadius = Number(request && request.radiusMeters);
+          if (MapMod._nearbyCircle && Number.isFinite(nextRadius) && nextRadius >= 0) MapMod._nearbyCircle.setRadius(nextRadius);
+          return;
+        }
+        if (action === 'nearby-overlay-clear') {
+          if (MapMod.map && MapMod._nearbyMarker) MapMod.map.removeLayer(MapMod._nearbyMarker);
+          if (MapMod.map && MapMod._nearbyCircle) MapMod.map.removeLayer(MapMod._nearbyCircle);
+          MapMod._nearbyMarker = null;
+          MapMod._nearbyCircle = null;
+          return;
+        }
+        if (action === 'clear-waypoint-overlays') {
+          if (MapMod.map && Array.isArray(AppState.waypointMapMarkers)) {
+            AppState.waypointMapMarkers.forEach(function(marker) { MapMod.map.removeLayer(marker); });
+          }
+          AppState.waypointMapMarkers = [];
           return;
         }
         if (action === 'set-view') {
