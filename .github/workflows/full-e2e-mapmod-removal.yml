@@ -6,6 +6,9 @@ on:
       - agent/portfolio-maintainability-pass
     paths:
       - .github/workflows/full-e2e-mapmod-removal.yml
+      - js/main-ui.js
+      - tests/e2e/**
+      - playwright.config.js
 
 permissions:
   contents: read
@@ -28,4 +31,12 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium chrome
       - name: Run full E2E suite
-        run: npm run test:e2e
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          npm run test:e2e -- --reporter=line 2>&1 | tee /tmp/full-e2e.log
+          status=${PIPESTATUS[0]}
+          echo "===== full E2E tail ====="
+          tail -n 300 /tmp/full-e2e.log
+          exit "$status"
