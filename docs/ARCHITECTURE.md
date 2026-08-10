@@ -41,7 +41,8 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/core.js` | Shared state, storage, DOM and common helpers |
 | `js/services.js` | Browser-to-Worker API boundary |
 | `js/data.js` | Client-side data helpers |
-| `js/main-ui.js` | Primary route-search and route-result UI |
+| `js/route-search-model.js` | Pure route endpoint normalization, address-resolution planning, vehicle request shaping and unresolved-point messages |
+| `js/main-ui.js` | Primary route-search orchestration, route-result UI, map/list UI and navigation handoff |
 | `js/enhancements.js` | Cross-cutting interaction enhancements |
 | `js/route-conditions.js` | Traffic/weather/event condition DOM rendering, interaction and thin view-model delegation |
 | `js/route-condition-view-model.js` | Pure road-event classification, impact, presentation, summaries and alert ordering |
@@ -121,8 +122,9 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 1. **Desktop layout utilities — complete.** `js/desktop-layout.js` is now the single implementation for rail sizing, normalization, pointer/keyboard resizing, persistence, reset, CSS variables, and ARIA separator state. The duplicate implementation was removed from `desktop-dashboard.js` after the focused Chromium regression gate passed.
 2. **Map layers — complete for the first extraction pass.** `js/maplibre-camera-layer.js` owns CCTV marker/GeoJSON behavior, `js/maplibre-route-layer.js` owns route GeoJSON plus fitBounds behavior, and `js/maplibre-condition-layer.js` owns section/event/weather rendering plus event marker selection. The duplicate route/camera/condition implementations were removed from `maplibre-renderer.js` after focused Vitest and Chromium gates passed.
 3. **Route condition presentation — complete for the pure-data extraction pass.** `js/route-condition-view-model.js` is the single owner for road-event classification, impact, presentation, location approximation, primary-event selection, summary and alert ordering. `js/route-conditions.js` delegates those decisions and retains DOM rendering, loading/error state, timeline interaction and navigation handoff. The transitional parity module and duplicated fallback implementations were removed after runtime delegation and Chromium regression gates passed.
-4. **Main route UI — next.** Split input/search state, route summary, and navigation handoff after the lower-level seams are stable.
-5. **Shared globals.** Only then reduce global state and tighten module dependencies.
+4. **Route-search input/request preparation — complete for the first extraction pass.** `js/route-search-model.js` owns endpoint normalization/validation, waypoint-address planning, cached route-point reuse, vehicle request shaping, and unresolved-point messages. `RouteMod.analyze()` retains async geocoding, Worker route creation, state transitions, and result orchestration while delegating the pure preparation decisions to the model.
+5. **Route summary and navigation handoff — next.** Extract route-summary presentation and navigation handoff from `main-ui.js` behind focused runtime seams without changing route creation or provider behavior.
+6. **Shared globals.** Only then reduce global state and tighten module dependencies.
 
 ## Validation gates
 
@@ -134,7 +136,7 @@ npm run test:e2e:desktop-refactor
 npm run test:e2e
 ```
 
-The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, and route-condition runtime delegation to the extracted view model. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
+The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, and route-search endpoint-preparation delegation to the extracted model. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
 The route-condition runtime integration fixture deliberately uses unambiguous lane-closure wording (`施工，占用外側車道`) so it tests delegation rather than overlapping text-classification heuristics.
 
