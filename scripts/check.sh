@@ -12,6 +12,7 @@ node --check js/services.js
 node --check js/data.js
 node --check js/route-search-model.js
 node --check js/route-summary-model.js
+node --check js/route-navigation-model.js
 node --check js/main-ui.js
 node --check js/enhancements.js
 node --check js/route-condition-view-model.js
@@ -60,12 +61,18 @@ grep -q 'RouteSummaryModel.routeUiCopy' js/main-ui.js
 grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
+grep -q 'js/route-navigation-model.js' index.html
 grep -q 'js/route-conditions.js' index.html
-node -e "const s=require('fs').readFileSync('index.html','utf8'); const vm=s.indexOf('js/route-condition-view-model.js'); const ui=s.indexOf('js/route-conditions.js'); if(vm < 0 || ui < 0 || vm > ui) throw new Error('route-condition view model must load before route-conditions');"
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const vm=s.indexOf('js/route-condition-view-model.js'); const nav=s.indexOf('js/route-navigation-model.js'); const ui=s.indexOf('js/route-conditions.js'); if(vm < 0 || nav < 0 || ui < 0 || vm > ui || nav > ui) throw new Error('route condition/navigation models must load before route-conditions');"
 grep -q 'RouteConditionViewModel.roadEventPresentation' js/route-conditions.js
 grep -q 'RouteConditionViewModel.primaryRoadEvent' js/route-conditions.js
 grep -q 'RouteConditionViewModel.summarizeRoadEvents' js/route-conditions.js
 grep -q 'RouteConditionViewModel.buildAlerts' js/route-conditions.js
+grep -q 'RouteNavigationModel.buildNavigation' js/route-conditions.js
+grep -q 'RouteNavigationModel.appleUrl' js/route-conditions.js
+grep -q 'RouteNavigationModel.appleClickIntent' js/route-conditions.js
+! grep -q 'function googleUrl' js/route-conditions.js
+! grep -q 'function appleUrl' js/route-conditions.js
 ! grep -q 'ROAD_EVENT_KINDS' js/route-conditions.js
 ! grep -q 'inferRoadEventKind' js/route-conditions.js
 grep -q 'js/ride-tools.js' index.html
