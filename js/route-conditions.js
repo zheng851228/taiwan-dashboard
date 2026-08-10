@@ -15,6 +15,7 @@
   var autoTimer = null;
   var requestVersion = 0;
   var userAdjustedCollapse = false;
+  var vehicleState = { mode: 'motorcycle', plate: 'white' };
 
   function setVisible(id, visible) {
     var element = Dom.byId(id);
@@ -542,8 +543,8 @@
   function navigationState() {
     return window.RouteNavigationModel.buildNavigation(
       currentRoute,
-      RouteMod.mode,
-      RouteMod.plate
+      vehicleState.mode,
+      vehicleState.plate
     );
   }
 
@@ -632,6 +633,14 @@
     Dom.onId('nav-google', 'click', guardNavigationLink);
     Dom.onId('nav-apple', 'click', openAppleMaps);
     Bus.on('condition:select', focusSection);
+    Bus.on('vehicle:changed', function(event) {
+      vehicleState = {
+        mode: event && event.mode === 'car' ? 'car' : 'motorcycle',
+        plate: event && event.plate ? event.plate : 'white'
+      };
+      setNavigationLinks();
+      renderAppleLegs(false);
+    });
     autoTimer = window.setInterval(function() {
       if (!currentRoute || document.visibilityState !== 'visible') return;
       if (Date.now() - lastRefreshAt >= AUTO_REFRESH_MS) refresh();
