@@ -69,8 +69,8 @@ grep -q 'RouteConditionViewModel.primaryRoadEvent' js/route-conditions.js
 grep -q 'RouteConditionViewModel.summarizeRoadEvents' js/route-conditions.js
 grep -q 'RouteConditionViewModel.buildAlerts' js/route-conditions.js
 grep -q 'RouteNavigationModel.buildNavigation' js/route-conditions.js
-grep -q 'RouteNavigationModel.appleUrl' js/route-conditions.js
 grep -q 'RouteNavigationModel.appleClickIntent' js/route-conditions.js
+! grep -q 'function routePoints' js/route-conditions.js
 ! grep -q 'function googleUrl' js/route-conditions.js
 ! grep -q 'function appleUrl' js/route-conditions.js
 ! grep -q 'ROAD_EVENT_KINDS' js/route-conditions.js
