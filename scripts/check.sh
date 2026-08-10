@@ -10,6 +10,7 @@ echo "Checking frontend files..."
 node --check js/core.js
 node --check js/services.js
 node --check js/data.js
+node --check js/route-search-model.js
 node --check js/main-ui.js
 node --check js/enhancements.js
 node --check js/route-condition-view-model.js
@@ -45,7 +46,13 @@ grep -q 'css/tailwind.generated.css' index.html
 grep -q 'js/core.js' index.html
 grep -q 'js/services.js' index.html
 grep -q 'js/data.js' index.html
+grep -q 'js/route-search-model.js' index.html
 grep -q 'js/main-ui.js' index.html
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-search-model.js'); const ui=s.indexOf('js/main-ui.js'); if(model < 0 || ui < 0 || model > ui) throw new Error('route-search model must load before main-ui');"
+grep -q 'RouteSearchModel.prepareEndpoints' js/main-ui.js
+grep -q 'RouteSearchModel.buildAddressPlan' js/main-ui.js
+grep -q 'RouteSearchModel.buildVehicle' js/main-ui.js
+grep -q 'RouteSearchModel.unresolvedPointMessage' js/main-ui.js
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-conditions.js' index.html
