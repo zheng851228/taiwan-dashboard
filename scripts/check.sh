@@ -62,6 +62,13 @@ grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 ! grep -q 'window.ThemeMod' js/main-ui.js
 ! grep -q 'window.ListMod' js/main-ui.js
 ! grep -q 'window.ModalMod' js/main-ui.js
+! grep -q 'window.NavMod' js/main-ui.js
+grep -q "Bus.on('navigation:request'" js/main-ui.js
+! grep -q 'NavMod' index.html
+for file in js/desktop-dashboard.js js/enhancements.js js/ride-tools.js; do
+  ! grep -q 'NavMod' "$file"
+  grep -q "Bus.emit('navigation:request'" "$file"
+done
 ! grep -q 'window.DesktopElevationMod' js/desktop-dashboard.js
 grep -q 'state.routeCameras = event && Array.isArray(event.cams)' js/desktop-dashboard.js
 ! grep -q 'RouteMod.filteredCams' js/desktop-dashboard.js
