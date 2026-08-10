@@ -26,6 +26,8 @@ test('map commands flow through map:request bus events', async ({ page }, testIn
     window.Bus.emit('map:request', { action: 'focus-route' });
     window.Bus.emit('map:request', { action: 'draw-route', coords: routeCoords, mode: 'motorcycle' });
     window.Bus.emit('map:request', { action: 'draw-start-end', points: routePoints });
+    const routeSnapshot = window.__MapTestProbe.snapshot();
+
     window.Bus.emit('map:request', { action: 'focus-camera', camera });
     window.Bus.emit('map:request', { action: 'draw-condition-sections', sections });
     window.Bus.emit('map:request', { action: 'focus-section', order: 2 });
@@ -39,7 +41,8 @@ test('map commands flow through map:request bus events', async ({ page }, testIn
 
     return {
       actions: window.__MapTestProbe.actions(),
-      snapshot: window.__MapTestProbe.snapshot()
+      routeSnapshot,
+      finalSnapshot: window.__MapTestProbe.snapshot()
     };
   });
 
@@ -53,8 +56,8 @@ test('map commands flow through map:request bus events', async ({ page }, testIn
     { action: 'draw-condition-sections', sections: 1 },
     { action: 'focus-section', order: 2 }
   ]);
-  expect(result.snapshot.center[0]).toBeCloseTo(24.15, 2);
-  expect(result.snapshot.center[1]).toBeCloseTo(120.68, 2);
-  expect(result.snapshot.routeLayerCount).toBeGreaterThan(0);
-  expect(result.snapshot.startEndMarkerCount).toBe(2);
+  expect(result.routeSnapshot.routeLayerCount).toBeGreaterThan(0);
+  expect(result.routeSnapshot.startEndMarkerCount).toBe(2);
+  expect(result.finalSnapshot.center[0]).toBeCloseTo(24.15, 2);
+  expect(result.finalSnapshot.center[1]).toBeCloseTo(120.68, 2);
 });
