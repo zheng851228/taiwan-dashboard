@@ -790,7 +790,7 @@
       var simplified = simplifyCoords(coords, adaptiveStep);
       RouteMod.routeCoords = coords;
       RouteMod.active = true;
-      if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
+      ListMod.visibleLimit = ListMod.PAGE_SIZE;
       var cctv = Data.allCams();
       var FILTER_KM = 5;
 
@@ -869,7 +869,7 @@
       RouteUiMod.setState('empty');
       RouteMod.setAnalyzeBusy(false);
       RouteMod.active = false; RouteMod.filteredCams = []; RouteMod.routeCoords = [];
-      if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
+      ListMod.visibleLimit = ListMod.PAGE_SIZE;
       AppState.routeAllPoints = [];
       MapMod.clearRoute();
       MapMod.drawStartEnd(null); // 清除起終點標記
@@ -1309,13 +1309,10 @@
     }
   };
 
-  window.ThemeMod = ThemeMod;
   window.NavMod = NavMod;
   window.MapMod = MapMod;
   window.InfoMod = InfoMod;
   window.RouteMod = RouteMod;
-  window.ListMod = ListMod;
-  window.ModalMod = ModalMod;
 
   window.addEventListener('load', function() {
     ClockMod.init();
