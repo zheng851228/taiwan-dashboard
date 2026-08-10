@@ -377,7 +377,7 @@
       source: camera.source || 'CCTV'
     };
     if (camera.status === 'offline') Toast.show('\u93e1\u982d\u72c0\u614b\u7570\u5e38\uff0c\u7121\u6cd5\u7528\u756b\u9762\u78ba\u8a8d\u73fe\u5834');
-    MapMod.focusCam(normalized);
+    Bus.emit('map:request', { action: 'focus-camera', camera: normalized });
   }
 
   function render(payload) {
@@ -489,8 +489,8 @@
     renderTimeline(sections);
     setNavigationLinks();
     renderAppleLegs(false);
-    MapMod.drawConditionSections(sections);
-    MapMod.drawStartEnd(AppState.routeAllPoints);
+    Bus.emit('map:request', { action: 'draw-condition-sections', sections: sections });
+    Bus.emit('map:request', { action: 'draw-start-end', points: AppState.routeAllPoints });
     if (shouldUseMobileReadyLayout() && !userAdjustedCollapse) setCollapsed(true);
     Bus.emit('conditions:updated', data);
   }
@@ -531,7 +531,7 @@
   }
 
   function focusSection(order) {
-    MapMod.focusSection(order);
+    Bus.emit('map:request', { action: 'focus-section', order: order });
     Dom.queryAll('.condition-section').forEach(function(item) {
       item.classList.toggle('active', Number(item.dataset.order) === Number(order));
     });

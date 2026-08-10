@@ -280,8 +280,8 @@
     RouteMod.setVehicle(restoredMode, restoredPlate);
     RouteMod.routeCoords = mapCoordinates;
     RouteMod.filteredCams = [];
-    MapMod.drawRoute(mapCoordinates, restoredMode);
-    MapMod.drawStartEnd(AppState.routeAllPoints);
+    Bus.emit('map:request', { action: 'draw-route', coords: mapCoordinates, mode: restoredMode });
+    Bus.emit('map:request', { action: 'draw-start-end', points: AppState.routeAllPoints });
 
     var start = Dom.byId('js-route-start');
     var end = Dom.byId('js-route-end');
