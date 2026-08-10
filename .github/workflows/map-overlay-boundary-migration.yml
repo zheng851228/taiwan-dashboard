@@ -1,0 +1,34 @@
+name: Map Overlay Boundary Migration
+
+on:
+  push:
+    branches:
+      - agent/portfolio-maintainability-pass
+    paths:
+      - scripts/migrate-map-overlay-boundary.mjs
+      - .github/workflows/map-overlay-boundary-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/portfolio-maintainability-pass
+      - name: Apply map overlay boundary migration
+        run: node scripts/migrate-map-overlay-boundary.mjs
+      - name: Commit migration result
+        run: |
+          if git diff --quiet -- js/main-ui.js js/enhancements.js; then
+            echo "No map overlay boundary changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/main-ui.js js/enhancements.js
+          git commit -m "refactor: move overlay lifecycle behind map requests"
+          git push origin HEAD:agent/portfolio-maintainability-pass
