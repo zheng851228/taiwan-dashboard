@@ -43,9 +43,10 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/data.js` | Client-side data helpers |
 | `js/route-search-model.js` | Pure route endpoint normalization, address-resolution planning, vehicle request shaping and unresolved-point messages |
 | `js/route-summary-model.js` | Pure route distance/time normalization, vehicle labels, route-summary copy and completion messages |
-| `js/main-ui.js` | Primary route-search orchestration, route-result DOM wiring, map/list UI and navigation handoff |
+| `js/route-navigation-model.js` | Pure Google/Apple navigation targets, white-plate navigation options, Apple multi-stop legs and click intents |
+| `js/main-ui.js` | Primary route-search orchestration, route-result DOM wiring, map/list UI and in-app page navigation |
 | `js/enhancements.js` | Cross-cutting interaction enhancements |
-| `js/route-conditions.js` | Traffic/weather/event condition DOM rendering, interaction and thin view-model delegation |
+| `js/route-conditions.js` | Traffic/weather/event condition DOM rendering, interaction, external-navigation DOM wiring and thin model delegation |
 | `js/route-condition-view-model.js` | Pure road-event classification, impact, presentation, summaries and alert ordering |
 | `js/ride-tools.js` | Rider utility features |
 | `js/maplibre-renderer.js` | MapLibre lifecycle, shared layer/source setup, terrain/basemap and camera orchestration |
@@ -76,6 +77,7 @@ js/
 ├── features/
 │   ├── route-search/
 │   ├── route-summary/
+│   ├── navigation/
 │   ├── traffic/
 │   ├── weather/
 │   ├── incidents/
@@ -122,11 +124,11 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 
 1. **Desktop layout utilities — complete.** `js/desktop-layout.js` is now the single implementation for rail sizing, normalization, pointer/keyboard resizing, persistence, reset, CSS variables, and ARIA separator state. The duplicate implementation was removed from `desktop-dashboard.js` after the focused Chromium regression gate passed.
 2. **Map layers — complete for the first extraction pass.** `js/maplibre-camera-layer.js` owns CCTV marker/GeoJSON behavior, `js/maplibre-route-layer.js` owns route GeoJSON plus fitBounds behavior, and `js/maplibre-condition-layer.js` owns section/event/weather rendering plus event marker selection. The duplicate route/camera/condition implementations were removed from `maplibre-renderer.js` after focused Vitest and Chromium gates passed.
-3. **Route condition presentation — complete for the pure-data extraction pass.** `js/route-condition-view-model.js` is the single owner for road-event classification, impact, presentation, location approximation, primary-event selection, summary and alert ordering. `js/route-conditions.js` delegates those decisions and retains DOM rendering, loading/error state, timeline interaction and navigation handoff. The transitional parity module and duplicated fallback implementations were removed after runtime delegation and Chromium regression gates passed.
+3. **Route condition presentation — complete for the pure-data extraction pass.** `js/route-condition-view-model.js` is the single owner for road-event classification, impact, presentation, location approximation, primary-event selection, summary and alert ordering. `js/route-conditions.js` delegates those decisions and retains DOM rendering, loading/error state, timeline interaction and navigation UI wiring. The transitional parity module and duplicated fallback implementations were removed after runtime delegation and Chromium regression gates passed.
 4. **Route-search input/request preparation — complete for the first extraction pass.** `js/route-search-model.js` owns endpoint normalization/validation, waypoint-address planning, cached route-point reuse, vehicle request shaping, and unresolved-point messages. `RouteMod.analyze()` retains async geocoding, Worker route creation, state transitions, and result orchestration while delegating the pure preparation decisions to the model.
 5. **Route summary presentation — complete for the first extraction pass.** `js/route-summary-model.js` owns route distance/time normalization, vehicle labels, camera-count/status copy, summary text and completion messages. `RouteMod.updateRouteUi()` remains the DOM writer, while `RouteMod.analyze()` retains route-result orchestration and delegates route-info normalization plus completion copy.
-6. **Navigation handoff — next.** Extract navigation intent and handoff decisions from `main-ui.js` behind focused runtime seams without changing route creation, external navigation targets, or provider behavior.
-7. **Shared globals.** Only then reduce global state and tighten module dependencies.
+6. **External navigation handoff — complete for the first extraction pass.** `js/route-navigation-model.js` owns route-point normalization for navigation, Google Maps targets, white-plate Google avoidance options, Apple Maps targets, Apple multi-stop leg generation, and Apple click intent. `js/route-conditions.js` now only writes navigation href/disabled state, renders Apple leg links, and displays the handoff message.
+7. **Shared globals — next.** Reduce cross-module globals and tighten dependency direction only after the extracted seams remain stable.
 
 ## Validation gates
 
@@ -138,7 +140,7 @@ npm run test:e2e:desktop-refactor
 npm run test:e2e
 ```
 
-The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, and route-summary DOM copy delegation to extracted models. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
+The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, route-summary DOM copy delegation, and external Google/Apple navigation target decisions. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
 The route-condition runtime integration fixture deliberately uses unambiguous lane-closure wording (`施工，占用外側車道`) so it tests delegation rather than overlapping text-classification heuristics.
 
