@@ -53,9 +53,9 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/maplibre-route-layer.js` | Route GeoJSON, route coordinate state and fitBounds behavior |
 | `js/maplibre-camera-layer.js` | CCTV GeoJSON, marker lifecycle and camera interaction |
 | `js/maplibre-condition-layer.js` | Traffic section GeoJSON, incident cues/markers, rainy-weather points and condition fallback fitting |
-| `js/desktop-dashboard.js` | Desktop command-center orchestration; elevation/playback remains closure-local and route-camera state is consumed from `route:updated` events |
+| `js/desktop-dashboard.js` | Desktop command-center orchestration; elevation/playback remains closure-local, route cameras come from `route:updated`, and vehicle mode/plate come from `vehicle:changed` |
 | `js/desktop-layout.js` | Desktop rail sizing, resizing, persistence and reset behavior |
-| `js/pwa.js` | Installation/update/offline lifecycle |
+| `js/pwa.js` | Installation/update/offline lifecycle; offline vehicle restoration uses the route vehicle capability instead of direct mode mutation |
 
 Several of these modules are now large enough that new features should not automatically be appended to them.
 
@@ -128,7 +128,7 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 4. **Route-search input/request preparation — complete for the first extraction pass.** `js/route-search-model.js` owns endpoint normalization/validation, waypoint-address planning, cached route-point reuse, vehicle request shaping, and unresolved-point messages. `RouteMod.analyze()` retains async geocoding, Worker route creation, state transitions, and result orchestration while delegating the pure preparation decisions to the model.
 5. **Route summary presentation — complete for the first extraction pass.** `js/route-summary-model.js` owns route distance/time normalization, vehicle labels, camera-count/status copy, summary text and completion messages. `RouteMod.updateRouteUi()` remains the DOM writer, while `RouteMod.analyze()` retains route-result orchestration and delegates route-info normalization plus completion copy.
 6. **External navigation handoff — complete for the first extraction pass.** `js/route-navigation-model.js` owns route-point normalization for navigation, Google Maps targets, white-plate Google avoidance options, Apple Maps targets, Apple multi-stop leg generation, and Apple click intent. `js/route-conditions.js` now only writes navigation href/disabled state, renders Apple leg links, and displays the handoff message.
-7. **Shared globals — incremental cleanup in progress.** The first audit removed internal-only `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` from `window`. The next pass has started reducing direct consumers of retained integration globals: `desktop-dashboard.js` no longer reads `RouteMod.filteredCams`; `RouteMod.updateRouteUi()` publishes camera snapshots through `route:updated`, and the desktop module owns a local `state.routeCameras` copy that is cleared on `route:cleared`. Continue this pattern with other retained globals only where an existing event or narrowly scoped capability provides a clearer dependency direction.
+7. **Shared globals — incremental cleanup in progress.** The first audit removed internal-only `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` from `window`. The next pass is reducing direct consumers of retained integration globals one dependency at a time: `desktop-dashboard.js` no longer reads `RouteMod.filteredCams`, `RouteMod.mode`, or `RouteMod.plate`; camera snapshots arrive through `route:updated`, vehicle state arrives through `vehicle:changed`, and the desktop module owns local `state.routeCameras` plus `state.vehicle` copies. PWA offline restoration now calls `RouteMod.setVehicle()` so it participates in the same vehicle event path instead of mutating `RouteMod.mode` directly. Continue this pattern only where an existing event or narrowly scoped capability provides a clearer dependency direction.
 
 ## Validation gates
 
@@ -140,9 +140,9 @@ npm run test:e2e:desktop-refactor
 npm run test:e2e
 ```
 
-The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, route-summary DOM copy delegation, external Google/Apple navigation target decisions, the supported browser-global surface, and desktop route-camera state consumption from the `route:updated` event payload. Static checks prevent internal-only `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` from being re-exported to `window`, and prevent `desktop-dashboard.js` from directly reading `RouteMod.filteredCams`. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
+The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, route-summary DOM copy delegation, external Google/Apple navigation target decisions, the supported browser-global surface, desktop route-camera state consumption from the `route:updated` payload, and desktop vehicle state consumption from the `vehicle:changed` payload. Static checks prevent internal-only `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` from being re-exported to `window`; prevent `desktop-dashboard.js` from directly reading `RouteMod.filteredCams`, `RouteMod.mode`, or `RouteMod.plate`; and require PWA offline vehicle restoration to use `RouteMod.setVehicle()`.
 
-GitHub Actions CI #131 passed on the documented shared-global event-boundary head: static/unit checks and the focused desktop Chromium regression were both green.
+GitHub Actions CI #142 passed on the vehicle-event-boundary head: static/unit checks and the focused desktop Chromium regression were both green.
 
 The route-condition runtime integration fixture deliberately uses unambiguous lane-closure wording (`施工，占用外側車道`) so it tests delegation rather than overlapping text-classification heuristics.
 
