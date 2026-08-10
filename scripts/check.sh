@@ -59,6 +59,10 @@ grep -q 'RouteSearchModel.unresolvedPointMessage' js/main-ui.js
 grep -q 'RouteSummaryModel.normalizeRouteInfo' js/main-ui.js
 grep -q 'RouteSummaryModel.routeUiCopy' js/main-ui.js
 grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
+! grep -q 'window.ThemeMod' js/main-ui.js
+! grep -q 'window.ListMod' js/main-ui.js
+! grep -q 'window.ModalMod' js/main-ui.js
+! grep -q 'window.DesktopElevationMod' js/desktop-dashboard.js
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-navigation-model.js' index.html
