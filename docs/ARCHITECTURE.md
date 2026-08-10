@@ -142,6 +142,8 @@ npm run test:e2e
 
 The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, route-summary DOM copy delegation, external Google/Apple navigation target decisions, the supported browser-global surface, and desktop route-camera state consumption from the `route:updated` event payload. Static checks prevent internal-only `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` from being re-exported to `window`, and prevent `desktop-dashboard.js` from directly reading `RouteMod.filteredCams`. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
+GitHub Actions CI #131 passed on the documented shared-global event-boundary head: static/unit checks and the focused desktop Chromium regression were both green.
+
 The route-condition runtime integration fixture deliberately uses unambiguous lane-closure wording (`施工，占用外側車道`) so it tests delegation rather than overlapping text-classification heuristics.
 
 For routing/provider changes, also run the relevant fixture and live route audits before production deployment.
