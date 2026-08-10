@@ -539,28 +539,12 @@
     if (selected) selected.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  function routePoints() {
-    return (currentRoute && currentRoute.locations || []).map(function(location) {
-      return Number(location.lat).toFixed(6) + ',' + Number(location.lng).toFixed(6);
-    });
-  }
-
-  function googleUrl(points) {
-    var params = new URLSearchParams({
-      api: '1',
-      origin: points[0],
-      destination: points[points.length - 1],
-      travelmode: RouteMod.mode === 'car' ? 'driving' : 'two-wheeler',
-      dir_action: 'navigate'
-    });
-    if (points.length > 2) params.set('waypoints', points.slice(1, -1).join('|'));
-    if (RouteMod.mode === 'motorcycle' && RouteMod.plate === 'white') params.set('avoid', 'highways,tolls');
-    return 'https://www.google.com/maps/dir/?' + params.toString();
-  }
-
-  function appleUrl(from, to) {
-    var params = new URLSearchParams({ saddr: from, daddr: to, dirflg: 'd' });
-    return 'https://maps.apple.com/?' + params.toString();
+  function navigationState() {
+    return window.RouteNavigationModel.buildNavigation(
+      currentRoute,
+      RouteMod.mode,
+      RouteMod.plate
+    );
   }
 
   function updateNavigationLink(link, href, enabled) {
@@ -571,40 +555,31 @@
   }
 
   function setNavigationLinks() {
-    var points = routePoints();
-    var enabled = points.length >= 2;
-    updateNavigationLink(
-      Dom.byId('nav-google'),
-      enabled ? googleUrl(points) : '#',
-      enabled
-    );
-    updateNavigationLink(
-      Dom.byId('nav-apple'),
-      enabled ? appleUrl(points[0], points[1]) : '#',
-      enabled
-    );
+    var state = navigationState();
+    updateNavigationLink(Dom.byId('nav-google'), state.googleHref, state.enabled);
+    updateNavigationLink(Dom.byId('nav-apple'), state.appleHref, state.enabled);
   }
 
   function renderAppleLegs(reveal) {
     var wrap = Dom.byId('apple-leg-links');
     if (!wrap) return;
-    var points = routePoints();
+    var state = navigationState();
     wrap.innerHTML = '';
-    wrap.classList.toggle('hidden', !reveal || points.length <= 2);
-    if (!reveal || points.length <= 2) return;
+    wrap.classList.toggle('hidden', !reveal || !state.appleRequiresLegHandoff);
+    if (!reveal || !state.appleRequiresLegHandoff) return;
     var note = document.createElement('div');
     note.textContent = 'Apple Maps Map Links \u4e0d\u652f\u63f4\u4e00\u6b21\u4ea4\u63a5\u591a\u505c\u9760\u9ede\uff0c\u8acb\u4f9d\u539f\u59cb\u9806\u5e8f\u958b\u555f\u5404\u6bb5\uff1a';
     var buttons = document.createElement('div');
     buttons.className = 'apple-leg-buttons';
-    for (var index = 0; index < points.length - 1; index += 1) {
+    state.appleLegs.forEach(function(leg) {
       var link = document.createElement('a');
       link.className = 'apple-leg-button';
-      link.href = appleUrl(points[index], points[index + 1]);
+      link.href = leg.href;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      link.textContent = '\u7b2c ' + (index + 1) + ' \u6bb5';
+      link.textContent = '\u7b2c ' + leg.index + ' \u6bb5';
       buttons.appendChild(link);
-    }
+    });
     wrap.appendChild(note);
     wrap.appendChild(buttons);
   }
@@ -616,15 +591,11 @@
   }
 
   function openAppleMaps(event) {
-    var points = routePoints();
-    if (points.length < 2) {
-      event.preventDefault();
-      return;
-    }
-    if (points.length === 2) return;
-    event.preventDefault();
-    renderAppleLegs(true);
-    Toast.show('Apple Maps \u8acb\u4f9d\u9806\u5e8f\u958b\u555f\u5404\u6bb5\u8def\u7dda', 4000);
+    var state = navigationState();
+    var intent = window.RouteNavigationModel.appleClickIntent(state.points);
+    if (intent.preventDefault) event.preventDefault();
+    if (intent.revealLegs) renderAppleLegs(true);
+    if (intent.message) Toast.show(intent.message, 4000);
   }
 
   function toggleCollapsed() {
