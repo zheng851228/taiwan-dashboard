@@ -9,7 +9,6 @@ test('keeps internal-only modules off window while retaining required integratio
 
   await expect.poll(() => page.evaluate(() => Boolean(
     window.RouteMod
-      && window.MapMod
       && window.RouteConditionsMod
       && window.DesktopDashboardMod
   ))).toBe(true);
@@ -20,11 +19,12 @@ test('keeps internal-only modules off window while retaining required integratio
       ListMod: Object.prototype.hasOwnProperty.call(window, 'ListMod'),
       ModalMod: Object.prototype.hasOwnProperty.call(window, 'ModalMod'),
       NavMod: Object.prototype.hasOwnProperty.call(window, 'NavMod'),
+      MapMod: Object.prototype.hasOwnProperty.call(window, 'MapMod'),
+      MapTestProbe: Object.prototype.hasOwnProperty.call(window, '__MapTestProbe'),
       DesktopElevationMod: Object.prototype.hasOwnProperty.call(window, 'DesktopElevationMod')
     },
     integration: {
       RouteMod: typeof window.RouteMod === 'object',
-      MapMod: typeof window.MapMod === 'object',
       RouteConditionsMod: typeof window.RouteConditionsMod === 'object',
       DesktopDashboardMod: typeof window.DesktopDashboardMod === 'object'
     }
@@ -35,11 +35,12 @@ test('keeps internal-only modules off window while retaining required integratio
     ListMod: false,
     ModalMod: false,
     NavMod: false,
+    MapMod: false,
+    MapTestProbe: false,
     DesktopElevationMod: false
   });
   expect(surface.integration).toEqual({
     RouteMod: true,
-    MapMod: true,
     RouteConditionsMod: true,
     DesktopDashboardMod: true
   });
