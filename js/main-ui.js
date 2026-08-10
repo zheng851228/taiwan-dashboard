@@ -127,6 +127,10 @@
 
   var NavMod = {
     init: function() {
+      Bus.on('navigation:request', function(request) {
+        var page = request && request.page;
+        if (['map','list','tools'].indexOf(page) !== -1) NavMod.go(page);
+      });
       ['map','list','tools'].forEach(function(k) {
         Dom.onId('nav-' + k, 'click', function() { NavMod.go(k); });
       });
@@ -1309,7 +1313,6 @@
     }
   };
 
-  window.NavMod = NavMod;
   window.MapMod = MapMod;
   window.InfoMod = InfoMod;
   window.RouteMod = RouteMod;

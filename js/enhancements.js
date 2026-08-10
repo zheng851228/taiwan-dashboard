@@ -62,7 +62,7 @@
         var county = card.dataset.county;
         var center = window.COUNTY_CENTERS && window.COUNTY_CENTERS[county];
         if (center && MapMod.map) {
-          NavMod.go('map');
+          Bus.emit('navigation:request', { page: 'map' });
           MapMod.map.setView(center, 11);
           Toast.show(county + ' ' + (Data.weather[county] ? Data.weather[county].temp + '\u00B0C' : ''));
         }

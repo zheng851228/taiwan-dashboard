@@ -78,7 +78,7 @@
         Dom.on(btn, 'click', function() {
           var item = FavoritesMod.load().find(function(fav) { return fav.id === btn.dataset.openFavorite; });
           if (!item || !MapMod.map) return;
-          NavMod.go('map');
+          Bus.emit('navigation:request', { page: 'map' });
           MapMod.map.setView([item.lat, item.lng], 14);
           var match = Data.allCams().find(function(cam) { return cam.id === item.id; });
           if (match) InfoMod.open(match);
@@ -256,14 +256,14 @@
         if (!action) return;
         event.preventDefault();
         if (action.dataset.routeAction === 'browse-cameras') {
-          NavMod.go('list');
+          Bus.emit('navigation:request', { page: 'list' });
           setTimeout(function() {
             var search = Dom.byId('js-search');
             if (search) search.focus();
           }, 80);
           return;
         }
-        NavMod.go('map');
+        Bus.emit('navigation:request', { page: 'map' });
         setTimeout(function() {
           var expanded = Dom.byId('route-expanded');
           if (expanded && expanded.classList.contains('hidden')) {
