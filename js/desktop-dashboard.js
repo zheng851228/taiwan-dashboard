@@ -74,8 +74,8 @@
     var info = AppState.lastRouteInfo;
     text('desktop-route-meta', info ? ('約 ' + info.distance + ' km · 預估 ' + info.duration + ' 分') : '建立路線後顯示距離與預估時間');
     Dom.queryAll('.desktop-vehicle-tab').forEach(function(button) {
-      var active = button.dataset.desktopMode === (RouteMod && state.vehicle.mode)
-        && (button.dataset.desktopMode === 'car' || button.dataset.desktopPlate === (RouteMod && state.vehicle.plate));
+      var active = button.dataset.desktopMode === state.vehicle.mode
+        && (button.dataset.desktopMode === 'car' || button.dataset.desktopPlate === state.vehicle.plate);
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
