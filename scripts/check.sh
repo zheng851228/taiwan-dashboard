@@ -69,6 +69,14 @@ for file in js/desktop-dashboard.js js/enhancements.js js/ride-tools.js; do
   ! grep -q 'NavMod' "$file"
   grep -q "Bus.emit('navigation:request'" "$file"
 done
+grep -q "Bus.on('map:request'" js/main-ui.js
+! grep -q 'MapMod' js/desktop-dashboard.js
+! grep -q 'MapMod' js/ride-tools.js
+grep -q "Bus.emit('map:request'" js/desktop-dashboard.js
+grep -q "Bus.emit('map:request'" js/ride-tools.js
+grep -q "Bus.emit('map:request'" js/enhancements.js
+! grep -q 'MapMod.map.setView' js/enhancements.js
+! grep -q 'MapMod.map.invalidateSize' js/enhancements.js
 ! grep -q 'window.DesktopElevationMod' js/desktop-dashboard.js
 grep -q 'state.routeCameras = event && Array.isArray(event.cams)' js/desktop-dashboard.js
 ! grep -q 'RouteMod.filteredCams' js/desktop-dashboard.js
