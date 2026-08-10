@@ -66,6 +66,8 @@ grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 ! grep -q 'window.MapMod' js/main-ui.js
 grep -q "params.get('e2e') !== '1'" js/main-ui.js
 grep -q 'window.__MapTestProbe = Object.freeze' js/main-ui.js
+grep -q 'var mapTestWaypointMarker = null' js/main-ui.js
+! grep -q 'window.__mapTestWaypointMarker' js/main-ui.js
 grep -q "Bus.on('navigation:request'" js/main-ui.js
 ! grep -q 'NavMod' index.html
 for file in js/desktop-dashboard.js js/enhancements.js js/ride-tools.js; do

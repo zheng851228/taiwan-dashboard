@@ -230,6 +230,7 @@
 
   var mapTestActions = [];
   var mapTestProbeEnabled = false;
+  var mapTestWaypointMarker = null;
 
   function recordMapTestAction(action, detail) {
     if (!mapTestProbeEnabled) return;
@@ -278,8 +279,8 @@
       waypointStateCount: Array.isArray(AppState.waypointMapMarkers) ? AppState.waypointMapMarkers.length : 0,
       testWaypointAttached: Boolean(
         MapMod.map
-        && window.__mapTestWaypointMarker
-        && MapMod.map.hasLayer(window.__mapTestWaypointMarker)
+        && mapTestWaypointMarker
+        && MapMod.map.hasLayer(mapTestWaypointMarker)
       ),
       incidentCues: incidentCues
     };
@@ -297,11 +298,11 @@
         var lat = Array.isArray(center) ? Number(center[0]) : NaN;
         var lng = Array.isArray(center) ? Number(center[1]) : NaN;
         if (!MapMod.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-        if (window.__mapTestWaypointMarker && MapMod.map.hasLayer(window.__mapTestWaypointMarker)) {
-          MapMod.map.removeLayer(window.__mapTestWaypointMarker);
+        if (mapTestWaypointMarker && MapMod.map.hasLayer(mapTestWaypointMarker)) {
+          MapMod.map.removeLayer(mapTestWaypointMarker);
         }
-        window.__mapTestWaypointMarker = L.marker([lat, lng]).addTo(MapMod.map);
-        AppState.waypointMapMarkers = [window.__mapTestWaypointMarker];
+        mapTestWaypointMarker = L.marker([lat, lng]).addTo(MapMod.map);
+        AppState.waypointMapMarkers = [mapTestWaypointMarker];
         return true;
       }
     });
