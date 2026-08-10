@@ -63,6 +63,9 @@ grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 ! grep -q 'window.ListMod' js/main-ui.js
 ! grep -q 'window.ModalMod' js/main-ui.js
 ! grep -q 'window.NavMod' js/main-ui.js
+! grep -q 'window.MapMod' js/main-ui.js
+grep -q "params.get('e2e') !== '1'" js/main-ui.js
+grep -q 'window.__MapTestProbe = Object.freeze' js/main-ui.js
 grep -q "Bus.on('navigation:request'" js/main-ui.js
 ! grep -q 'NavMod' index.html
 for file in js/desktop-dashboard.js js/enhancements.js js/ride-tools.js; do
@@ -83,6 +86,7 @@ for file in js/desktop-dashboard.js js/ride-tools.js js/enhancements.js js/route
   ! grep -q 'MapMod' "$file"
 done
 node -e "const fs=require('fs'); for (const name of fs.readdirSync('js')) { if (!name.endsWith('.js') || name === 'main-ui.js') continue; const file='js/'+name; const text=fs.readFileSync(file,'utf8'); if (text.includes('MapMod')) throw new Error('direct MapMod consumer remains: '+file); }"
+! grep -R -q 'MapMod' tests/e2e
 grep -q "Bus.emit('map:request'" js/desktop-dashboard.js
 grep -q "Bus.emit('map:request'" js/ride-tools.js
 grep -q "Bus.emit('map:request'" js/enhancements.js
