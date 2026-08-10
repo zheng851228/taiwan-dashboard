@@ -643,26 +643,18 @@
     },
     updateRouteUi: function(cameraCount) {
       var count = cameraCount || 0;
+      var copy = window.RouteSummaryModel.routeUiCopy(count, AppState.lastRouteInfo, RouteMod.mode);
       var st = Dom.byId('js-route-status');
       var banner = Dom.byId('js-route-banner');
       var info = Dom.byId('js-list-route-info');
       var cnt = Dom.byId('js-list-route-count');
       var summary = Dom.byId('route-summary');
-      if (st) {
-        st.textContent = count > 0
-          ? '\u5b89\u5168\u9a57\u8b49\u5b8c\u6210 \u00b7 ' + count + ' \u652f\u6cbf\u9014\u73fe\u5834\u756b\u9762'
-          : '\u5b89\u5168\u9a57\u8b49\u5b8c\u6210 \u00b7 \u6cbf\u9014\u66ab\u7121\u73fe\u5834\u756b\u9762';
-      }
+      if (st) st.textContent = copy.statusText;
       setFlexVisible(banner, !UiPrefsMod.isHidden('routeBannerHidden'));
       setFlexVisible(info, true);
-      if (cnt) {
-        cnt.textContent = count > 0
-          ? '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + count + ' \u652f'
-          : '\u8def\u7dda\u904e\u6ffe\uff1a\u672a\u627e\u5230\u5408\u9069\u651d\u5f71\u6a5f';
-      }
-      if (summary && AppState.lastRouteInfo) {
-        summary.textContent = (RouteMod.mode === 'motorcycle' ? '\ud83c\udfcd' : '\ud83d\ude97') + ' '
-          + AppState.lastRouteInfo.distance + 'km/' + AppState.lastRouteInfo.duration + '\u5206 \u00b7 \u5df2\u9a57\u8b49';
+      if (cnt) cnt.textContent = copy.listCountText;
+      if (summary && copy.summaryText) {
+        summary.textContent = copy.summaryText;
         summary.classList.remove('hidden');
       }
       Bus.emit('route:updated', {
@@ -763,18 +755,10 @@
             return [Number(point[1]), Number(point[0])];
           });
           AppState.activeRoute = route;
-          AppState.lastRouteInfo = {
-            distance: Number(route.distanceKm || 0).toFixed(1),
-            duration: Math.round(Number(route.durationMinutes || 0))
-          };
+          AppState.lastRouteInfo = window.RouteSummaryModel.normalizeRouteInfo(route);
           RouteMod.setAnalyzeBusy(false);
           var info = AppState.lastRouteInfo;
-          var plateLabels = { white: '\u767d\u724c', yellow: '\u9ec3\u724c', red: '\u7d05\u724c' };
-          var modeLabel = RouteMod.mode === 'motorcycle'
-            ? ('\ud83c\udfcd\ufe0f ' + plateLabels[RouteMod.plate])
-            : '\ud83d\ude97 \u6c7d\u8eca';
-          var msg = info ? (modeLabel + ' ' + info.distance + 'km / \u7d04' + info.duration + '\u5206\u9418') : '\u8def\u7dda\u89e3\u6790\u5b8c\u6210';
-          if (route.dataMode === 'fixture') msg = '\u793a\u7bc4\u8def\u7dda\u5df2\u8f09\u5165\uff0c\u4e0d\u53ef\u7528\u65bc\u5be6\u969b\u9a0e\u4e58';
+          var msg = window.RouteSummaryModel.completionMessage(route, info, RouteMod.mode, RouteMod.plate);
           Toast.show(msg, 3000);
           var exp = Dom.byId('route-expanded');
           var col = Dom.byId('route-collapsed');
