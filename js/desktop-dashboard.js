@@ -25,6 +25,7 @@
     basemap: Storage.get(BASEMAP_PREF_KEY, 'satellite') === 'satellite' ? 'satellite' : 'dark',
     cctvIndex: 0,
     routeCameras: [],
+    vehicle: { mode: 'motorcycle', plate: 'white' },
     layout: null
   };
 
@@ -73,8 +74,8 @@
     var info = AppState.lastRouteInfo;
     text('desktop-route-meta', info ? ('約 ' + info.distance + ' km · 預估 ' + info.duration + ' 分') : '建立路線後顯示距離與預估時間');
     Dom.queryAll('.desktop-vehicle-tab').forEach(function(button) {
-      var active = button.dataset.desktopMode === (RouteMod && RouteMod.mode)
-        && (button.dataset.desktopMode === 'car' || button.dataset.desktopPlate === (RouteMod && RouteMod.plate));
+      var active = button.dataset.desktopMode === (RouteMod && state.vehicle.mode)
+        && (button.dataset.desktopMode === 'car' || button.dataset.desktopPlate === (RouteMod && state.vehicle.plate));
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
@@ -309,7 +310,7 @@
       if (state.renderer) {
         state.renderer.resize();
         var route = routeCoordinates();
-        if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
+        if (route.length) state.renderer.drawRoute(route, state.vehicle.mode);
         state.renderer.drawConditionSections(state.sections);
         state.renderer.drawCameras(state.routeCameras);
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
@@ -427,7 +428,7 @@
         Storage.set(TERRAIN_PREF_KEY, state.terrainMode);
         state.pendingTerrainMode = null;
         var route = routeCoordinates();
-        if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
+        if (route.length) state.renderer.drawRoute(route, state.vehicle.mode);
         state.basemap = state.renderer.getBasemap();
         Storage.set(BASEMAP_PREF_KEY, state.basemap);
         updateDesktopView(AppState.routeConditions);
@@ -656,14 +657,20 @@
       state.resizeTimer = window.setTimeout(syncViewport, 180);
     });
     Bus.on('route-ui:state', function() { syncHeader(); });
-    Bus.on('vehicle:changed', syncHeader);
+    Bus.on('vehicle:changed', function(event) {
+      state.vehicle = {
+        mode: event && event.mode === 'car' ? 'car' : 'motorcycle',
+        plate: event && event.plate ? event.plate : 'white'
+      };
+      syncHeader();
+    });
     Bus.on('route:updated', function(event) {
       state.routeCameras = event && Array.isArray(event.cams) ? event.cams.slice() : [];
       syncHeader();
       state.cctvIndex = 0;
       if (state.renderer) {
         var route = routeCoordinates();
-        state.renderer.drawRoute(route, RouteMod.mode);
+        state.renderer.drawRoute(route, state.vehicle.mode);
         state.renderer.drawCameras(state.routeCameras);
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }

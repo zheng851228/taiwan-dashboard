@@ -275,10 +275,12 @@
 
     RouteMod.active = true;
     if (window.RouteUiMod) RouteUiMod.setState('ready');
-    RouteMod.mode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
+    var restoredMode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
+    var restoredPlate = route.vehicle && route.vehicle.plate ? route.vehicle.plate : 'white';
+    RouteMod.setVehicle(restoredMode, restoredPlate);
     RouteMod.routeCoords = mapCoordinates;
     RouteMod.filteredCams = [];
-    MapMod.drawRoute(mapCoordinates, RouteMod.mode);
+    MapMod.drawRoute(mapCoordinates, restoredMode);
     MapMod.drawStartEnd(AppState.routeAllPoints);
 
     var start = Dom.byId('js-route-start');
