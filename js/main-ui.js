@@ -241,6 +241,25 @@
       MapMod._canvas = L.canvas({ padding: 0.5 });
       MapMod.tileLayer = L.tileLayer(Config.TILE_DARK, { attribution: Config.TILE_ATTR, maxZoom: 19 }).addTo(MapMod.map);
       MapMod.addPlaceLabels();
+      Bus.on('map:request', function(request) {
+        var action = request && request.action;
+        if (action === 'invalidate-size') {
+          if (MapMod.map && MapMod.map.invalidateSize) MapMod.map.invalidateSize();
+          return;
+        }
+        if (action === 'focus-route') {
+          MapMod.focusRoute();
+          return;
+        }
+        if (action === 'set-view') {
+          var center = request && request.center;
+          var lat = Array.isArray(center) ? Number(center[0]) : NaN;
+          var lng = Array.isArray(center) ? Number(center[1]) : NaN;
+          var zoom = Number(request && request.zoom);
+          if (!MapMod.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+          MapMod.map.setView([lat, lng], Number.isFinite(zoom) ? zoom : MapMod.map.getZoom());
+        }
+      });
     },
     addPlaceLabels: function() {
       if (!MapMod.map || !Array.isArray(Config.MAP_LABELS)) return;
