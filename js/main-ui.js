@@ -228,6 +228,85 @@
     return cue;
   }
 
+  var mapTestActions = [];
+  var mapTestProbeEnabled = false;
+
+  function recordMapTestAction(action, detail) {
+    if (!mapTestProbeEnabled) return;
+    mapTestActions.push(Object.assign({ action: action }, detail || {}));
+  }
+
+  function mapTestSnapshot() {
+    var center = MapMod.map && MapMod.map.getCenter ? MapMod.map.getCenter() : null;
+    var nearbyCenter = MapMod._nearbyMarker && MapMod._nearbyMarker.getLatLng
+      ? MapMod._nearbyMarker.getLatLng()
+      : null;
+    var routeLayers = Array.isArray(MapMod.routeLayer)
+      ? MapMod.routeLayer
+      : (MapMod.routeLayer ? [MapMod.routeLayer] : []);
+    var incidentCues = MapMod.routeIncidentLayers
+      .filter(function(layer) { return layer && layer._roadEventLocationCue; })
+      .map(function(layer) {
+        return {
+          kind: layer._roadEventKind || null,
+          impact: layer._roadEventImpact || null,
+          status: layer._roadEventStatus || null,
+          color: layer.options && layer.options.color || null,
+          dashArray: layer.options && layer.options.dashArray || null,
+          points: layer.getLatLngs ? layer.getLatLngs().length : 0
+        };
+      });
+    return {
+      ready: Boolean(MapMod.map),
+      tileUrl: MapMod.tileLayer && MapMod.tileLayer._url || null,
+      center: center ? [center.lat, center.lng] : null,
+      zoom: MapMod.map && MapMod.map.getZoom ? MapMod.map.getZoom() : null,
+      routeLayerCount: routeLayers.length,
+      routeLayerAttached: Boolean(MapMod.map) && routeLayers.length > 0
+        ? routeLayers.every(function(layer) { return MapMod.map.hasLayer(layer); })
+        : false,
+      routeSectionLayerCount: MapMod.routeSectionLayers.length,
+      routeIncidentLayerCount: MapMod.routeIncidentLayers.length,
+      routeIncidentMarkerCount: MapMod.routeIncidentMarkers.length,
+      routeWeatherMarkerCount: MapMod.routeWeatherMarkers.length,
+      startEndMarkerCount: MapMod.startEndMarkers.length,
+      nearbyMarkerCenter: nearbyCenter ? [nearbyCenter.lat, nearbyCenter.lng] : null,
+      nearbyRadius: MapMod._nearbyCircle && MapMod._nearbyCircle.getRadius
+        ? MapMod._nearbyCircle.getRadius()
+        : null,
+      nearbyCleared: MapMod._nearbyMarker === null && MapMod._nearbyCircle === null,
+      waypointStateCount: Array.isArray(AppState.waypointMapMarkers) ? AppState.waypointMapMarkers.length : 0,
+      testWaypointAttached: Boolean(
+        MapMod.map
+        && window.__mapTestWaypointMarker
+        && MapMod.map.hasLayer(window.__mapTestWaypointMarker)
+      ),
+      incidentCues: incidentCues
+    };
+  }
+
+  function installMapTestProbe() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('e2e') !== '1') return;
+    mapTestProbeEnabled = true;
+    window.__MapTestProbe = Object.freeze({
+      snapshot: mapTestSnapshot,
+      clearActions: function() { mapTestActions = []; },
+      actions: function() { return mapTestActions.map(function(item) { return Object.assign({}, item); }); },
+      createWaypointMarker: function(center) {
+        var lat = Array.isArray(center) ? Number(center[0]) : NaN;
+        var lng = Array.isArray(center) ? Number(center[1]) : NaN;
+        if (!MapMod.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+        if (window.__mapTestWaypointMarker && MapMod.map.hasLayer(window.__mapTestWaypointMarker)) {
+          MapMod.map.removeLayer(window.__mapTestWaypointMarker);
+        }
+        window.__mapTestWaypointMarker = L.marker([lat, lng]).addTo(MapMod.map);
+        AppState.waypointMapMarkers = [window.__mapTestWaypointMarker];
+        return true;
+      }
+    });
+  }
+
   var MapMod = {
     map: null, tileLayer: null, markers: [], placeLabelMarkers: [], routeLayer: null,
     routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [], routeIncidentLayers: [],
@@ -246,10 +325,12 @@
         var action = request && request.action;
         if (action === 'invalidate-size') {
           if (MapMod.map && MapMod.map.invalidateSize) MapMod.map.invalidateSize();
+          recordMapTestAction('invalidate-size');
           return;
         }
         if (action === 'focus-route') {
           MapMod.focusRoute();
+          recordMapTestAction('focus-route');
           return;
         }
         if (action === 'nearby-overlay-upsert') {
@@ -299,28 +380,33 @@
           var routeCoords = request && request.coords;
           if (!Array.isArray(routeCoords) || routeCoords.length < 2) return;
           MapMod.drawRoute(routeCoords, request && request.mode);
+          recordMapTestAction('draw-route', { mode: request && request.mode, points: routeCoords.length });
           return;
         }
         if (action === 'draw-start-end') {
           MapMod.drawStartEnd(request && request.points);
+          recordMapTestAction('draw-start-end');
           return;
         }
         if (action === 'focus-camera') {
           var camera = request && request.camera;
           if (!camera) return;
           MapMod.focusCam(camera);
+          recordMapTestAction('focus-camera');
           return;
         }
         if (action === 'draw-condition-sections') {
           var conditionSections = request && request.sections;
           if (!Array.isArray(conditionSections)) return;
           MapMod.drawConditionSections(conditionSections);
+          recordMapTestAction('draw-condition-sections', { sections: conditionSections.length });
           return;
         }
         if (action === 'focus-section') {
           var sectionOrder = Number(request && request.order);
           if (!Number.isFinite(sectionOrder)) return;
           MapMod.focusSection(sectionOrder);
+          recordMapTestAction('focus-section', { order: sectionOrder });
           return;
         }
         if (action === 'set-view') {
@@ -329,7 +415,9 @@
           var lng = Array.isArray(center) ? Number(center[1]) : NaN;
           var zoom = Number(request && request.zoom);
           if (!MapMod.map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-          MapMod.map.setView([lat, lng], Number.isFinite(zoom) ? zoom : MapMod.map.getZoom());
+          var appliedZoom = Number.isFinite(zoom) ? zoom : MapMod.map.getZoom();
+          MapMod.map.setView([lat, lng], appliedZoom);
+          recordMapTestAction('set-view', { center: [lat, lng], zoom: appliedZoom });
         }
       });
     },
@@ -1404,7 +1492,6 @@
     }
   };
 
-  window.MapMod = MapMod;
   window.InfoMod = InfoMod;
   window.RouteMod = RouteMod;
 
@@ -1412,6 +1499,7 @@
     ClockMod.init();
     UiPrefsMod.init();
     MapMod.init();
+    installMapTestProbe();
     if (Storage.get(THEME_KEY, 'dark') === 'light') {
       document.body.classList.add('light');
       var _tb = Dom.byId('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
