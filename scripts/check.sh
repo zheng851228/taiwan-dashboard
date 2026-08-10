@@ -65,6 +65,12 @@ grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 ! grep -q 'window.DesktopElevationMod' js/desktop-dashboard.js
 grep -q 'state.routeCameras = event && Array.isArray(event.cams)' js/desktop-dashboard.js
 ! grep -q 'RouteMod.filteredCams' js/desktop-dashboard.js
+grep -q "Bus.on('vehicle:changed'" js/desktop-dashboard.js
+grep -q "vehicle: { mode: 'motorcycle', plate: 'white' }" js/desktop-dashboard.js
+! grep -q 'RouteMod.mode' js/desktop-dashboard.js
+! grep -q 'RouteMod.plate' js/desktop-dashboard.js
+grep -q 'RouteMod.setVehicle(restoredMode, restoredPlate)' js/pwa.js
+! grep -q 'RouteMod.mode' js/pwa.js
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-navigation-model.js' index.html
