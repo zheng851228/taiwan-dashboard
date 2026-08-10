@@ -5,7 +5,7 @@ on:
     branches:
       - agent/portfolio-maintainability-pass
     paths:
-      - scripts/migrate-mapmod-e2e-probe.mjs
+      - scripts/migrate-mapmod-e2e-probe-v2.mjs
       - .github/workflows/mapmod-e2e-probe-migration.yml
 
 permissions:
@@ -19,16 +19,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: agent/portfolio-maintainability-pass
-      - name: Apply E2E probe migration
-        run: node scripts/migrate-mapmod-e2e-probe.mjs
+      - name: Apply corrected E2E probe migration
+        run: node scripts/migrate-mapmod-e2e-probe-v2.mjs
       - name: Commit migration result
         run: |
-          if git diff --quiet -- js/main-ui.js tests/e2e/dashboard.spec.js tests/e2e/desktop-map-request.spec.js tests/e2e/desktop-map-overlay-request.spec.js tests/e2e/desktop-browser-global-surface.spec.js scripts/check.sh; then
+          if git diff --quiet -- js/main-ui.js tests/e2e/dashboard.spec.js; then
             echo "No E2E probe changes needed."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add js/main-ui.js tests/e2e/dashboard.spec.js tests/e2e/desktop-map-request.spec.js tests/e2e/desktop-map-overlay-request.spec.js tests/e2e/desktop-browser-global-surface.spec.js scripts/check.sh
+          git add js/main-ui.js tests/e2e/dashboard.spec.js
           git commit -m "test: decouple E2E map probes from MapMod global"
           git push origin HEAD:agent/portfolio-maintainability-pass
