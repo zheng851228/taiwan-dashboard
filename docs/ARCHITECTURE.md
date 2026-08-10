@@ -44,7 +44,7 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/route-search-model.js` | Pure route endpoint normalization, address-resolution planning, vehicle request shaping and unresolved-point messages |
 | `js/route-summary-model.js` | Pure route distance/time normalization, vehicle labels, route-summary copy and completion messages |
 | `js/route-navigation-model.js` | Pure Google/Apple navigation targets, white-plate navigation options, Apple multi-stop legs and click intents |
-| `js/main-ui.js` | Primary route-search orchestration, route-result DOM wiring, map/list UI and in-app page navigation |
+| `js/main-ui.js` | Primary route-search orchestration, route-result DOM wiring, map/list UI and in-app page navigation; theme/list/modal implementations remain closure-local |
 | `js/enhancements.js` | Cross-cutting interaction enhancements |
 | `js/route-conditions.js` | Traffic/weather/event condition DOM rendering, interaction, external-navigation DOM wiring and thin model delegation |
 | `js/route-condition-view-model.js` | Pure road-event classification, impact, presentation, summaries and alert ordering |
@@ -53,7 +53,7 @@ The Worker owns routing orchestration, motorcycle eligibility validation, provid
 | `js/maplibre-route-layer.js` | Route GeoJSON, route coordinate state and fitBounds behavior |
 | `js/maplibre-camera-layer.js` | CCTV GeoJSON, marker lifecycle and camera interaction |
 | `js/maplibre-condition-layer.js` | Traffic section GeoJSON, incident cues/markers, rainy-weather points and condition fallback fitting |
-| `js/desktop-dashboard.js` | Desktop command-center orchestration |
+| `js/desktop-dashboard.js` | Desktop command-center orchestration; elevation/playback implementation remains closure-local |
 | `js/desktop-layout.js` | Desktop rail sizing, resizing, persistence and reset behavior |
 | `js/pwa.js` | Installation/update/offline lifecycle |
 
@@ -114,7 +114,7 @@ A renderer may decide how to display `unknown`, but it should not decide whether
 
 ### 4. Prefer dependency direction over globals
 
-New modules should receive the state or service functions they need where practical. Avoid introducing new cross-module globals. Existing globals can be migrated gradually.
+New modules should receive the state or service functions they need where practical. Avoid introducing new cross-module globals. Internal-only modules must stay closure-local; remaining browser globals should represent intentional integration surfaces and be reduced incrementally behind events or narrow capabilities.
 
 ### 5. Protect route correctness first
 
@@ -128,7 +128,7 @@ Changes involving license rules, restricted roads, route geometry, shape indices
 4. **Route-search input/request preparation — complete for the first extraction pass.** `js/route-search-model.js` owns endpoint normalization/validation, waypoint-address planning, cached route-point reuse, vehicle request shaping, and unresolved-point messages. `RouteMod.analyze()` retains async geocoding, Worker route creation, state transitions, and result orchestration while delegating the pure preparation decisions to the model.
 5. **Route summary presentation — complete for the first extraction pass.** `js/route-summary-model.js` owns route distance/time normalization, vehicle labels, camera-count/status copy, summary text and completion messages. `RouteMod.updateRouteUi()` remains the DOM writer, while `RouteMod.analyze()` retains route-result orchestration and delegates route-info normalization plus completion copy.
 6. **External navigation handoff — complete for the first extraction pass.** `js/route-navigation-model.js` owns route-point normalization for navigation, Google Maps targets, white-plate Google avoidance options, Apple Maps targets, Apple multi-stop leg generation, and Apple click intent. `js/route-conditions.js` now only writes navigation href/disabled state, renders Apple leg links, and displays the handoff message.
-7. **Shared globals — next.** Reduce cross-module globals and tighten dependency direction only after the extracted seams remain stable.
+7. **Shared globals — first cleanup pass complete.** A repo-wide usage audit showed `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` had no cross-file consumers. Their `window` exports and defensive global guards were removed, while intentional cross-file surfaces such as `RouteMod`, `MapMod`, `NavMod`, `RouteConditionsMod`, and `DesktopDashboardMod` remain. The next pass should reduce direct consumers of those retained globals through existing `Bus` events or narrowly scoped capability seams rather than introducing a replacement mega-global.
 
 ## Validation gates
 
@@ -140,7 +140,7 @@ npm run test:e2e:desktop-refactor
 npm run test:e2e
 ```
 
-The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, route-summary DOM copy delegation, and external Google/Apple navigation target decisions. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
+The focused desktop refactor suite covers layout keyboard resizing, ARIA state, persistence across reloads, bounds and reset behavior, MapLibre route source/fitted state, clickable CCTV markers, synthetic condition rendering, route-condition runtime delegation, route-search endpoint-preparation delegation, route-summary DOM copy delegation, external Google/Apple navigation target decisions, and the supported browser-global surface. Static checks also prevent internal-only `ThemeMod`, `ListMod`, `ModalMod`, and `DesktopElevationMod` from being re-exported to `window`. Existing command-center coverage continues to exercise pointer resizing and broader desktop behavior. The full E2E suite remains the broader interaction gate.
 
 The route-condition runtime integration fixture deliberately uses unambiguous lane-closure wording (`施工，占用外側車道`) so it tests delegation rather than overlapping text-classification heuristics.
 
