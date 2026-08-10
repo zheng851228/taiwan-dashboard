@@ -1,0 +1,20 @@
+name: Map Test Probe Audit
+
+on:
+  push:
+    branches:
+      - agent/portfolio-maintainability-pass
+    paths:
+      - scripts/audit-map-test-probe.mjs
+      - .github/workflows/map-test-probe-audit.yml
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/portfolio-maintainability-pass
+      - name: Audit map test probe usage
+        run: node scripts/audit-map-test-probe.mjs
