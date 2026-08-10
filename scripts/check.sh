@@ -124,6 +124,10 @@ grep -q 'RouteConditionViewModel.summarizeRoadEvents' js/route-conditions.js
 grep -q 'RouteConditionViewModel.buildAlerts' js/route-conditions.js
 grep -q 'RouteNavigationModel.buildNavigation' js/route-conditions.js
 grep -q 'RouteNavigationModel.appleClickIntent' js/route-conditions.js
+grep -q "Bus.on('vehicle:changed'" js/route-conditions.js
+grep -q "var vehicleState = { mode: 'motorcycle', plate: 'white' }" js/route-conditions.js
+! grep -q 'RouteMod.mode' js/route-conditions.js
+! grep -q 'RouteMod.plate' js/route-conditions.js
 ! grep -q 'function routePoints' js/route-conditions.js
 ! grep -q 'function googleUrl' js/route-conditions.js
 ! grep -q 'function appleUrl' js/route-conditions.js
