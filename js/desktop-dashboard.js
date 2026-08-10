@@ -24,6 +24,7 @@
     cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid'),
     basemap: Storage.get(BASEMAP_PREF_KEY, 'satellite') === 'satellite' ? 'satellite' : 'dark',
     cctvIndex: 0,
+    routeCameras: [],
     layout: null
   };
 
@@ -255,7 +256,7 @@
   }
 
   function renderCctv() {
-    var allCameras = (window.RouteMod && RouteMod.filteredCams || []).slice();
+    var allCameras = state.routeCameras.slice();
     var selected = state.sections.find(function(item) { return Number(item.order) === Number(state.selectedOrder); });
     var preferred = selected && selected.cameras || [];
     var cameras = preferred.concat(allCameras).filter(function(camera, index, list) {
@@ -310,7 +311,7 @@
         var route = routeCoordinates();
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
         state.renderer.drawConditionSections(state.sections);
-        state.renderer.drawCameras(RouteMod.filteredCams || []);
+        state.renderer.drawCameras(state.routeCameras);
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }
       DesktopElevationMod.refresh();
@@ -545,13 +546,13 @@
       window.setTimeout(function() { var search = Dom.byId('js-search'); if (search) search.focus(); }, 80);
     });
     Dom.onId('desktop-cctv-prev', 'click', function() {
-      var count = (RouteMod && RouteMod.filteredCams || []).length;
+      var count = state.routeCameras.length;
       if (count < 2) return;
       state.cctvIndex = (state.cctvIndex - 1 + count) % count;
       renderCctv();
     });
     Dom.onId('desktop-cctv-next', 'click', function() {
-      var count = (RouteMod && RouteMod.filteredCams || []).length;
+      var count = state.routeCameras.length;
       if (count < 2) return;
       state.cctvIndex = (state.cctvIndex + 1) % count;
       renderCctv();
@@ -656,13 +657,14 @@
     });
     Bus.on('route-ui:state', function() { syncHeader(); });
     Bus.on('vehicle:changed', syncHeader);
-    Bus.on('route:updated', function() {
+    Bus.on('route:updated', function(event) {
+      state.routeCameras = event && Array.isArray(event.cams) ? event.cams.slice() : [];
       syncHeader();
       state.cctvIndex = 0;
       if (state.renderer) {
         var route = routeCoordinates();
         state.renderer.drawRoute(route, RouteMod.mode);
-        state.renderer.drawCameras(RouteMod.filteredCams || []);
+        state.renderer.drawCameras(state.routeCameras);
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }
       renderCctv();
@@ -678,13 +680,14 @@
       state.sections = [];
       state.selectedOrder = null;
       state.cctvIndex = 0;
+      state.routeCameras = [];
       if (state.renderer) state.renderer.clear();
       reportConditions(null);
       renderContext();
       renderCctv();
       DesktopElevationMod.clear();
     });
-    Bus.on('filter:changed', function() { if (state.renderer) state.renderer.drawCameras(RouteMod.filteredCams || []); renderCctv(); });
+    Bus.on('filter:changed', function() { if (state.renderer) state.renderer.drawCameras(state.routeCameras); renderCctv(); });
     Bus.on('camera:selected', function(camera) {
       if (camera && state.renderer) state.renderer.focusPoint(camera.lat, camera.lng, 13);
     });
