@@ -35,7 +35,7 @@ jobs:
         run: |
           set +e
           set -o pipefail
-          npm run test:e2e -- --reporter=line 2>&1 | tee /tmp/full-e2e.log
+          npm run test:e2e -- --reporter=line --workers=2 2>&1 | tee /tmp/full-e2e.log
           status=${PIPESTATUS[0]}
           echo "===== full E2E tail ====="
           tail -n 300 /tmp/full-e2e.log
