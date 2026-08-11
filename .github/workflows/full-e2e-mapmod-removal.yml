@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium chrome
+        run: npx playwright install --with-deps chromium chrome webkit
       - name: Run full E2E suite
         shell: bash
         run: |

@@ -998,20 +998,21 @@ test('keeps a saved camera after reload', async ({ page }) => {
 
 test('keeps all large camera result sets reachable through progressive loading', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic large-list verification runs once.');
+  const cameras = Array.from({ length: 205 }, (_, index) => ({
+    id: `synthetic-${index}`,
+    name: `測試攝影機 ${index}`,
+    lat: 25.0478,
+    lon: 121.517,
+    cam_url: '',
+    status: 'active',
+    source: 'E2E'
+  }));
+  await page.route('http://127.0.0.1:8787/v2/cams', (route) => route.fulfill({
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ status: 'ok', data: cameras, message: '' })
+  }));
   await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
-  await expect.poll(() => page.evaluate(() => Data.allCams().length)).toBeGreaterThan(0);
-  await page.evaluate(() => {
-    const source = Data.allCams()[0];
-    const cameras = Array.from({ length: 205 }, (_, index) => ({
-      ...source,
-      id: `synthetic-${index}`,
-      name: `測試攝影機 ${index}`,
-      searchText: `測試攝影機 ${index}`
-    }));
-    Data.allCams = () => cameras;
-    ListMod.visibleLimit = ListMod.PAGE_SIZE;
-    ListMod.render();
-  });
   await openList(page);
 
   await expect(page.locator('.cam-card')).toHaveCount(200);
