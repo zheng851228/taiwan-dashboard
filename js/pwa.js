@@ -273,15 +273,13 @@
     AppState.routeReport = snapshot.routeReport || null;
     AppState.routeConditions = null;
 
-    RouteMod.active = true;
-    if (window.RouteUiMod) RouteUiMod.setState('ready');
     var restoredMode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
     var restoredPlate = route.vehicle && route.vehicle.plate ? route.vehicle.plate : 'white';
-    RouteMod.setVehicle(restoredMode, restoredPlate);
-    RouteMod.routeCoords = mapCoordinates;
-    RouteMod.filteredCams = [];
-    Bus.emit('map:request', { action: 'draw-route', coords: mapCoordinates, mode: restoredMode });
-    Bus.emit('map:request', { action: 'draw-start-end', points: AppState.routeAllPoints });
+    Bus.emit('route:restore-request', {
+      coords: mapCoordinates,
+      mode: restoredMode,
+      plate: restoredPlate
+    });
 
     var start = Dom.byId('js-route-start');
     var end = Dom.byId('js-route-end');

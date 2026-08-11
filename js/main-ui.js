@@ -873,6 +873,16 @@
       }
     },
     init: function() {
+      Bus.on('route:restore-request', function(request) {
+        if (!request || !Array.isArray(request.coords) || request.coords.length < 2) return;
+        RouteMod.active = true;
+        RouteUiMod.setState('ready');
+        RouteMod.setVehicle(request.mode, request.plate);
+        RouteMod.routeCoords = request.coords.map(function(point) { return point.slice(); });
+        RouteMod.filteredCams = [];
+        Bus.emit('map:request', { action: 'draw-route', coords: RouteMod.routeCoords, mode: RouteMod.mode });
+        Bus.emit('map:request', { action: 'draw-start-end', points: AppState.routeAllPoints });
+      });
       Dom.onAll('.route-mode-btn', 'click', function(btn) {
           RouteMod.setVehicle(btn.dataset.mode, btn.dataset.plate || RouteMod.plate);
       });

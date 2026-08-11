@@ -98,8 +98,7 @@ grep -q "action: 'nearby-overlay-clear'" js/enhancements.js
 grep -q "action: 'clear-waypoint-overlays'" js/enhancements.js
 ! grep -q 'NearbyMod.marker' js/enhancements.js
 ! grep -q 'NearbyMod.circle' js/enhancements.js
-grep -q "action: 'draw-route'" js/pwa.js
-grep -q "action: 'draw-start-end'" js/pwa.js
+! grep -q "Bus.emit('map:request'" js/pwa.js
 grep -q "action: 'focus-camera'" js/route-conditions.js
 grep -q "action: 'draw-condition-sections'" js/route-conditions.js
 grep -q "action: 'draw-start-end'" js/route-conditions.js
@@ -111,8 +110,9 @@ grep -q "Bus.on('vehicle:changed'" js/desktop-dashboard.js
 grep -q "vehicle: { mode: 'motorcycle', plate: 'white' }" js/desktop-dashboard.js
 ! grep -q 'RouteMod.mode' js/desktop-dashboard.js
 ! grep -q 'RouteMod.plate' js/desktop-dashboard.js
-grep -q 'RouteMod.setVehicle(restoredMode, restoredPlate)' js/pwa.js
-! grep -q 'RouteMod.mode' js/pwa.js
+grep -q "Bus.emit('route:restore-request'" js/pwa.js
+grep -q "Bus.on('route:restore-request'" js/main-ui.js
+! grep -q 'RouteMod' js/pwa.js
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-navigation-model.js' index.html
