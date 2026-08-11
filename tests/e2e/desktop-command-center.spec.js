@@ -1,6 +1,31 @@
 import { expect, test } from '@playwright/test';
 
 const WORKER = '/?worker=http://127.0.0.1:8787';
+const TERRAIN_TILE_URL = 'https://tiles.mapterhorn.com/e2e-terrain/{z}/{x}/{y}.png';
+// A 512px Terrarium tile whose RGB value (128, 0, 0) decodes to 0m elevation.
+const TERRAIN_DEM_TILE = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAgAAAAIAAQMAAADOtka5AAAAA1BMVEWAAABGTyZaAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAANklEQVR42u3BAQEAAACCIP+vbkhAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB8G4IAAAFjdVCkAAAAAElFTkSuQmCC',
+  'base64'
+);
+const TERRAIN_TILEJSON = JSON.stringify({
+  tilejson: '3.0.0',
+  name: 'Desktop E2E terrain fixture',
+  scheme: 'xyz',
+  tiles: [TERRAIN_TILE_URL],
+  minzoom: 0,
+  maxzoom: 14,
+  bounds: [117.5, 20.5, 123.4, 26.7]
+});
+
+test.beforeEach(async ({ page }) => {
+  await page.route('https://tiles.mapterhorn.com/**', route => {
+    const headers = { 'access-control-allow-origin': '*' };
+    if (new URL(route.request().url()).pathname === '/tilejson.json') {
+      return route.fulfill({ status: 200, contentType: 'application/json', headers, body: TERRAIN_TILEJSON });
+    }
+    return route.fulfill({ status: 200, contentType: 'image/png', headers, body: TERRAIN_DEM_TILE });
+  });
+});
 
 async function openRoutePlanner(page) {
   if (!(await page.locator('#route-expanded').isVisible())) {
