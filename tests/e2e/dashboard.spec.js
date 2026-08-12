@@ -1013,6 +1013,8 @@ test('keeps all large camera result sets reachable through progressive loading',
     body: JSON.stringify({ status: 'ok', data: cameras, message: '' })
   }));
   await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await expect.poll(() => page.evaluate(() => Data.allCams().length)).toBeGreaterThan(0);
+  await page.evaluate(() => window.Bus.emit('filter:changed'));
   await openList(page);
 
   await expect(page.locator('.cam-card')).toHaveCount(200);
