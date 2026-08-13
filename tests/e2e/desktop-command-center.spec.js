@@ -86,6 +86,43 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-support-panel')).toBeHidden();
 });
 
+test('desktop CCTV preview clears loading state and keeps camera totals consistent', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop CCTV ready-state verification only.');
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.route('https://example.com/cctv-ready.jpg*', route => route.fulfill({
+    status: 200,
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#17324a"/></svg>'
+  }));
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+
+  await page.evaluate(() => {
+    const conditions = JSON.parse(JSON.stringify(AppState.routeConditions));
+    conditions.sections[0].cameras = [{
+      id: 'cctv-ready',
+      name: '沿途影像載入完成測試',
+      lat: conditions.sections[0].geometry[0][0],
+      lng: conditions.sections[0].geometry[0][1],
+      imageUrl: 'https://example.com/cctv-ready.jpg',
+      status: 'online',
+      source: 'CCTV'
+    }];
+    AppState.routeConditions = conditions;
+    Bus.emit('conditions:updated', conditions);
+  });
+
+  const preview = page.locator('#desktop-cctv-media img');
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate(image => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.locator('#desktop-cctv-media .desktop-cctv-placeholder')).toBeHidden();
+
+  const displayedTotal = Number((await page.locator('#desktop-cctv-name').innerText()).match(/\/(\d+)$/)?.[1]);
+  expect(displayedTotal).toBeGreaterThan(0);
+  await expect(page.locator('#desktop-camera-count')).toHaveText(`${displayedTotal} 支`);
+  await expect(page.locator('#js-route-status')).toContainText(`${displayedTotal} 支沿途現場畫面`);
+});
+
 test('1280px ready command center keeps the map dominant without horizontal overflow', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop command-center verification only.');
   await page.setViewportSize({ width: 1280, height: 854 });
@@ -493,7 +530,7 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
 test('missing Tailwind shell styles show a recovery screen instead of overlapping panels', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop shell recovery verification only.');
   await page.setViewportSize({ width: 1536, height: 1024 });
-  await page.route('**/css/tailwind.generated.css?v=43', route => route.abort());
+  await page.route('**/css/tailwind.generated.css?v=44', route => route.abort());
   await page.goto(WORKER);
 
   const recovery = page.locator('#tailwind-style-recovery');
