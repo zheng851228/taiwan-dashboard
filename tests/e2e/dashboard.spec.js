@@ -12,6 +12,7 @@ async function expandConditionsIfCollapsed(page) {
 async function openRoutePlanner(page) {
   const expanded = page.locator('#route-expanded');
   if (!(await expanded.isVisible())) await page.locator('#route-toggle').click();
+  await expect(expanded).toBeVisible();
 }
 
 async function expectMapReady(page) {
@@ -87,28 +88,26 @@ test('loads the validated Pages camera snapshot without waiting for the producti
 
 test('projects cameras that arrive after the route without rebuilding the route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Late camera projection behavior runs once.');
-  let releaseCameraRequest;
-  await page.route('**/v2/cams', async route => {
-    await new Promise(resolve => {
-      releaseCameraRequest = async () => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            status: 'ok',
-            updatedAt: new Date().toISOString(),
-            data: [{
-              id: 'late-route-cam',
-              name: '台北車站沿途測試攝影機',
-              lat: 25.0478,
-              lng: 121.517,
-              imageUrl: 'https://example.com/late-camera.jpg'
-            }]
-          })
-        });
-        resolve();
-      };
-    });
+  const pendingCameraRequests = [];
+  let camerasReleased = false;
+  const cameraResponse = () => ({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      status: 'ok',
+      updatedAt: new Date().toISOString(),
+      data: [{
+        id: 'late-route-cam',
+        name: '台北車站沿途測試攝影機',
+        lat: 25.0478,
+        lng: 121.517,
+        imageUrl: 'https://example.com/late-camera.jpg'
+      }]
+    })
+  });
+  await page.route('**/v2/cams', route => {
+    if (camerasReleased) return route.fulfill(cameraResponse());
+    pendingCameraRequests.push(route);
   });
 
   await page.goto(WORKER);
@@ -117,10 +116,11 @@ test('projects cameras that arrive after the route without rebuilding the route'
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expect.poll(() => page.evaluate(() => Boolean(AppState.activeRoute && RouteMod.active))).toBe(true);
-  await expect.poll(() => typeof releaseCameraRequest).toBe('function');
+  await expect.poll(() => pendingCameraRequests.length).toBeGreaterThan(0);
   expect(await page.evaluate(() => RouteMod.filteredCams.length)).toBe(0);
 
-  await releaseCameraRequest();
+  camerasReleased = true;
+  await Promise.all(pendingCameraRequests.splice(0).map(route => route.fulfill(cameraResponse())));
   await expect.poll(() => page.evaluate(() => RouteMod.filteredCams.map(camera => camera.id))).toContain('late-route-cam');
   await expect(page.locator('.desktop-cctv-marker[title="台北車站沿途測試攝影機"]')).toBeVisible();
 });
@@ -1013,6 +1013,7 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
   });
   await page.goto(WORKER);
+  await expect.poll(() => page.evaluate(() => Config.WORKER_BASE)).toBe(workerOrigin);
   await openRoutePlanner(page);
   await page.locator('#js-gmaps-url').fill(
     'https://www.google.com/maps/dir/25.0478,121.5170/24.9500,121.6200/24.7570,121.7530'
@@ -1222,6 +1223,7 @@ test('uses foreground location only after the location button is pressed', async
 test('keeps manual route entry available when location is denied', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Deterministic denial verification runs in Chromium.');
   await page.addInitScript(() => {
+    localStorage.setItem('tw_desktop_basemap_v1', 'dark');
     Object.defineProperty(navigator, 'geolocation', {
       configurable: true,
       value: {
