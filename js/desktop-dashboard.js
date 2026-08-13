@@ -411,13 +411,37 @@
     renderCctv();
   }
 
+  function normalizeCamera(camera) {
+    if (!camera) return null;
+    return Object.assign({}, camera, {
+      id: String(camera.id || (camera.lat + ':' + camera.lng + ':' + (camera.imageUrl || camera.cam_url || camera.url || ''))),
+      url: camera.url || camera.imageUrl || camera.cam_url || '',
+      type: camera.type || 'cctv'
+    });
+  }
+
+  function uniqueCameras(cameras) {
+    var seen = {};
+    return (cameras || []).map(normalizeCamera).filter(function(camera) {
+      if (!camera || seen[camera.id]) return false;
+      seen[camera.id] = true;
+      return true;
+    });
+  }
+
+  function routeCameras() {
+    var globalRouteCameras = (window.RouteMod && RouteMod.filteredCams || []).slice();
+    var conditionCameras = state.sections.reduce(function(result, section) {
+      return result.concat(section.cameras || []);
+    }, []);
+    return uniqueCameras(conditionCameras.concat(globalRouteCameras));
+  }
+
   function renderCctv() {
-    var allCameras = (window.RouteMod && RouteMod.filteredCams || []).slice();
+    var allCameras = routeCameras();
     var selected = state.sections.find(function(item) { return Number(item.order) === Number(state.selectedOrder); });
     var preferred = selected && selected.cameras || [];
-    var cameras = preferred.concat(allCameras).filter(function(camera, index, list) {
-      return camera && list.findIndex(function(item) { return item.id === camera.id; }) === index;
-    });
+    var cameras = uniqueCameras(preferred.concat(allCameras));
     if (state.cctvIndex >= cameras.length) state.cctvIndex = 0;
     var camera = cameras[state.cctvIndex];
     var media = Dom.byId('desktop-cctv-media');
@@ -433,7 +457,7 @@
       if (next) next.disabled = true;
       return;
     }
-    var safeUrl = safeHttpUrl(camera.url);
+    var safeUrl = safeHttpUrl(camera.url || camera.imageUrl || camera.cam_url);
     if (media) {
       if (safeUrl) {
         media.innerHTML = '<img alt="' + escapeHtml(camera.name || '沿途 CCTV') + '" src="' + escapeHtml(safeUrl + (safeUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now() / 60000)) + '"><span class="desktop-cctv-placeholder">載入影像中</span>';
@@ -467,7 +491,7 @@
         var route = routeCoordinates();
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
         state.renderer.drawConditionSections(state.sections);
-        state.renderer.drawCameras(RouteMod.filteredCams || []);
+        state.renderer.drawCameras(routeCameras());
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }
       if (window.DesktopElevationMod) DesktopElevationMod.refresh();
@@ -584,6 +608,8 @@
         state.pendingTerrainMode = null;
         var route = routeCoordinates();
         if (route.length) state.renderer.drawRoute(route, RouteMod.mode);
+        state.renderer.drawCameras(routeCameras());
+        state.renderer.drawStartEnd(AppState.routeAllPoints || []);
         state.basemap = state.renderer.getBasemap();
         Storage.set(BASEMAP_PREF_KEY, state.basemap);
         updateDesktopView(AppState.routeConditions);
@@ -713,13 +739,13 @@
       window.setTimeout(function() { var search = Dom.byId('js-search'); if (search) search.focus(); }, 80);
     });
     Dom.onId('desktop-cctv-prev', 'click', function() {
-      var count = (RouteMod && RouteMod.filteredCams || []).length;
+      var count = routeCameras().length;
       if (count < 2) return;
       state.cctvIndex = (state.cctvIndex - 1 + count) % count;
       renderCctv();
     });
     Dom.onId('desktop-cctv-next', 'click', function() {
-      var count = (RouteMod && RouteMod.filteredCams || []).length;
+      var count = routeCameras().length;
       if (count < 2) return;
       state.cctvIndex = (state.cctvIndex + 1) % count;
       renderCctv();
@@ -832,7 +858,7 @@
       if (state.renderer) {
         var route = routeCoordinates();
         state.renderer.drawRoute(route, RouteMod.mode);
-        state.renderer.drawCameras(RouteMod.filteredCams || []);
+        state.renderer.drawCameras(routeCameras());
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }
       renderCctv();
@@ -854,7 +880,7 @@
       renderCctv();
       if (window.DesktopElevationMod) DesktopElevationMod.clear();
     });
-    Bus.on('filter:changed', function() { if (state.renderer) state.renderer.drawCameras(RouteMod.filteredCams || []); renderCctv(); });
+    Bus.on('filter:changed', function() { if (state.renderer) state.renderer.drawCameras(routeCameras()); renderCctv(); });
     Bus.on('camera:selected', function(camera) {
       if (camera && state.renderer) state.renderer.focusPoint(camera.lat, camera.lng, 13);
     });

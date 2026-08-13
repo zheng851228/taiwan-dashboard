@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v42";
+const CACHE_VERSION = "v43";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -22,17 +22,17 @@ const SHELL_URLS = [
   "./assets/vendor/fontawesome/webfonts/fa-solid-900.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
-  "./css/tailwind.generated.css?v=42",
-  "./css/style.css?v=42",
-  "./js/core.js?v=42",
-  "./js/services.js?v=42",
-  "./js/data.js?v=42",
-  "./js/main-ui.js?v=42",
-  "./js/enhancements.js?v=42",
-  "./js/route-conditions.js?v=42",
-  "./js/ride-tools.js?v=42",
-  "./js/desktop-bootstrap.js?v=42",
-  "./js/pwa.js?v=42"
+  "./css/tailwind.generated.css?v=43",
+  "./css/style.css?v=43",
+  "./js/core.js?v=43",
+  "./js/services.js?v=43",
+  "./js/data.js?v=43",
+  "./js/main-ui.js?v=43",
+  "./js/enhancements.js?v=43",
+  "./js/route-conditions.js?v=43",
+  "./js/ride-tools.js?v=43",
+  "./js/desktop-bootstrap.js?v=43",
+  "./js/pwa.js?v=43"
 ];
 
 const API_PATTERNS = [
@@ -93,7 +93,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (/^\/(v2\/|route$|cam-list$|weather$)/.test(url.pathname)) {
+  if (/^\/(v2\/|route$|cam-list$|weather$)/.test(url.pathname) || /\/cam-list\.json$/.test(url.pathname)) {
     event.respondWith(apiNetworkOnly(request));
     return;
   }

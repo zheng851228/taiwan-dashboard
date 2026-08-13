@@ -56,14 +56,14 @@
     });
   }
 
-  function requestJsonWithTimeout(url, options, fallbackKey, timeoutMs) {
+  function requestJsonWithTimeout(url, options, fallbackKey, timeoutMs, timeoutMessage, timeoutCode) {
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var requestOptions = options ? Object.assign({}, options) : {};
     if (controller) requestOptions.signal = controller.signal;
     var timeout = Math.max(1000, Number(timeoutMs) || 20000);
     var timedOut = false;
-    var timeoutError = new Error('\u6cbf\u9014\u72c0\u6cc1\u56de\u61c9\u903e\u6642\uff0c\u8acb\u7a0d\u5f8c\u91cd\u8a66\u3002');
-    timeoutError.code = 'CONDITIONS_TIMEOUT';
+    var timeoutError = new Error(timeoutMessage || '\u6cbf\u9014\u72c0\u6cc1\u56de\u61c9\u903e\u6642\uff0c\u8acb\u7a0d\u5f8c\u91cd\u8a66\u3002');
+    timeoutError.code = timeoutCode || 'CONDITIONS_TIMEOUT';
     var timer;
     var request = requestJson(url, requestOptions, fallbackKey).then(function(payload) {
       clearTimeout(timer);
@@ -86,7 +86,23 @@
   window.AppServices = {
     loadCams: function() {
       setDataStatus('cams', 'loading');
-      return requestJson(Config.WORKER_BASE + '/v2/cams', null, 'cams')
+      var slot = Math.floor(Date.now() / (6 * 60 * 60 * 1000));
+      var snapshotUrl = new URL('./cam-list.json?slot=' + slot, window.location.href).toString();
+      function loadWorkerCameras() {
+        return requestJsonWithTimeout(
+          Config.WORKER_BASE + '/v2/cams',
+          null,
+          'cams',
+          6000,
+          '\u5373\u6642 CCTV \u6e05\u55ae\u56de\u61c9\u903e\u6642',
+          'CAMS_TIMEOUT'
+        );
+      }
+      var localWorker = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(Config.WORKER_BASE);
+      var cameraRequest = localWorker
+        ? loadWorkerCameras()
+        : requestJson(snapshotUrl, null, 'cams').catch(loadWorkerCameras);
+      return cameraRequest
         .catch(function(err) {
           if (err.status === 404) return requestJson(Config.WORKER_BASE + '/cam-list', null, 'cams');
           throw err;

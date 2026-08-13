@@ -801,12 +801,9 @@
           MapMod.drawStartEnd(AppState.routeAllPoints);
         });
     },
-    _doFilter: function(coords) {
+    _filterCameras: function(coords) {
       var adaptiveStep = Math.max(Config.SIMPLIFY_STEP, Math.ceil(coords.length / 600));
       var simplified = simplifyCoords(coords, adaptiveStep);
-      RouteMod.routeCoords = coords;
-      RouteMod.active = true;
-      if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
       var cctv = Data.allCams();
       var FILTER_KM = 5;
 
@@ -859,8 +856,21 @@
         filteredEntries = sampled;
       }
 
-      var filteredCctv = filteredEntries.map(function(entry) { return entry.cam; });
-      RouteMod.filteredCams = filteredCctv;
+      return filteredEntries.map(function(entry) { return entry.cam; });
+    },
+    refreshCameras: function() {
+      if (!navigator.onLine || !RouteMod.active || !Array.isArray(RouteMod.routeCoords) || RouteMod.routeCoords.length < 2) return;
+      RouteMod.filteredCams = RouteMod._filterCameras(RouteMod.routeCoords);
+      RouteMod.updateRouteUi(RouteMod.filteredCams.length);
+      Bus.emit('filter:changed');
+    },
+    _doFilter: function(coords) {
+      var adaptiveStep = Math.max(Config.SIMPLIFY_STEP, Math.ceil(coords.length / 600));
+      var simplified = simplifyCoords(coords, adaptiveStep);
+      RouteMod.routeCoords = coords;
+      RouteMod.active = true;
+      if (window.ListMod) ListMod.visibleLimit = ListMod.PAGE_SIZE;
+      RouteMod.filteredCams = RouteMod._filterCameras(coords);
       MapMod.drawRoute(simplified, RouteMod.mode);
       // 立即畫起終點標記（MapMod 內建，不依賴 WaypointsMod）
       MapMod.drawStartEnd(AppState.routeAllPoints);
@@ -1366,7 +1376,13 @@
       _renderTimer = setTimeout(function() { ListMod.render(); }, 80);
     }
     Bus.on('filter:changed',  debouncedRender);
-    Bus.on('cams:updated',    debouncedRender);
+    Bus.on('cams:updated', function() {
+      // Route planning can finish before the large nationwide camera list.
+      // Re-run only the camera projection when data arrives; do not rebuild
+      // the route, duplicate history, or disturb the current map view.
+      if (navigator.onLine && RouteMod.active) RouteMod.refreshCameras();
+      debouncedRender();
+    });
     Bus.on('weather:updated', debouncedRender);
     ListMod.render();
     NearbyMod.init();

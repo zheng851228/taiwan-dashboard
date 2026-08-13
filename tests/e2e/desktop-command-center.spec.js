@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-const WORKER = '/?worker=http://127.0.0.1:8787';
+const workerPort = process.env.E2E_WORKER_PORT || '8787';
+const WORKER = `/?worker=http://127.0.0.1:${workerPort}`;
 
 async function openRoutePlanner(page) {
   if (!(await page.locator('#route-expanded').isVisible())) {
@@ -492,7 +493,7 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
 test('missing Tailwind shell styles show a recovery screen instead of overlapping panels', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop shell recovery verification only.');
   await page.setViewportSize({ width: 1536, height: 1024 });
-  await page.route('**/css/tailwind.generated.css?v=42', route => route.abort());
+  await page.route('**/css/tailwind.generated.css?v=43', route => route.abort());
   await page.goto(WORKER);
 
   const recovery = page.locator('#tailwind-style-recovery');

@@ -2,6 +2,15 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-13 — PWA v43 route CCTV recovery
+
+- 正式網站優先載入 GitHub Pages 的六小時驗證 CCTV 快照，不再先等待公開 Worker 處理全台大型清單；快照維持 network-only，不進離線 App shell，也不會把離線舊資料標成即時。快照尚未發布時才回退 Worker。
+- 路線若比攝影機清單更早完成，資料抵達後會只重算沿線攝影機，不重建路線、不重複寫入最近路線，也不改變使用者目前地圖視角。
+- 桌面地圖會合併 conditions 已定位攝影機與全台清單結果，並正規化 `imageUrl`／`cam_url`，讓地圖圖示和右側影像使用同一組可用來源。
+- 攝影機更新 workflow 補上最小寫入權限、單例執行與內容驗證，避免空檔或錯誤回應覆蓋可用快照。
+- Playwright 可選用替代的本機 Worker 連接埠，避免與其他本機服務碰撞；只有從 loopback 開啟的測試頁能接受其他 loopback port，正式網站仍忽略這類 override。
+- Service Worker 清除 v42 shell；不修改 Worker endpoint、conditions schema、路線安全規則、secret 或 production Worker。
+
 ## 2026-08-03 — PWA v42 shell style recovery
 
 - 核心 CSS 與 JavaScript 資源使用同一 v42 URL 版本，避免舊 Service Worker 將新版 HTML 與舊版介面資源混合。

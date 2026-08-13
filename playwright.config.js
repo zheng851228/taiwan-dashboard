@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const workerPort = process.env.E2E_WORKER_PORT || '8787';
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30000,
@@ -13,8 +15,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm run worker:dev:fixture',
-      url: 'http://127.0.0.1:8787/v2/weather',
+      command: `npm run worker:dev:fixture -- --port ${workerPort}`,
+      url: `http://127.0.0.1:${workerPort}/v2/weather`,
       reuseExistingServer: true,
       timeout: 120000
     },
