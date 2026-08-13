@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-const WORKER = '/?worker=http://127.0.0.1:8787';
+const workerPort = process.env.E2E_WORKER_PORT || '8787';
+const WORKER = `/?worker=http://127.0.0.1:${workerPort}`;
 
 test('extracted MapLibre condition overlay writes traffic, event and weather outputs', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop condition overlay verification only.');

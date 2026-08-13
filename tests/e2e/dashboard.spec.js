@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+const workerPort = process.env.E2E_WORKER_PORT || '8787';
+const workerOrigin = `http://127.0.0.1:${workerPort}`;
+const WORKER = `/?worker=${workerOrigin}`;
+const E2E_WORKER = `${WORKER}&e2e=1`;
+
 async function expandConditionsIfCollapsed(page) {
   const toggle = page.locator('#condition-toggle');
   if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
@@ -8,6 +13,7 @@ async function expandConditionsIfCollapsed(page) {
 async function openRoutePlanner(page) {
   const expanded = page.locator('#route-expanded');
   if (!(await expanded.isVisible())) await page.locator('#route-toggle').click();
+  await expect(expanded).toBeVisible();
 }
 
 async function expectMapReady(page) {
@@ -54,13 +60,85 @@ test('ignores an arbitrary Worker override and keeps the production origin', asy
   await expect(page.locator('#route-collapsed:visible, #route-expanded:visible')).toBeVisible();
 });
 
+test('loads the validated Pages camera snapshot without waiting for the production Worker', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Camera snapshot behavior runs once.');
+  let workerCameraRequests = 0;
+  await page.route('**/v2/cams', route => {
+    workerCameraRequests += 1;
+    return route.abort('failed');
+  });
+  await page.route('**/cam-list.json?slot=*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'pages-cam-1',
+      name: '台中車站附近測試攝影機',
+      lat: 24.137,
+      lon: 120.686,
+      cam_url: 'https://example.com/camera.jpg'
+    }])
+  }));
+
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => ({
+    state: Data.camsState,
+    ids: Data.allCams().map(camera => camera.id)
+  }))).toEqual({ state: 'ready', ids: ['pages-cam-1'] });
+  expect(workerCameraRequests).toBe(0);
+});
+
+test('projects cameras that arrive after the route without rebuilding the route', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Late camera projection behavior runs once.');
+  const pendingCameraRequests = [];
+  let camerasReleased = false;
+  const cameraResponse = () => ({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      status: 'ok',
+      updatedAt: new Date().toISOString(),
+      data: [{
+        id: 'late-route-cam',
+        name: '台北車站沿途測試攝影機',
+        lat: 25.0478,
+        lng: 121.517,
+        imageUrl: 'https://example.com/late-camera.jpg'
+      }]
+    })
+  });
+  await page.route('**/v2/cams', route => {
+    if (camerasReleased) return route.fulfill(cameraResponse());
+    pendingCameraRequests.push(route);
+  });
+
+  await page.goto(WORKER);
+  await openRoutePlanner(page);
+  await page.locator('#js-route-start').fill('25.0478,121.5170');
+  await page.locator('#js-route-end').fill('24.7570,121.7530');
+  await page.locator('#js-route-btn').click();
+  await expect.poll(() => page.evaluate(() => Boolean(AppState.activeRoute && RouteMod.active))).toBe(true);
+  await expect.poll(() => pendingCameraRequests.length).toBeGreaterThan(0);
+  expect(await page.evaluate(() => RouteMod.filteredCams.length)).toBe(0);
+
+  camerasReleased = true;
+  await Promise.all(pendingCameraRequests.splice(0).map(route => route.fulfill(cameraResponse())));
+  await expect.poll(() => page.evaluate(() => RouteMod.filteredCams.map(camera => camera.id))).toContain('late-route-cam');
+  await expect(page.locator('.desktop-cctv-marker[title="台北車站沿途測試攝影機"]')).toBeVisible();
+});
+
 test('plans a validated motorcycle route and renders ordered conditions', async ({ page }) => {
   const browserErrors = [];
+  const mapProviderFailures = [];
   page.on('console', (message) => {
     if (message.type() === 'error') browserErrors.push(message.text());
   });
   page.on('pageerror', (error) => browserErrors.push(error.message));
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  page.on('response', (response) => {
+    if (response.status() === 403 && /(?:cartocdn\.com|mapterhorn\.com|api\.maptiler\.com)/.test(response.url())) {
+      mapProviderFailures.push(response.url());
+    }
+  });
+  await page.goto(E2E_WORKER);
   await expectMapReady(page);
 
   await openRoutePlanner(page);
@@ -153,12 +231,21 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
     eventLayers: window.__MapTestProbe.snapshot().routeIncidentLayerCount,
     eventMarkers: window.__MapTestProbe.snapshot().routeIncidentMarkerCount
   }))).toEqual({ eventLayers: 0, eventMarkers: 0 });
-  expect(browserErrors.filter((message) => !/Failed to load resource.*404/.test(message))).toEqual([]);
+  let remainingMapFailures = mapProviderFailures.length;
+  const unexpectedErrors = browserErrors.filter((message) => {
+    if (/Failed to load resource.*404/.test(message)) return false;
+    if (remainingMapFailures > 0 && /Failed to load resource.*403/.test(message)) {
+      remainingMapFailures -= 1;
+      return false;
+    }
+    return true;
+  });
+  expect(unexpectedErrors).toEqual([]);
 });
 
 test('keeps coordinate-free road events visible without inventing a precise map segment', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic event-location verification runs once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -191,7 +278,7 @@ test('keeps coordinate-free road events visible without inventing a precise map 
 
 test('keeps separate official event locations as separate map markers', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic multi-location verification runs once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -236,7 +323,7 @@ test('keeps separate official event locations as separate map markers', async ({
 
 test('removes old event colors before drawing a replacement route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Map layer lifecycle verification runs once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -266,7 +353,7 @@ test('removes old event colors before drawing a replacement route', async ({ pag
 });
 
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   if (await page.locator('#desktop-map').isVisible()) {
     await expect(page.locator('#desktop-source-note')).toContainText('資料不足');
   } else {
@@ -283,7 +370,7 @@ test('keeps traffic unknown semantics and safety guidance visible', async ({ pag
 
 test('distinguishes a checked route with no incidents from unavailable event sources', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Synthetic coverage semantics run once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -317,7 +404,7 @@ test('distinguishes a checked route with no incidents from unavailable event sou
 
 test('keeps legacy Worker event failures partial and unknown', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Legacy Worker compatibility semantics run once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -348,7 +435,7 @@ test('keeps legacy Worker event failures partial and unknown', async ({ page }, 
 
 test('keeps missing legacy coverage partial even without explicit issues', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Missing legacy coverage semantics run once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -378,7 +465,7 @@ test('keeps missing legacy coverage partial even without explicit issues', async
 
 test('does not claim no incidents when every reported event scope failed', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Failed event-scope semantics run once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -414,7 +501,7 @@ test('does not claim no incidents when every reported event scope failed', async
 
 test('marks a zero incident count as partially unknown when some event scopes failed', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Partial event-scope semantics run once.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -452,7 +539,7 @@ test('keeps the mobile route planner focused on the active task', async ({ page 
   const viewport = page.viewportSize();
   test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
 
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
 
   await expect(page.locator('#route-expanded')).toBeVisible();
@@ -470,7 +557,7 @@ test('keeps the fresh mobile screen focused on route planning', async ({ page })
   const viewport = page.viewportSize();
   test.skip(!viewport || viewport.width > 640, 'Mobile first-screen verification only.');
 
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
   await expect(page.locator('#route-collapsed')).toBeVisible();
   await expect(page.locator('#ride-status-card')).toBeHidden();
@@ -490,7 +577,7 @@ test('lets users optionally hide and restore the top clock and route banner', as
     localStorage.removeItem('tw_ui_clock_hidden_v1');
     localStorage.removeItem('tw_ui_route_banner_hidden_v1');
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
 
   await expect(page.locator('#js-clock-wrap')).toBeVisible();
   await page.locator('#js-clock-hide').click();
@@ -533,7 +620,7 @@ test('lets users optionally hide and restore the top clock and route banner', as
 });
 
 test('makes tool empty states actionable without changing the three-page navigation', async ({ page }) => {
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openTools(page);
 
   const startRoute = page.locator('#ride-checklist [data-route-action="start-route"]');
@@ -552,7 +639,7 @@ test('makes tool empty states actionable without changing the three-page navigat
 test('mobile logo returns from tools without clearing the active route', async ({ page }) => {
   const viewport = page.viewportSize();
   test.skip(!viewport || viewport.width > 640, 'Mobile logo verification only.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -571,7 +658,7 @@ test('keeps the completed mobile route map-first with compact controls', async (
   test.skip(!viewport || viewport.width > 640, 'Mobile density verification only.');
 
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -614,7 +701,7 @@ test('keeps collapsed route actions and summary inside a short 320px screen', as
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Small-viewport geometry runs once.');
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -637,7 +724,7 @@ test('keeps collapsed route actions and summary inside a short 320px screen', as
 test('surfaces a conditions refresh failure even when the mobile panel was collapsed', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'Collapsed failure visibility verification runs on iPhone.');
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -659,7 +746,7 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
 test('turns a hanging conditions request into an actionable timeout', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'Conditions timeout UX runs on iPhone.');
   await page.addInitScript(() => localStorage.setItem('tw_pwa_install_dismissed_v1', '1'));
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -682,7 +769,7 @@ test('turns a hanging conditions request into an actionable timeout', async ({ p
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
   test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.locator('#js-theme').click();
   await expect(page.locator('body')).toHaveClass(/light/);
   await expect.poll(() => page.evaluate(() => window.__MapTestProbe.snapshot().tileUrl)).toBe(
@@ -700,7 +787,7 @@ test('shows useful route suggestions from the first character without remote aut
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/v2/geocode') geocodeRequests += 1;
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
 
   const start = page.locator('#js-route-start');
@@ -735,7 +822,7 @@ test('shows useful route suggestions from the first character without remote aut
 });
 
 test('preserves an unsupported pasted route and always clears its loading state', async ({ page }) => {
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
 
   const importInput = page.locator('#js-gmaps-url');
@@ -763,7 +850,7 @@ test('keeps selected place labels while routing with their local coordinates', a
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/v2/geocode') geocodeRequests += 1;
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
 
   const start = page.locator('#js-route-start');
@@ -792,7 +879,7 @@ test('keeps selected place labels while routing with their local coordinates', a
 
 test('retries one transient geocode and route network failure', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop network retry verification only.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalFetch = window.fetch.bind(window);
     window.__networkRetryCounts = { geocode: 0, route: 0 };
@@ -821,7 +908,7 @@ test('retries one transient geocode and route network failure', async ({ page },
 
 test('replaces a repeated route network failure with a Chinese recovery message', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop network failure UX verification only.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalFetch = window.fetch.bind(window);
     window.__routeFailureAttempts = 0;
@@ -846,7 +933,7 @@ test('replaces a repeated route network failure with a Chinese recovery message'
 });
 
 test('keeps a cleared route empty when an older conditions request finishes', async ({ page }) => {
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     window.__releaseConditions = null;
     AppServices.loadRouteConditions = function() {
@@ -885,7 +972,7 @@ test('keeps a cleared route empty when an older conditions request finishes', as
 });
 
 test('does not restore a route whose analysis finishes after it was cleared', async ({ page }) => {
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     window.__releaseRouteAnalysis = null;
     AppServices.createRoute = function() {
@@ -927,7 +1014,8 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
+  await expect.poll(() => page.evaluate(() => Config.WORKER_BASE)).toBe(workerOrigin);
   await openRoutePlanner(page);
   await page.locator('#js-gmaps-url').fill(
     'https://www.google.com/maps/dir/25.0478,121.5170/24.9500,121.6200/24.7570,121.7530'
@@ -981,7 +1069,7 @@ test('preserves ordered Google Maps waypoints when importing a route', async ({ 
 });
 
 test('keeps a saved camera after reload', async ({ page }) => {
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openList(page);
   const firstCard = page.locator('.cam-card').first();
   await expect(firstCard).toBeVisible();
@@ -1002,18 +1090,21 @@ test('keeps all large camera result sets reachable through progressive loading',
     id: `synthetic-${index}`,
     name: `測試攝影機 ${index}`,
     lat: 25.0478,
-    lon: 121.517,
-    cam_url: '',
+    lng: 121.517,
+    imageUrl: '',
     status: 'active',
     source: 'E2E'
   }));
-  await page.route('http://127.0.0.1:8787/v2/cams', (route) => route.fulfill({
+  await page.route('**/v2/cams', (route) => route.fulfill({
     contentType: 'application/json',
-    headers: { 'access-control-allow-origin': '*' },
-    body: JSON.stringify({ status: 'ok', data: cameras, message: '' })
+    body: JSON.stringify({
+      status: 'ok',
+      updatedAt: new Date().toISOString(),
+      data: cameras
+    })
   }));
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
-  await expect.poll(() => page.evaluate(() => Data.allCams().length)).toBeGreaterThan(0);
+  await page.goto(E2E_WORKER);
+  await expect.poll(() => page.evaluate(() => Data.allCams().length)).toBe(205);
   await page.evaluate(() => window.Bus.emit('filter:changed'));
   await openList(page);
 
@@ -1032,7 +1123,7 @@ test('does not interrupt first load and keeps a fixed iPhone install entry', asy
     localStorage.removeItem('tw_pwa_install_prompted_v2');
     sessionStorage.setItem('pwa-test-initialized', '1');
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
 
   const sheet = page.locator('#pwa-install-sheet');
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
@@ -1055,7 +1146,7 @@ test('shows one non-blocking install nudge after the first live safe route', asy
     localStorage.removeItem('tw_pwa_install_prompted_v2');
     sessionStorage.setItem('pwa-live-test-initialized', '1');
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => {
     const originalLoad = AppServices.loadRouteConditions;
     AppServices.loadRouteConditions = async (...args) => {
@@ -1092,7 +1183,7 @@ test('does not prompt for fixture conditions', async ({ page }, testInfo) => {
     localStorage.removeItem('tw_pwa_install_dismissed_v1');
     localStorage.removeItem('tw_pwa_install_prompted_v2');
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -1111,7 +1202,7 @@ test('does not auto prompt outside iPhone Safari or standalone mode', async ({ p
       Object.defineProperty(navigator, 'standalone', { configurable: true, value: true });
     }
   }, testInfo.project.name === 'iphone');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#pwa-install-sheet')).toBeHidden();
 });
@@ -1122,7 +1213,7 @@ test('keeps install guidance absent on tablet use', async ({ page }, testInfo) =
     localStorage.removeItem('tw_pwa_install_dismissed_v1');
     localStorage.removeItem('tw_pwa_install_prompted_v2');
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#pwa-install-sheet')).toBeHidden();
 });
@@ -1131,7 +1222,7 @@ test('uses foreground location only after the location button is pressed', async
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Deterministic permission verification runs in Chromium.');
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ latitude: 24.1618, longitude: 120.6466, accuracy: 18 });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await expect(page.locator('#js-route-start')).toHaveValue('');
   await page.locator('#js-loc').click();
   await expect(page.locator('#js-route-start')).toHaveValue('24.161800,120.646600');
@@ -1140,6 +1231,7 @@ test('uses foreground location only after the location button is pressed', async
 test('keeps manual route entry available when location is denied', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Deterministic denial verification runs in Chromium.');
   await page.addInitScript(() => {
+    localStorage.setItem('tw_desktop_basemap_v1', 'dark');
     Object.defineProperty(navigator, 'geolocation', {
       configurable: true,
       value: {
@@ -1149,7 +1241,7 @@ test('keeps manual route entry available when location is denied', async ({ page
       }
     });
   });
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.locator('#js-loc').click();
   await expect(page.locator('#toast')).toContainText('請允許位置權限');
   await openRoutePlanner(page);
@@ -1159,7 +1251,7 @@ test('keeps manual route entry available when location is denied', async ({ page
 
 test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }) => {
   test.skip(browserName !== 'chromium', 'Offline service-worker verification runs in Chromium.');
-  await page.goto('/?worker=http://127.0.0.1:8787&e2e=1');
+  await page.goto(E2E_WORKER);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
@@ -1184,10 +1276,10 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
     window.__MapTestProbe.snapshot().routeLayerCount === 3
       && window.__MapTestProbe.snapshot().routeLayerAttached
   )).toBe(true);
-  const apiResult = await page.evaluate(async () => {
-    const response = await fetch('http://127.0.0.1:8787/v2/weather');
+  const apiResult = await page.evaluate(async (origin) => {
+    const response = await fetch(origin + '/v2/weather');
     return { status: response.status, body: await response.json() };
-  });
+  }, workerOrigin);
   expect(apiResult.status).toBe(503);
   expect(apiResult.body.status).toBe('error');
   expect(apiResult.body.message).toContain('\u96e2\u7dda');

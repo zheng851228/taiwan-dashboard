@@ -5,6 +5,13 @@ on:
     - cron: '0 */6 * * *'   # 每 6 小時更新一次
   workflow_dispatch:          # 也可手動觸發
 
+permissions:
+  contents: write
+
+concurrency:
+  group: update-cam-list
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -13,10 +20,26 @@ jobs:
 
       - name: Fetch twipcam cam-list.json
         run: |
-          curl -sSL "https://www.twipcam.com/api/v1/cam-list.json" \
+          curl --fail --show-error --silent --location \
+            --retry 2 --max-time 60 \
+            "https://www.twipcam.com/api/v1/cam-list.json" \
             -H "User-Agent: Mozilla/5.0" \
-            -o cam-list.json
-          echo "筆數: $(cat cam-list.json | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d))')"
+            -o cam-list.next.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path('cam-list.next.json')
+          data = json.loads(source.read_text())
+          if not isinstance(data, list) or len(data) < 1000:
+              raise SystemExit('CCTV snapshot rejected: expected at least 1000 cameras')
+          valid = [item for item in data if isinstance(item, dict) and item.get('id') and item.get('lat') and (item.get('lon') or item.get('lng'))]
+          if len(valid) < 1000:
+              raise SystemExit('CCTV snapshot rejected: too few valid coordinates')
+          Path('cam-list.json').write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')))
+          print(f'筆數: {len(data)}；有效座標: {len(valid)}')
+          source.unlink()
+          PY
 
       - name: Commit and push if changed
         run: |

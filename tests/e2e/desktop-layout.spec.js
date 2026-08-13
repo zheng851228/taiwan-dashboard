@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-const WORKER = '/?worker=http://127.0.0.1:8787';
+const workerPort = process.env.E2E_WORKER_PORT || '8787';
+const WORKER = `/?worker=http://127.0.0.1:${workerPort}`;
 const LAYOUT_KEY = 'tw_desktop_layout_v1';
 
 async function openReadyDesktop(page) {

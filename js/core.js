@@ -18,7 +18,9 @@
     if (candidate) {
       var parsed = new URL(candidate);
       var origin = parsed.origin;
-      var isCleanOrigin = parsed.pathname === '/' && !parsed.search && !parsed.hash && ALLOWED_WORKER_ORIGINS.has(origin);
+      var localPage = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      var localFixtureOrigin = localPage && /^http:\/\/(?:localhost|127\.0\.0\.1):\d+$/.test(origin);
+      var isCleanOrigin = parsed.pathname === '/' && !parsed.search && !parsed.hash && (ALLOWED_WORKER_ORIGINS.has(origin) || localFixtureOrigin);
       if (isCleanOrigin) workerOverride = origin;
     }
   } catch (err) {

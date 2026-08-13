@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-const WORKER = '/?worker=http://127.0.0.1:8787&e2e=1';
+const workerPort = process.env.E2E_WORKER_PORT || '8787';
+const WORKER = `/?worker=http://127.0.0.1:${workerPort}&e2e=1`;
 
 test('nearby and waypoint overlays flow through map:request bus events', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
