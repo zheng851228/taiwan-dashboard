@@ -1,0 +1,42 @@
+name: Remove legacy MapLibre camera implementation (one-time)
+
+on:
+  push:
+    branches:
+      - refactor/remove-legacy-maplibre-camera
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/remove-legacy-maplibre-camera
+      - name: Remove only legacy drawCameras block
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('js/maplibre-renderer.js')
+          text = path.read_text()
+          start_token = '      drawCameras: function(cams) {\n'
+          end_token = '      setCursor: function(point) {\n'
+          assert text.count(start_token) == 1, f'expected one drawCameras block, got {text.count(start_token)}'
+          start = text.index(start_token)
+          end = text.index(end_token, start)
+          path.write_text(text[:start] + text[end:])
+          PY
+          git diff --check
+          git diff -- js/maplibre-renderer.js
+      - name: Commit cleanup and remove one-time workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/maplibre-renderer.js
+          git commit -m 'refactor: remove legacy MapLibre camera implementation'
+          git rm .github/workflows/remove-legacy-maplibre-camera-once.yml
+          git commit -m 'chore: remove one-time camera cleanup workflow'
+          git push origin HEAD:refactor/remove-legacy-maplibre-camera
