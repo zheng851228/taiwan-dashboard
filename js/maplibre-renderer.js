@@ -393,15 +393,6 @@
         this.currentPreset = 'solid';
         this.eventMarkerCount = 0;
       },
-      drawRoute: function(coords) {
-        if (!coords || coords.length < 2) return;
-        this.routeCoords = coords.slice();
-        this.routeFitApplied = true;
-        var line = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords.map(toLngLat) } };
-        this._setSourceData('desktop-route', { type: 'FeatureCollection', features: [line] });
-        var bounds = makeBounds(this.module, coords);
-        if (bounds && this.map) this.map.fitBounds(bounds, { padding: this._routePadding(), maxZoom: 11, duration: 0 });
-      },
       drawConditionSections: function(sections) {
         var self = this;
         var sectionFeatures = [];
