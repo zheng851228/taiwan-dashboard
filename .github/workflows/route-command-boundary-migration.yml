@@ -1,0 +1,45 @@
+name: Route Command Boundary Migration
+
+on:
+  push:
+    branches:
+      - refactor/route-command-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    name: Route external commands through bus once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/route-command-boundary
+          fetch-depth: 0
+
+      - name: Apply route command boundary
+        run: |
+          node scripts/migrate-route-command-boundary.mjs
+          node --check js/main-ui.js
+          node --check js/desktop-dashboard.js
+          node --check js/enhancements.js
+          node --check js/route-conditions.js
+          node --check tests/e2e/route-command-boundary.spec.js
+          sh -n scripts/check.sh
+          git diff --check
+
+      - name: Commit migration
+        run: |
+          if git diff --quiet -- js/main-ui.js js/desktop-dashboard.js js/enhancements.js js/route-conditions.js scripts/check.sh .github/workflows/ci.yml; then
+            echo "Route command boundary already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/main-ui.js js/desktop-dashboard.js js/enhancements.js js/route-conditions.js scripts/check.sh .github/workflows/ci.yml
+          git commit -m "refactor: route external commands through bus requests"
+          git push origin HEAD:refactor/route-command-boundary
