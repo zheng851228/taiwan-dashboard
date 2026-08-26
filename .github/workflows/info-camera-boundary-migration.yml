@@ -1,0 +1,42 @@
+name: Info Camera Boundary Migration
+
+on:
+  push:
+    branches:
+      - refactor/info-camera-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    name: Route camera info through bus once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/info-camera-boundary
+          fetch-depth: 0
+
+      - name: Apply info camera boundary
+        run: |
+          node scripts/migrate-info-camera-boundary.mjs
+          node --check js/main-ui.js
+          node --check js/enhancements.js
+          node --check js/ride-tools.js
+          git diff --check
+
+      - name: Commit migration
+        run: |
+          if git diff --quiet -- js/main-ui.js js/enhancements.js js/ride-tools.js; then
+            echo "Info camera boundary already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/main-ui.js js/enhancements.js js/ride-tools.js
+          git commit -m "refactor: route camera info through bus events"
+          git push origin HEAD:refactor/info-camera-boundary
