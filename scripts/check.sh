@@ -46,7 +46,9 @@ grep -q 'js/services.js' index.html
 grep -q 'js/data.js' index.html
 grep -q 'js/main-ui.js' index.html
 grep -q 'js/enhancements.js' index.html
+grep -q 'js/route-condition-view-model.js' index.html
 grep -q 'js/route-conditions.js' index.html
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-condition-view-model.js'); const runtime=s.indexOf('js/route-conditions.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route condition view model must load before route-conditions.js')"
 grep -q 'js/ride-tools.js' index.html
 grep -q 'js/pwa.js' index.html
 grep -q 'manifest.json' index.html
@@ -56,6 +58,7 @@ grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
 grep -q 'taiwan-dashboard-api-production.lucky851228.workers.dev' sw.js
+grep -q 'js/route-condition-view-model.js?v=44' sw.js
 test -s css/tailwind.generated.css
 test -s assets/icons/icon-192.png
 test -s assets/icons/icon-512.png

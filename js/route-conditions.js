@@ -161,6 +161,9 @@
   }
 
   function roadEventPresentation(incident) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.roadEventPresentation) {
+      return RouteConditionViewModel.roadEventPresentation(incident);
+    }
     incident = incident || {};
     var kind = inferRoadEventKind(incident);
     var impact = inferRoadEventImpact(incident);
@@ -184,6 +187,9 @@
   }
 
   function primaryRoadEvent(incidents) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.primaryRoadEvent) {
+      return RouteConditionViewModel.primaryRoadEvent(incidents);
+    }
     return (incidents || []).map(function(incident) {
       return { incident: incident, presentation: roadEventPresentation(incident) };
     }).sort(function(a, b) {
@@ -201,6 +207,9 @@
   }
 
   function summarizeRoadEvents(sections) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.summarizeRoadEvents) {
+      return RouteConditionViewModel.summarizeRoadEvents(sections);
+    }
     var unique = new Map();
     var affectedSections = 0;
     (sections || []).forEach(function(section) {
@@ -326,6 +335,9 @@
   }
 
   function buildAlerts(sections) {
+    if (window.RouteConditionViewModel && RouteConditionViewModel.buildAlerts) {
+      return RouteConditionViewModel.buildAlerts(sections);
+    }
     var alerts = [];
     sections.forEach(function(section) {
       var traffic = section.traffic || {};
