@@ -31,7 +31,7 @@ test.describe('MapLibre camera layer seam', () => {
     expect(result.hasDraw).toBe(true);
   });
 
-  test('draw removes stale CCTV markers, ignores invalid coordinates, and updates source data', async ({ page }) => {
+  test('draw removes stale CCTV markers, ignores invalid coordinates, and opens cameras through the bus boundary', async ({ page }) => {
     await openReadyDesktop(page);
 
     const result = await page.evaluate(() => {
@@ -62,9 +62,7 @@ test.describe('MapLibre camera layer seam', () => {
       const eventMarker = makeExistingMarker('desktop-map-marker desktop-event-marker');
       let sourceUpdate = null;
       let openedCamera = null;
-      const previousOpen = window.InfoMod && window.InfoMod.open;
-      if (!window.InfoMod) window.InfoMod = {};
-      window.InfoMod.open = function(cam) { openedCamera = cam && cam.id; };
+      window.Bus.on('camera:selected', function(cam) { openedCamera = cam && cam.id; });
 
       const renderer = {
         markers: [staleCamera, eventMarker],
@@ -86,7 +84,7 @@ test.describe('MapLibre camera layer seam', () => {
       const cameraElement = newCameraMarker && newCameraMarker.getElement();
       if (cameraElement) cameraElement.click();
 
-      const output = {
+      return {
         featureCount: features.length,
         featureCoordinates: features[0] && features[0].geometry.coordinates,
         cameraIds: Object.keys(renderer.cameraById),
@@ -98,11 +96,9 @@ test.describe('MapLibre camera layer seam', () => {
         ariaLabel: cameraElement && cameraElement.getAttribute('aria-label'),
         title: cameraElement && cameraElement.title,
         markerCoordinates: newCameraMarker && newCameraMarker.coords,
-        openedCamera
+        openedCamera,
+        infoGlobal: typeof window.InfoMod
       };
-
-      if (previousOpen) window.InfoMod.open = previousOpen;
-      return output;
     });
 
     expect(result.featureCount).toBe(1);
@@ -117,5 +113,6 @@ test.describe('MapLibre camera layer seam', () => {
     expect(result.title).toBe('測試攝影機');
     expect(result.markerCoordinates).toEqual([120.68, 24.15]);
     expect(result.openedCamera).toBe('cam-1');
+    expect(result.infoGlobal).toBe('undefined');
   });
 });
