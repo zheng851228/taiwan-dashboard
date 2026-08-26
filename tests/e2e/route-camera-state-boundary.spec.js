@@ -40,14 +40,13 @@ test('route camera consumers use route:updated payload instead of RouteMod.filte
     RouteStripMod.toggle();
 
     const cameraCount = document.getElementById('desktop-camera-count');
-    const strip = document.getElementById('route-camera-strip');
     const stripCount = document.getElementById('strip-count');
     const scroll = document.getElementById('route-camera-strip-scroll');
     const afterPayload = {
       desktopCameraCount: cameraCount.textContent,
       stripCount: stripCount.textContent,
       stripText: scroll.textContent,
-      stripVisible: strip.classList.contains('visible') || strip.style.display === 'block'
+      routeCameraSnapshotCount: RouteStripMod.routeCameras.length
     };
 
     RouteMod.filteredCams = stale.slice();
@@ -57,7 +56,8 @@ test('route camera consumers use route:updated payload instead of RouteMod.filte
     const afterLegacyMutation = {
       desktopCameraCount: cameraCount.textContent,
       stripCount: stripCount.textContent,
-      stripText: scroll.textContent
+      stripText: scroll.textContent,
+      routeCameraSnapshotCount: RouteStripMod.routeCameras.length
     };
 
     AppState.activeRoute = null;
@@ -66,7 +66,7 @@ test('route camera consumers use route:updated payload instead of RouteMod.filte
     RouteStripMod.toggle();
     const afterClear = {
       desktopCameraCount: cameraCount.textContent,
-      stripVisible: strip.classList.contains('visible') || strip.style.display === 'block'
+      routeCameraSnapshotCount: RouteStripMod.routeCameras.length
     };
 
     AppState.activeRoute = original.activeRoute;
@@ -79,7 +79,7 @@ test('route camera consumers use route:updated payload instead of RouteMod.filte
     desktopCameraCount: '2 支',
     stripCount: '共 2 支',
     stripText: expect.stringContaining('Fresh A'),
-    stripVisible: true
+    routeCameraSnapshotCount: 2
   });
   expect(result.afterPayload.stripText).toContain('Fresh B');
 
@@ -88,9 +88,10 @@ test('route camera consumers use route:updated payload instead of RouteMod.filte
   expect(result.afterLegacyMutation.stripText).toContain('Fresh A');
   expect(result.afterLegacyMutation.stripText).toContain('Fresh B');
   expect(result.afterLegacyMutation.stripText).not.toContain('Stale camera');
+  expect(result.afterLegacyMutation.routeCameraSnapshotCount).toBe(2);
 
   expect(result.afterClear).toEqual({
     desktopCameraCount: '--',
-    stripVisible: false
+    routeCameraSnapshotCount: 0
   });
 });
