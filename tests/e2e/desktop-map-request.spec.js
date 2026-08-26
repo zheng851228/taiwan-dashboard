@@ -62,3 +62,49 @@ test('legacy map view commands flow through map:request bus events', async ({ pa
   expect(result.invalidateCalls).toBe(1);
   expect(result.focusRouteCalls).toBe(1);
 });
+
+test('route-condition map commands flow through map:request bus events', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
+  await page.goto('/');
+
+  await expect.poll(() => page.evaluate(() => Boolean(
+    window.Bus && window.MapMod && window.MapMod.map
+  ))).toBe(true);
+
+  const calls = await page.evaluate(() => {
+    const originals = {
+      drawStartEnd: window.MapMod.drawStartEnd,
+      focusCam: window.MapMod.focusCam,
+      drawConditionSections: window.MapMod.drawConditionSections,
+      focusSection: window.MapMod.focusSection
+    };
+    const observed = [];
+
+    window.MapMod.drawStartEnd = function(points) { observed.push(['draw-start-end', points]); };
+    window.MapMod.focusCam = function(camera) { observed.push(['focus-camera', camera && camera.id]); };
+    window.MapMod.drawConditionSections = function(sections) { observed.push(['draw-condition-sections', sections && sections.length]); };
+    window.MapMod.focusSection = function(order) { observed.push(['focus-section', order]); };
+
+    window.Bus.emit('map:request', { action: 'draw-start-end', points: [[24.1, 120.6], [24.2, 120.7]] });
+    window.Bus.emit('map:request', { action: 'focus-camera', camera: { id: 'camera-1', lat: 24.1, lng: 120.6 } });
+    window.Bus.emit('map:request', { action: 'draw-condition-sections', sections: [{ order: 1 }] });
+    window.Bus.emit('map:request', { action: 'focus-section', order: 3 });
+    window.Bus.emit('map:request', { action: 'focus-camera' });
+    window.Bus.emit('map:request', { action: 'draw-condition-sections', sections: null });
+    window.Bus.emit('map:request', { action: 'focus-section', order: 'bad' });
+
+    window.MapMod.drawStartEnd = originals.drawStartEnd;
+    window.MapMod.focusCam = originals.focusCam;
+    window.MapMod.drawConditionSections = originals.drawConditionSections;
+    window.MapMod.focusSection = originals.focusSection;
+
+    return observed;
+  });
+
+  expect(calls).toEqual([
+    ['draw-start-end', [[24.1, 120.6], [24.2, 120.7]]],
+    ['focus-camera', 'camera-1'],
+    ['draw-condition-sections', 1],
+    ['focus-section', 3]
+  ]);
+});

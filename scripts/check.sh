@@ -99,9 +99,14 @@ grep -q "action === 'nearby-overlay-upsert'" js/main-ui.js
 grep -q "action === 'nearby-overlay-radius'" js/main-ui.js
 grep -q "action === 'nearby-overlay-clear'" js/main-ui.js
 grep -q "action === 'clear-waypoint-overlays'" js/main-ui.js
+grep -q "action === 'draw-start-end'" js/main-ui.js
+grep -q "action === 'focus-camera'" js/main-ui.js
+grep -q "action === 'draw-condition-sections'" js/main-ui.js
+grep -q "action === 'focus-section'" js/main-ui.js
 ! grep -q 'MapMod' js/desktop-dashboard.js
 ! grep -q 'MapMod' js/ride-tools.js
 ! grep -q 'MapMod' js/enhancements.js
+! grep -q 'MapMod' js/route-conditions.js
 grep -q "Bus.emit('map:request'" js/desktop-dashboard.js
 grep -q "Bus.emit('map:request'" js/enhancements.js
 grep -q "Bus.emit('map:request'" js/ride-tools.js
@@ -109,6 +114,10 @@ grep -q "action: 'nearby-overlay-upsert'" js/enhancements.js
 grep -q "action: 'nearby-overlay-radius'" js/enhancements.js
 grep -q "action: 'nearby-overlay-clear'" js/enhancements.js
 grep -q "action: 'clear-waypoint-overlays'" js/enhancements.js
+grep -q "action: 'draw-start-end'" js/route-conditions.js
+grep -q "action: 'focus-camera'" js/route-conditions.js
+grep -q "action: 'draw-condition-sections'" js/route-conditions.js
+grep -q "action: 'focus-section'" js/route-conditions.js
 grep -q 'window.MapMod = MapMod' js/main-ui.js
 grep -q 'window.RouteMod = RouteMod' js/main-ui.js
 grep -q '/v2/routes' js/services.js
