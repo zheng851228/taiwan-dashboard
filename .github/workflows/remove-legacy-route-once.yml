@@ -19,6 +19,7 @@ jobs:
         with:
           ref: refactor/remove-legacy-maplibre-route
 
+      # Remove only the legacy route method; condition/event/weather remain in renderer.
       - name: Remove legacy drawRoute only
         run: |
           python3 - <<'PY'
