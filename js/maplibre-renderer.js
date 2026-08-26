@@ -473,37 +473,6 @@
           self.markers.push(new self.module.Marker({ element: element, anchor: 'center' }).setLngLat([Number(point[1]), Number(point[0])]).addTo(self.map));
         });
       },
-      drawCameras: function(cams) {
-        var self = this;
-        var features = [];
-        this.cameraById = {};
-        this.markers = this.markers.filter(function(marker) {
-          var element = marker.getElement && marker.getElement();
-          if (element && element.classList.contains('desktop-cctv-marker')) {
-            marker.remove();
-            return false;
-          }
-          return true;
-        });
-        (cams || []).forEach(function(cam) {
-          if (!Number.isFinite(Number(cam.lat)) || !Number.isFinite(Number(cam.lng))) return;
-          self.cameraById[cam.id] = cam;
-          features.push({ type: 'Feature', properties: { id: cam.id }, geometry: { type: 'Point', coordinates: [Number(cam.lng), Number(cam.lat)] } });
-          if (self.module && self.map) {
-            var element = markerElement('desktop-cctv-marker', '沿途 CCTV：' + (cam.name || '未命名攝影機'), '#07111b');
-            element.innerHTML = '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
-            element.title = cam.name || '沿途 CCTV';
-            element.addEventListener('click', function(event) {
-              event.stopPropagation();
-              if (window.InfoMod) InfoMod.open(cam);
-            });
-            self.markers.push(new self.module.Marker({ element: element, anchor: 'center' })
-              .setLngLat([Number(cam.lng), Number(cam.lat)])
-              .addTo(self.map));
-          }
-        });
-        this._setSourceData('desktop-cameras', { type: 'FeatureCollection', features: features });
-      },
       setCursor: function(point) {
         if (!this.module || !this.map || !point) return;
         if (!this.cursorMarker) {
