@@ -358,7 +358,7 @@
         state.renderer.drawCameras(routeCameras());
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }
-      if (window.DesktopElevationMod) DesktopElevationMod.refresh();
+      DesktopElevationMod.refresh();
     }
   }
 
@@ -649,7 +649,7 @@
       }
       syncTerrainControls();
       syncCameraControls();
-      if (window.DesktopElevationMod) DesktopElevationMod.refresh();
+      DesktopElevationMod.refresh();
     });
     Dom.onId('desktop-map-3d', 'click', function() {
       state.terrainMode = '3d';
@@ -665,7 +665,7 @@
       }
       syncTerrainControls();
       syncCameraControls();
-      if (window.DesktopElevationMod) DesktopElevationMod.refresh();
+      DesktopElevationMod.refresh();
     });
     Dom.onId('desktop-map-legacy', 'click', function() {
       Storage.set(MAP_PREF_KEY, 'legacy');
@@ -714,7 +714,7 @@
         state.renderer.drawStartEnd(AppState.routeAllPoints || []);
       }
       renderCctv();
-      if (window.DesktopElevationMod) DesktopElevationMod.refresh();
+      DesktopElevationMod.refresh();
     });
     Bus.on('conditions:updated', function(data) { updateDesktopView(data); });
     Bus.on('condition:select', function(order) {
@@ -730,7 +730,7 @@
       reportConditions(null);
       renderContext();
       renderCctv();
-      if (window.DesktopElevationMod) DesktopElevationMod.clear();
+      DesktopElevationMod.clear();
     });
     Bus.on('filter:changed', function() {
       syncCameraCount();
@@ -999,7 +999,6 @@
       state.playback.raf = window.requestAnimationFrame(frame);
     }
   };
-  window.DesktopElevationMod = DesktopElevationMod;
 
   function bindPlayback() {
     Dom.onId('desktop-playback-toggle', 'click', function() { DesktopElevationMod.toggle(); });
