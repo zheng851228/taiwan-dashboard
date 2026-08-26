@@ -62,6 +62,7 @@ test('route camera consumers use route:updated payload instead of RouteMod.filte
 
     AppState.activeRoute = null;
     Bus.emit('route:cleared');
+    RouteStripMod.hide();
     RouteStripMod.toggle();
     const afterClear = {
       desktopCameraCount: cameraCount.textContent,
