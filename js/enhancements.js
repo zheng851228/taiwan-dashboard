@@ -61,9 +61,9 @@
       Dom.on(card, 'click', function() {
         var county = card.dataset.county;
         var center = window.COUNTY_CENTERS && window.COUNTY_CENTERS[county];
-        if (center && MapMod.map) {
+        if (center) {
           Bus.emit('navigation:request', { page: 'map' });
-          MapMod.map.setView(center, 11);
+          Bus.emit('map:request', { action: 'set-view', center: center, zoom: 11 });
           Toast.show(county + ' ' + (Data.weather[county] ? Data.weather[county].temp + '\u00B0C' : ''));
         }
       });
@@ -106,7 +106,7 @@ var NearbyMod = {
           fsBtn.querySelector('i').className = 'fa-solid fa-compress text-xl';
           fsBtn.classList.add('text-orange-500'); fsBtn.classList.remove('text-slate-400');
         }
-        setTimeout(function(){MapMod.map&&MapMod.map.invalidateSize();},100);
+        setTimeout(function(){ Bus.emit('map:request', { action: 'invalidate-size' }); },100);
     });
     var radiusBtns = Dom.queryAll('.nearby-r-btn');
     Dom.onId('js-loc', 'click', function() { NearbyMod.locate(); });
@@ -179,7 +179,7 @@ var NearbyMod = {
       radius: NearbyMod.radius * 1000, color: '#3b82f6', fillColor: '#3b82f6',
       fillOpacity: 0.05, weight: 1.5, dashArray: '6,4'
     }).addTo(MapMod.map);
-    MapMod.map.setView([NearbyMod.userLat, NearbyMod.userLng], 12);
+    Bus.emit('map:request', { action: 'set-view', center: [NearbyMod.userLat, NearbyMod.userLng], zoom: 12 });
   },
   getNearby: function() {
     if (NearbyMod.userLat === null) return [];
@@ -224,7 +224,7 @@ var NearbyMod = {
     Dom.queryAll('.nearby-cam-item', list).forEach(function(item) {
       Dom.on(item, 'click', function() {
         var cam = camMap[item.dataset.id];
-        if (cam) { InfoMod.open(cam); MapMod.map.setView([cam.lat, cam.lng], 14); }
+        if (cam) { InfoMod.open(cam); Bus.emit('map:request', { action: 'set-view', center: [cam.lat, cam.lng], zoom: 14 }); }
       });
     });
   },
@@ -605,7 +605,7 @@ var RouteStripMod = {
         for (var i = 0; i < allCams.length; i++) { if (allCams[i].id === cam.id) { found = allCams[i]; break; } }
         if (!found) return;
         InfoMod.open(found);
-        MapMod.map.setView([found.lat, found.lng], 13);
+        Bus.emit('map:request', { action: 'set-view', center: [found.lat, found.lng], zoom: 13 });
       });
       scroll.appendChild(card);
     });

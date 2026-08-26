@@ -77,9 +77,9 @@
       Dom.queryAll('[data-open-favorite]', el).forEach(function(btn) {
         Dom.on(btn, 'click', function() {
           var item = FavoritesMod.load().find(function(fav) { return fav.id === btn.dataset.openFavorite; });
-          if (!item || !MapMod.map) return;
+          if (!item) return;
           Bus.emit('navigation:request', { page: 'map' });
-          MapMod.map.setView([item.lat, item.lng], 14);
+          Bus.emit('map:request', { action: 'set-view', center: [item.lat, item.lng], zoom: 14 });
           var match = Data.allCams().find(function(cam) { return cam.id === item.id; });
           if (match) InfoMod.open(match);
         });

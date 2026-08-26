@@ -367,7 +367,7 @@
     setVisible('desktop-map', !legacy && state.desktop);
     var legacyMap = Dom.byId('map');
     if (legacyMap) legacyMap.style.display = legacy || !state.desktop ? 'block' : 'none';
-    if (legacy && MapMod.map && MapMod.map.invalidateSize) window.setTimeout(function() { MapMod.map.invalidateSize(); }, 80);
+    if (legacy) window.setTimeout(function() { Bus.emit('map:request', { action: 'invalidate-size' }); }, 80);
     var setting = Dom.byId('desktop-map-mode-state');
     if (setting) setting.textContent = legacy ? '傳統地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖');
     syncCameraControls();
@@ -771,8 +771,8 @@
     if (state.renderer) {
       if (AppState.activeRoute) state.renderer.focusRoute();
       else state.renderer.resetView();
-    } else if (window.MapMod && MapMod.focusRoute) {
-      MapMod.focusRoute();
+    } else {
+      Bus.emit('map:request', { action: 'focus-route' });
     }
   }
 
