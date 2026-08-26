@@ -116,6 +116,15 @@ grep -q "action === 'focus-section'" js/main-ui.js
 ! grep -q 'RouteMod.setVehicle' js/desktop-dashboard.js
 ! grep -q 'RouteMod.analyze' js/enhancements.js
 ! grep -q 'RouteMod.clear' js/enhancements.js
+! grep -q 'RouteMod.active' js/desktop-dashboard.js
+! grep -q 'RouteMod.active' js/enhancements.js
+! grep -q 'RouteMod.active' js/ride-tools.js
+grep -q 'AppState.activeRoute' js/desktop-dashboard.js
+grep -q 'AppState.activeRoute' js/enhancements.js
+grep -q 'AppState.activeRoute' js/ride-tools.js
+grep -q 'RouteMod.active = true;' js/pwa.js
+grep -q 'RouteMod.active = true;' js/main-ui.js
+grep -q 'RouteMod.active = false;' js/main-ui.js
 ! grep -q 'MapMod' js/pwa.js
 grep -q "Bus.emit('map:request'" js/desktop-dashboard.js
 grep -q "Bus.emit('map:request'" js/enhancements.js

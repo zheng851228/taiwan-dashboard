@@ -253,7 +253,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     Dom.on(toggleBtn, 'click', openExp);
     Dom.on(closeBtn, 'click', closeExp);
     Bus.on('filter:changed', function() {
-      if (RouteMod && RouteMod.active) {
+      if (AppState.activeRoute) {
         closeExp();
         var clearMini = Dom.byId('js-route-clear-small');
         if (clearMini) clearMini.classList.remove('hidden');
