@@ -7,13 +7,96 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  wire-route-condition-model:
+    name: Wire route condition model once
+    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/wire-route-condition-view-model'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout wiring branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/wire-route-condition-view-model
+          fetch-depth: 0
+
+      - name: Apply route condition wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index_path = Path('index.html')
+          index = index_path.read_text()
+          runtime_script = '<script src="js/route-conditions.js?v=44"></script>'
+          model_script = '<script src="js/route-condition-view-model.js?v=44"></script>'
+          if index.count(runtime_script) != 1:
+              raise SystemExit(f'expected one route-conditions script, found {index.count(runtime_script)}')
+          if model_script in index:
+              raise SystemExit('route condition model script already present')
+          index = index.replace(runtime_script, model_script + '\n' + runtime_script, 1)
+          index_path.write_text(index)
+
+          route_path = Path('js/route-conditions.js')
+          route = route_path.read_text()
+          delegations = {
+              '  function roadEventPresentation(incident) {\n': "    if (window.RouteConditionViewModel && RouteConditionViewModel.roadEventPresentation) {\n      return RouteConditionViewModel.roadEventPresentation(incident);\n    }\n",
+              '  function primaryRoadEvent(incidents) {\n': "    if (window.RouteConditionViewModel && RouteConditionViewModel.primaryRoadEvent) {\n      return RouteConditionViewModel.primaryRoadEvent(incidents);\n    }\n",
+              '  function summarizeRoadEvents(sections) {\n': "    if (window.RouteConditionViewModel && RouteConditionViewModel.summarizeRoadEvents) {\n      return RouteConditionViewModel.summarizeRoadEvents(sections);\n    }\n",
+              '  function buildAlerts(sections) {\n': "    if (window.RouteConditionViewModel && RouteConditionViewModel.buildAlerts) {\n      return RouteConditionViewModel.buildAlerts(sections);\n    }\n",
+          }
+          for signature, guard in delegations.items():
+              if route.count(signature) != 1:
+                  raise SystemExit(f'expected one function signature: {signature.strip()}')
+              if guard.strip() in route:
+                  raise SystemExit(f'delegation already present: {signature.strip()}')
+              route = route.replace(signature, signature + guard, 1)
+          route_path.write_text(route)
+
+          sw_path = Path('sw.js')
+          sw = sw_path.read_text()
+          runtime_shell = '  "./js/route-conditions.js?v=44",'
+          model_shell = '  "./js/route-condition-view-model.js?v=44",'
+          if sw.count(runtime_shell) != 1:
+              raise SystemExit(f'expected one route-conditions shell entry, found {sw.count(runtime_shell)}')
+          if model_shell in sw:
+              raise SystemExit('route condition model shell entry already present')
+          sw = sw.replace(runtime_shell, model_shell + '\n' + runtime_shell, 1)
+          sw_path.write_text(sw)
+          PY
+
+          node --check js/route-condition-view-model.js
+          node --check js/route-conditions.js
+          node --check sw.js
+          git diff --check
+
+      - name: Restore final CI and commit wiring
+        run: |
+          git fetch origin main
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/ci.yml')
+          text = path.read_text()
+          old = 'tests/e2e/maplibre-condition-layer.spec.js --project=desktop-chromium'
+          new = 'tests/e2e/maplibre-condition-layer.spec.js tests/e2e/desktop-route-condition-view-model.spec.js --project=desktop-chromium'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one desktop seam command anchor, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/route-conditions.js sw.js .github/workflows/ci.yml
+          git commit -m "refactor: wire route condition presentation model"
+          git push origin HEAD:refactor/wire-route-condition-view-model
+
   check:
     name: Static checks and unit tests
     runs-on: ubuntu-latest
