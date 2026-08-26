@@ -1,0 +1,52 @@
+name: Fix Route Camera Static Guard Literals
+
+on:
+  push:
+    branches:
+      - refactor/route-camera-state-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/route-camera-state-boundary
+          fetch-depth: 0
+      - name: Fix literal grep guards
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/check.sh')
+          text = path.read_text()
+          needles = [
+              "grep -q 'state.routeCameras = (payload && payload.cams || []).slice();' js/desktop-dashboard.js",
+              "grep -q 'RouteStripMod.routeCameras = (payload && payload.cams || []).slice();' js/enhancements.js",
+              "grep -q 'state.routeCameras = [];' js/desktop-dashboard.js",
+              "grep -q 'RouteStripMod.routeCameras = [];' js/enhancements.js",
+              "grep -q 'cams: RouteMod.filteredCams.slice()' js/main-ui.js",
+              "grep -q 'RouteMod.filteredCams = [];' js/pwa.js",
+          ]
+          for needle in needles:
+              if text.count(needle) != 1:
+                  raise SystemExit(f'expected exactly one guard: {needle}')
+              text = text.replace(needle, needle.replace('grep -q ', 'grep -Fq ', 1))
+          path.write_text(text)
+          PY
+          sh -n scripts/check.sh
+          git diff --check
+      - name: Commit fix
+        run: |
+          if git diff --quiet -- scripts/check.sh; then
+            echo "Static guards already fixed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/check.sh
+          git commit -m "test: use literal matching for route camera guards"
+          git push origin HEAD:refactor/route-camera-state-boundary
