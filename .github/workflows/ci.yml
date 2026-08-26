@@ -58,3 +58,45 @@ jobs:
 
       - name: Run desktop seam regressions
         run: npx playwright test tests/e2e/desktop-layout.spec.js tests/e2e/maplibre-camera-layer.spec.js tests/e2e/maplibre-route-layer.spec.js --project=desktop-chromium
+
+  route-cleanup-once:
+    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/remove-legacy-maplibre-route'
+    name: Remove legacy route method once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/remove-legacy-maplibre-route
+          fetch-depth: 0
+
+      - name: Remove legacy drawRoute only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('js/maplibre-renderer.js')
+          text = path.read_text()
+          block = """      drawRoute: function(coords) {\n        if (!coords || coords.length < 2) return;\n        this.routeCoords = coords.slice();\n        this.routeFitApplied = true;\n        var line = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords.map(toLngLat) } };\n        this._setSourceData('desktop-route', { type: 'FeatureCollection', features: [line] });\n        var bounds = makeBounds(this.module, coords);\n        if (bounds && this.map) this.map.fitBounds(bounds, { padding: this._routePadding(), maxZoom: 11, duration: 0 });\n      },\n"""
+          count = text.count(block)
+          if count != 1:
+              raise SystemExit(f'expected exactly one legacy drawRoute block, found {count}')
+          updated = text.replace(block, '', 1)
+          if '      drawConditionSections: function(sections) {' not in updated:
+              raise SystemExit('condition layer boundary missing after route removal')
+          path.write_text(updated)
+          PY
+          git diff --check
+
+      - name: Restore CI and commit cleanup
+        run: |
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/maplibre-renderer.js .github/workflows/ci.yml
+          git commit -m "refactor: remove legacy MapLibre route implementation"
+          git push origin HEAD:refactor/remove-legacy-maplibre-route
