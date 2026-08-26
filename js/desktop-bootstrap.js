@@ -40,6 +40,7 @@
       .then(function() { return loadScript('./js/maplibre-renderer.js?v=44'); })
       .then(function() { return loadScript('./js/maplibre-camera-layer.js?v=44'); })
       .then(function() { return loadScript('./js/maplibre-route-layer.js?v=44'); })
+      .then(function() { return loadScript('./js/maplibre-condition-layer.js?v=44'); })
       .then(function() { return loadScript('./js/desktop-dashboard.js?v=44'); })
       .then(function() { return loadScript('./js/desktop-layout.js?v=44'); })
       .catch(function() { showLeafletFallback(); });
