@@ -17,6 +17,7 @@ node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
 node --check js/maplibre-camera-layer.js
 node --check js/maplibre-route-layer.js
+node --check js/maplibre-condition-layer.js
 node --check js/desktop-dashboard.js
 node --check js/desktop-layout.js
 node --check js/map-provider-config.js
