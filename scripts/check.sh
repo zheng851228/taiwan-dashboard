@@ -15,6 +15,7 @@ node --check js/enhancements.js
 node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
+node --check js/maplibre-camera-layer.js
 node --check js/desktop-dashboard.js
 node --check js/desktop-layout.js
 node --check js/map-provider-config.js
