@@ -88,7 +88,7 @@
 })();
 
 var NearbyMod = {
-  userLat: null, userLng: null, radius: 5, marker: null, circle: null,
+  userLat: null, userLng: null, radius: 5,
   init: function() {
     var fsBtn = Dom.byId('js-fullscreen');
     Dom.on(fsBtn, 'click', function() {
@@ -162,23 +162,12 @@ var NearbyMod = {
     });
   },
   showOnMap: function() {
-    if (!NearbyMod.userLat) return;
-    if (NearbyMod.marker) MapMod.map.removeLayer(NearbyMod.marker);
-    var icon = L.divIcon({
-      className: '',
-      html: '<div style="position:relative;width:20px;height:20px">' +
-            '<div style="position:absolute;inset:0;border-radius:50%;background:#3b82f6;opacity:0.3;animation:ping 1.5s ease-in-out infinite"></div>' +
-            '<div style="position:absolute;inset:3px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 0 8px #3b82f6"></div>' +
-            '</div>',
-      iconSize: [20,20], iconAnchor: [10,10]
+    if (NearbyMod.userLat === null || NearbyMod.userLng === null) return;
+    Bus.emit('map:request', {
+      action: 'nearby-overlay-upsert',
+      center: [NearbyMod.userLat, NearbyMod.userLng],
+      radiusMeters: NearbyMod.radius * 1000
     });
-    NearbyMod.marker = L.marker([NearbyMod.userLat, NearbyMod.userLng], { icon: icon })
-      .addTo(MapMod.map).bindTooltip('\u{1F4CD} \u6211\u7684\u4f4d\u7f6e', { direction:'top', permanent: false });
-    if (NearbyMod.circle) MapMod.map.removeLayer(NearbyMod.circle);
-    NearbyMod.circle = L.circle([NearbyMod.userLat, NearbyMod.userLng], {
-      radius: NearbyMod.radius * 1000, color: '#3b82f6', fillColor: '#3b82f6',
-      fillOpacity: 0.05, weight: 1.5, dashArray: '6,4'
-    }).addTo(MapMod.map);
     Bus.emit('map:request', { action: 'set-view', center: [NearbyMod.userLat, NearbyMod.userLng], zoom: 12 });
   },
   getNearby: function() {
@@ -192,7 +181,7 @@ var NearbyMod = {
     var list  = Dom.byId('nearby-list');
     var count = Dom.byId('nearby-count');
     if (!list) return;
-    if (NearbyMod.circle) NearbyMod.circle.setRadius(NearbyMod.radius * 1000);
+    if (NearbyMod.userLat !== null) Bus.emit('map:request', { action: 'nearby-overlay-radius', radiusMeters: NearbyMod.radius * 1000 });
     var cams = NearbyMod.getNearby();
     if (count) count.textContent = cams.length + ' \u652f';
     if (Data.camsState === 'loading' || Data.camsState === 'idle') {
@@ -235,8 +224,7 @@ var NearbyMod = {
   hide: function() {
     var panel = Dom.byId('nearby-panel');
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex','flex-col'); }
-    if (NearbyMod.marker) { MapMod.map.removeLayer(NearbyMod.marker); NearbyMod.marker = null; }
-    if (NearbyMod.circle) { MapMod.map.removeLayer(NearbyMod.circle); NearbyMod.circle = null; }
+    Bus.emit('map:request', { action: 'nearby-overlay-clear' });
     NearbyMod.userLat = null; NearbyMod.userLng = null;
   }
 };
@@ -554,10 +542,7 @@ var WaypointsMod = {
   },
 
   clearMarkers: function() {
-    if (AppState.waypointMapMarkers) {
-      AppState.waypointMapMarkers.forEach(function(m) { MapMod.map.removeLayer(m); });
-      AppState.waypointMapMarkers = [];
-    }
+    Bus.emit('map:request', { action: 'clear-waypoint-overlays' });
   }
 };
 

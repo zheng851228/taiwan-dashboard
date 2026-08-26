@@ -86,13 +86,20 @@ grep -q "Bus.on('map:request'" js/main-ui.js
 grep -q "action === 'invalidate-size'" js/main-ui.js
 grep -q "action === 'focus-route'" js/main-ui.js
 grep -q "action === 'set-view'" js/main-ui.js
+grep -q "action === 'nearby-overlay-upsert'" js/main-ui.js
+grep -q "action === 'nearby-overlay-radius'" js/main-ui.js
+grep -q "action === 'nearby-overlay-clear'" js/main-ui.js
+grep -q "action === 'clear-waypoint-overlays'" js/main-ui.js
 ! grep -q 'MapMod' js/desktop-dashboard.js
 ! grep -q 'MapMod' js/ride-tools.js
+! grep -q 'MapMod' js/enhancements.js
 grep -q "Bus.emit('map:request'" js/desktop-dashboard.js
 grep -q "Bus.emit('map:request'" js/enhancements.js
 grep -q "Bus.emit('map:request'" js/ride-tools.js
-! grep -q 'MapMod.map.setView' js/enhancements.js
-! grep -q 'MapMod.map.invalidateSize' js/enhancements.js
+grep -q "action: 'nearby-overlay-upsert'" js/enhancements.js
+grep -q "action: 'nearby-overlay-radius'" js/enhancements.js
+grep -q "action: 'nearby-overlay-clear'" js/enhancements.js
+grep -q "action: 'clear-waypoint-overlays'" js/enhancements.js
 grep -q 'window.MapMod = MapMod' js/main-ui.js
 grep -q 'window.InfoMod = InfoMod' js/main-ui.js
 grep -q 'window.RouteMod = RouteMod' js/main-ui.js
