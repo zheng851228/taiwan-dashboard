@@ -786,6 +786,18 @@
       }
     },
     init: function() {
+      Bus.on('route:request', function(request) {
+        var action = request && request.action;
+        if (action === 'set-vehicle') {
+          RouteMod.setVehicle(request && request.mode, request && request.plate);
+          return;
+        }
+        if (action === 'analyze') {
+          RouteMod.analyze();
+          return;
+        }
+        if (action === 'clear') RouteMod.clear();
+      });
       Dom.onAll('.route-mode-btn', 'click', function(btn) {
           RouteMod.setVehicle(btn.dataset.mode, btn.dataset.plate || RouteMod.plate);
       });

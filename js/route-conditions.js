@@ -625,7 +625,7 @@
 
   function init() {
     Dom.onId('condition-clear', 'click', function() {
-      if (window.RouteMod) RouteMod.clear();
+      Bus.emit('route:request', { action: 'clear' });
     });
     Dom.onId('condition-refresh', 'click', refresh);
     Dom.onId('condition-retry', 'click', refresh);

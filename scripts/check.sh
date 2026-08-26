@@ -81,6 +81,10 @@ grep -q "Bus.on('vehicle:changed'" js/route-conditions.js
 ! grep -q 'window.InfoMod = InfoMod' js/main-ui.js
 grep -q "Bus.on('navigation:request'" js/main-ui.js
 grep -q "Bus.on('camera:open'" js/main-ui.js
+grep -q "Bus.on('route:request'" js/main-ui.js
+grep -q "action === 'set-vehicle'" js/main-ui.js
+grep -q "action === 'analyze'" js/main-ui.js
+grep -q "action === 'clear'" js/main-ui.js
 grep -q "Bus.emit('camera:closed'" js/main-ui.js
 ! grep -q 'NavMod' js/desktop-dashboard.js
 ! grep -q 'NavMod' js/enhancements.js
@@ -108,6 +112,10 @@ grep -q "action === 'focus-section'" js/main-ui.js
 ! grep -q 'MapMod' js/ride-tools.js
 ! grep -q 'MapMod' js/enhancements.js
 ! grep -q 'MapMod' js/route-conditions.js
+! grep -q 'RouteMod' js/route-conditions.js
+! grep -q 'RouteMod.setVehicle' js/desktop-dashboard.js
+! grep -q 'RouteMod.analyze' js/enhancements.js
+! grep -q 'RouteMod.clear' js/enhancements.js
 ! grep -q 'MapMod' js/pwa.js
 grep -q "Bus.emit('map:request'" js/desktop-dashboard.js
 grep -q "Bus.emit('map:request'" js/enhancements.js
@@ -122,6 +130,10 @@ grep -q "action: 'draw-condition-sections'" js/route-conditions.js
 grep -q "action: 'focus-section'" js/route-conditions.js
 grep -q "action: 'draw-route'" js/pwa.js
 grep -q "action: 'draw-start-end'" js/pwa.js
+grep -q "action: 'set-vehicle'" js/desktop-dashboard.js
+grep -q "action: 'analyze'" js/enhancements.js
+grep -q "action: 'clear'" js/enhancements.js
+grep -q "action: 'clear'" js/route-conditions.js
 grep -q 'window.MapMod = MapMod' js/main-ui.js
 grep -q 'window.RouteMod = RouteMod' js/main-ui.js
 grep -q '/v2/routes' js/services.js
