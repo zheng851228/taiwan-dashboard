@@ -34,7 +34,7 @@ describe('RouteSummaryModel', () => {
     const info = { distance: '12.3', duration: 26 };
     const withCameras = model.routeUiCopy(4, info, 'motorcycle');
     expect(withCameras.statusText).toBe('安全驗證完成 · 4 支沿途現場畫面');
-    expect(withCameras.listCountText).toBe('路線過濾：共 4 支');
+    expect(withCameras.listCountText).toBe('路線過濾：共 4 支沿途現場畫面');
     expect(withCameras.summaryText).toBe('🏍 12.3km/26分 · 已驗證');
 
     const withoutCameras = model.routeUiCopy(0, info, 'car');
