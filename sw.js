@@ -28,6 +28,7 @@ const SHELL_URLS = [
   "./js/services.js?v=44",
   "./js/data.js?v=44",
   "./js/route-search-model.js?v=44",
+  "./js/route-summary-model.js?v=44",
   "./js/main-ui.js?v=44",
   "./js/enhancements.js?v=44",
   "./js/route-condition-view-model.js?v=44",
