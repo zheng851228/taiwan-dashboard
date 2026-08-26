@@ -119,6 +119,14 @@ grep -q "action === 'focus-section'" js/main-ui.js
 ! grep -q 'RouteMod.active' js/desktop-dashboard.js
 ! grep -q 'RouteMod.active' js/enhancements.js
 ! grep -q 'RouteMod.active' js/ride-tools.js
+! grep -q 'RouteMod.filteredCams' js/desktop-dashboard.js
+! grep -q 'RouteMod.filteredCams' js/enhancements.js
+grep -q 'state.routeCameras = (payload && payload.cams || []).slice();' js/desktop-dashboard.js
+grep -q 'RouteStripMod.routeCameras = (payload && payload.cams || []).slice();' js/enhancements.js
+grep -q 'state.routeCameras = [];' js/desktop-dashboard.js
+grep -q 'RouteStripMod.routeCameras = [];' js/enhancements.js
+grep -q 'cams: RouteMod.filteredCams.slice()' js/main-ui.js
+grep -q 'RouteMod.filteredCams = [];' js/pwa.js
 grep -q 'AppState.activeRoute' js/desktop-dashboard.js
 grep -q 'AppState.activeRoute' js/enhancements.js
 grep -q 'AppState.activeRoute' js/ride-tools.js
