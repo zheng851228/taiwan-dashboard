@@ -581,14 +581,14 @@
       var button = Dom.byId('js-open-favorites');
       if (button) button.click();
     });
-    Dom.onId('desktop-open-list', 'click', function() { toggleSettings(); NavMod.go('list'); });
-    Dom.onId('desktop-open-tools', 'click', function() { toggleSettings(); NavMod.go('tools'); });
+    Dom.onId('desktop-open-list', 'click', function() { toggleSettings(); Bus.emit('navigation:request', { page: 'list' }); });
+    Dom.onId('desktop-open-tools', 'click', function() { toggleSettings(); Bus.emit('navigation:request', { page: 'tools' }); });
     Dom.onId('desktop-context-open-list', 'click', function() {
-      NavMod.go('list');
+      Bus.emit('navigation:request', { page: 'list' });
       window.setTimeout(function() { var search = Dom.byId('js-search'); if (search) search.focus(); }, 80);
     });
     Dom.onId('desktop-cctv-open', 'click', function() {
-      NavMod.go('list');
+      Bus.emit('navigation:request', { page: 'list' });
       window.setTimeout(function() { var search = Dom.byId('js-search'); if (search) search.focus(); }, 80);
     });
     Dom.onId('desktop-cctv-prev', 'click', function() {
@@ -754,7 +754,7 @@
   }
 
   function goHome() {
-    if (window.NavMod) NavMod.go('map');
+    Bus.emit('navigation:request', { page: 'map' });
     ['desktop-settings-popover', 'desktop-condition-info-popover', 'favorites-panel', 'info-panel', 'modal', 'nearby-panel', 'route-camera-strip', 'desktop-camera-popover'].forEach(function(id) {
       var element = Dom.byId(id);
       if (element) {
