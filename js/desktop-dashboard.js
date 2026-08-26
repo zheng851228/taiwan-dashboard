@@ -674,7 +674,7 @@
       syncSettings();
     });
     Dom.onAll('.desktop-vehicle-tab', 'click', function(button) {
-      if (RouteMod && RouteMod.setVehicle) RouteMod.setVehicle(button.dataset.desktopMode, button.dataset.desktopPlate || 'white');
+      Bus.emit('route:request', { action: 'set-vehicle', mode: button.dataset.desktopMode, plate: button.dataset.desktopPlate || 'white' });
     });
     Dom.on(document, 'click', function(event) {
       var panel = Dom.byId('desktop-settings-popover');

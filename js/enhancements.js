@@ -261,7 +261,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     });
     var clearMini = Dom.byId('js-route-clear-small');
     Dom.on(clearMini, 'click', function() {
-      if (RouteMod) RouteMod.clear();
+      Bus.emit('route:request', { action: 'clear' });
       clearMini.classList.add('hidden');
     });
 
@@ -273,9 +273,9 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
     function analyzeNextFrame() {
       if (window.requestAnimationFrame) {
-        window.requestAnimationFrame(function() { RouteMod.analyze(); });
+        window.requestAnimationFrame(function() { Bus.emit('route:request', { action: 'analyze' }); });
       } else {
-        RouteMod.analyze();
+        Bus.emit('route:request', { action: 'analyze' });
       }
     }
 
@@ -400,9 +400,9 @@ function haversineKm(lat1, lon1, lat2, lon2) {
             // 填入後自動執行路線解析
             if (start && end) {
               if (window.requestAnimationFrame) {
-                window.requestAnimationFrame(function() { RouteMod.analyze(); });
+                window.requestAnimationFrame(function() { Bus.emit('route:request', { action: 'analyze' }); });
               } else {
-                RouteMod.analyze();
+                Bus.emit('route:request', { action: 'analyze' });
               }
             } else {
               Toast.show(end ? '\u8d77\u7d42\u9ede\u5df2\u5e36\u5165\uff01' : '\u8d77\u9ede\u5df2\u5e36\u5165');
