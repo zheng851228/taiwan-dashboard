@@ -1,4 +1,4 @@
-name: CI
+name: Route Search Wiring
 
 on:
   push:
@@ -8,84 +8,21 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: ci-route-search-wiring-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  wire-route-search-model:
-    name: Wire route search model once
+  wiring:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
-      - name: Checkout wiring branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: refactor/wire-route-search-model
           fetch-depth: 0
-
       - name: Apply remaining wiring
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          index_path = Path('index.html')
-          index = index_path.read_text()
-          main_script = '<script src="js/main-ui.js?v=44"></script>'
-          model_script = '<script src="js/route-search-model.js?v=44"></script>'
-          if model_script not in index:
-              if index.count(main_script) != 1:
-                  raise SystemExit(f'expected one main-ui script, found {index.count(main_script)}')
-              index_path.write_text(index.replace(main_script, model_script + '\n' + main_script, 1))
-
-          sw_path = Path('sw.js')
-          sw = sw_path.read_text()
-          main_shell = '  "./js/main-ui.js?v=44",'
-          model_shell = '  "./js/route-search-model.js?v=44",'
-          if model_shell not in sw:
-              if sw.count(main_shell) != 1:
-                  raise SystemExit(f'expected one main-ui shell entry, found {sw.count(main_shell)}')
-              sw_path.write_text(sw.replace(main_shell, model_shell + '\n' + main_shell, 1))
-
-          check_path = Path('scripts/check.sh')
-          check = check_path.read_text()
-          marker = "grep -q 'js/main-ui.js' index.html\n"
-          guards = """grep -q 'js/route-search-model.js' index.html
-node -e \"const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-search-model.js'); const runtime=s.indexOf('js/main-ui.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route search model must load before main-ui.js')\"
-"""
-          if "route search model must load before main-ui.js" not in check:
-              if check.count(marker) != 1:
-                  raise SystemExit(f'expected one main-ui check anchor, found {check.count(marker)}')
-              check = check.replace(marker, guards + marker, 1)
-          sw_marker = "grep -q 'js/route-condition-view-model.js?v=44' sw.js\n"
-          sw_guard = "grep -q 'js/route-search-model.js?v=44' sw.js\n"
-          if sw_guard not in check:
-              if check.count(sw_marker) != 1:
-                  raise SystemExit(f'expected one sw check anchor, found {check.count(sw_marker)}')
-              check = check.replace(sw_marker, sw_guard + sw_marker, 1)
-          delegate_marker = "grep -q '/v2/routes' js/services.js\n"
-          delegate_guards = """grep -q 'RouteSearchModel.prepareEndpoints' js/main-ui.js
-grep -q 'RouteSearchModel.buildAddressPlan' js/main-ui.js
-grep -q 'RouteSearchModel.unresolvedPointMessage' js/main-ui.js
-grep -q 'RouteSearchModel.buildVehicle' js/main-ui.js
-"""
-          if "grep -q 'RouteSearchModel.prepareEndpoints' js/main-ui.js" not in check:
-              if check.count(delegate_marker) != 1:
-                  raise SystemExit(f'expected one service check anchor, found {check.count(delegate_marker)}')
-              check = check.replace(delegate_marker, delegate_guards + delegate_marker, 1)
-          check_path.write_text(check)
-          PY
-
-          node --check js/main-ui.js
-          node --check sw.js
-          sh -n scripts/check.sh
-          git diff --check
-
+        run: node scripts/wire-route-search-runtime.mjs
       - name: Commit remaining wiring
         run: |
           if git diff --quiet -- index.html sw.js scripts/check.sh; then
-            echo "Remaining route search wiring already applied."
+            echo "Remaining wiring already applied."
             exit 0
           fi
           git config user.name "github-actions[bot]"
