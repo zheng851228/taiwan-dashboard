@@ -207,7 +207,7 @@
     },
     buildRouteReport: function() {
       var conditions = AppState.routeConditions;
-      if (!RouteMod.active || !AppState.lastRouteInfo || !conditions || !conditions.sections) {
+      if (!AppState.activeRoute || !AppState.lastRouteInfo || !conditions || !conditions.sections) {
         AppState.routeReport = null;
         RideInsightsMod.updateStatusCard();
         RideInsightsMod.updateRiskPanel();

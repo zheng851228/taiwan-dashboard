@@ -281,7 +281,7 @@
   }
 
   function syncCameraCount() {
-    var hasRoute = Boolean(AppState.activeRoute || (window.RouteMod && RouteMod.active));
+    var hasRoute = Boolean(AppState.activeRoute);
     var count = hasRoute ? routeCameras().length : 0;
     text('desktop-camera-count', hasRoute ? count + ' 支' : '--');
     var routeStatus = Dom.byId('js-route-status');
