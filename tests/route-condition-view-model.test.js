@@ -75,8 +75,8 @@ describe('RouteConditionViewModel', () => {
     const alerts = model.buildAlerts(sections);
     expect(alerts).toHaveLength(6);
     expect(alerts[0].event.impact).toBe('full_closure');
-    expect(alerts.some((alert) => alert.type === 'danger')).toBe(true);
-    expect(alerts.some((alert) => alert.type === 'weather')).toBe(false);
+    expect(alerts[1].type).toBe('danger');
+    expect(alerts[2].type).toBe('weather');
   });
 
   it('handles empty inputs without DOM or map dependencies', async () => {
