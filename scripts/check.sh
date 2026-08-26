@@ -73,6 +73,14 @@ grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 grep -q 'RouteNavigationModel.buildNavigation' js/route-conditions.js
 grep -q 'RouteNavigationModel.appleClickIntent' js/route-conditions.js
 grep -q "Bus.on('vehicle:changed'" js/route-conditions.js
+! grep -q 'window.ThemeMod = ThemeMod' js/main-ui.js
+! grep -q 'window.ListMod = ListMod' js/main-ui.js
+! grep -q 'window.ModalMod = ModalMod' js/main-ui.js
+! grep -q 'window.DesktopElevationMod = DesktopElevationMod' js/desktop-dashboard.js
+grep -q 'window.NavMod = NavMod' js/main-ui.js
+grep -q 'window.MapMod = MapMod' js/main-ui.js
+grep -q 'window.InfoMod = InfoMod' js/main-ui.js
+grep -q 'window.RouteMod = RouteMod' js/main-ui.js
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js

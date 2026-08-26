@@ -57,4 +57,4 @@ jobs:
         run: npx playwright install --with-deps chrome
 
       - name: Run desktop seam regressions
-        run: npx playwright test tests/e2e/desktop-layout.spec.js tests/e2e/maplibre-camera-layer.spec.js tests/e2e/maplibre-route-layer.spec.js tests/e2e/maplibre-condition-layer.spec.js tests/e2e/desktop-route-condition-view-model.spec.js tests/e2e/desktop-route-search-model.spec.js tests/e2e/desktop-route-summary-model.spec.js tests/e2e/desktop-route-navigation-model.spec.js --project=desktop-chromium
+        run: npx playwright test tests/e2e/desktop-layout.spec.js tests/e2e/maplibre-camera-layer.spec.js tests/e2e/maplibre-route-layer.spec.js tests/e2e/maplibre-condition-layer.spec.js tests/e2e/desktop-route-condition-view-model.spec.js tests/e2e/desktop-route-search-model.spec.js tests/e2e/desktop-route-summary-model.spec.js tests/e2e/desktop-route-navigation-model.spec.js tests/e2e/browser-global-boundary.spec.js --project=desktop-chromium
