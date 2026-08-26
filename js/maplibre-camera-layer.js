@@ -47,7 +47,7 @@
       var element = cameraMarkerElement(cam);
       element.addEventListener('click', function(event) {
         event.stopPropagation();
-        if (window.InfoMod) window.InfoMod.open(cam);
+        if (window.Bus && typeof window.Bus.emit === 'function') window.Bus.emit('camera:open', cam);
       });
       renderer.markers.push(new renderer.module.Marker({ element: element, anchor: 'center' })
         .setLngLat([Number(cam.lng), Number(cam.lat)])
