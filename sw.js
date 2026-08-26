@@ -29,6 +29,7 @@ const SHELL_URLS = [
   "./js/data.js?v=44",
   "./js/main-ui.js?v=44",
   "./js/enhancements.js?v=44",
+  "./js/route-condition-view-model.js?v=44",
   "./js/route-conditions.js?v=44",
   "./js/ride-tools.js?v=44",
   "./js/desktop-bootstrap.js?v=44",
