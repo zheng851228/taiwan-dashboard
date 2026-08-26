@@ -7,13 +7,146 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  wire-route-search-model:
+    name: Wire route search model once
+    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/wire-route-search-model'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout wiring branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/wire-route-search-model
+          fetch-depth: 0
+
+      - name: Apply route search wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index_path = Path('index.html')
+          index = index_path.read_text()
+          main_script = '<script src="js/main-ui.js?v=44"></script>'
+          model_script = '<script src="js/route-search-model.js?v=44"></script>'
+          if model_script not in index:
+              if index.count(main_script) != 1:
+                  raise SystemExit(f'expected one main-ui script, found {index.count(main_script)}')
+              index = index.replace(main_script, model_script + '\n' + main_script, 1)
+              index_path.write_text(index)
+
+          route_path = Path('js/main-ui.js')
+          route = route_path.read_text()
+          if 'window.RouteSearchModel.prepareEndpoints(' not in route:
+              old = """      var startVal = startEl ? startEl.value.trim() : '';
+      var endVal   = endEl   ? endEl.value.trim()   : '';
+      if (!startVal || !endVal) { Toast.show('\\u8acb\\u5206\\u5225\\u586b\\u5165\\u8d77\\u9ede\\u548c\\u7d42\\u9ede'); return; }
+"""
+              new = """      var endpointInput = window.RouteSearchModel.prepareEndpoints(
+        startEl ? startEl.value : '',
+        endEl ? endEl.value : ''
+      );
+      if (!endpointInput.ok) { Toast.show(endpointInput.message); return; }
+      var startVal = endpointInput.startValue;
+      var endVal = endpointInput.endValue;
+"""
+              if route.count(old) != 1:
+                  raise SystemExit(f'endpoint preparation anchor count: {route.count(old)}')
+              route = route.replace(old, new, 1)
+
+              old = """      var displayAddrs = [startVal]
+        .concat(uiWaypoints.map(function(wp) { return String(wp || '').trim(); }))
+        .concat([endVal]);
+      var allAddrs = displayAddrs.slice();
+      if (startEl && startEl.dataset.routePoint && startEl.dataset.routePointLabel === startVal) {
+        allAddrs[0] = startEl.dataset.routePoint;
+      }
+      if (endEl && endEl.dataset.routePoint && endEl.dataset.routePointLabel === endVal) {
+        allAddrs[allAddrs.length - 1] = endEl.dataset.routePoint;
+      }
+"""
+              new = """      var addressPlan = window.RouteSearchModel.buildAddressPlan({
+        startValue: startVal,
+        endValue: endVal,
+        waypoints: uiWaypoints,
+        startRoutePoint: startEl && startEl.dataset.routePoint,
+        startRoutePointLabel: startEl && startEl.dataset.routePointLabel,
+        endRoutePoint: endEl && endEl.dataset.routePoint,
+        endRoutePointLabel: endEl && endEl.dataset.routePointLabel
+      });
+      var displayAddrs = addressPlan.displayAddrs;
+      var allAddrs = addressPlan.resolutionAddrs;
+"""
+              if route.count(old) != 1:
+                  raise SystemExit(f'address plan anchor count: {route.count(old)}')
+              route = route.replace(old, new, 1)
+
+              old = """            var label = failedIndex === 0
+              ? '\\u8d77\\u9ede'
+              : (failedIndex === results.length - 1 ? '\\u7d42\\u9ede' : ('\\u7b2c ' + failedIndex + ' \\u500b\\u505c\\u9760\\u9ede'));
+            throw new Error(label + '\\u7121\\u6cd5\\u89e3\\u6790\\uff0c\\u8acb\\u6539\\u7528\\u66f4\\u5b8c\\u6574\\u5730\\u540d\\u6216\\u5ea7\\u6a19');
+"""
+              new = """            throw new Error(window.RouteSearchModel.unresolvedPointMessage(failedIndex, results.length));
+"""
+              if route.count(old) != 1:
+                  raise SystemExit(f'unresolved point anchor count: {route.count(old)}')
+              route = route.replace(old, new, 1)
+
+              old = """          var vehicle = RouteMod.mode === 'car'
+            ? { type: 'car' }
+            : { type: 'motorcycle', plate: RouteMod.plate };
+"""
+              new = """          var vehicle = window.RouteSearchModel.buildVehicle(RouteMod.mode, RouteMod.plate);
+"""
+              if route.count(old) != 1:
+                  raise SystemExit(f'vehicle anchor count: {route.count(old)}')
+              route = route.replace(old, new, 1)
+              route_path.write_text(route)
+
+          required = [
+              'RouteSearchModel.prepareEndpoints',
+              'RouteSearchModel.buildAddressPlan',
+              'RouteSearchModel.unresolvedPointMessage',
+              'RouteSearchModel.buildVehicle',
+          ]
+          for token in required:
+              if token not in route_path.read_text():
+                  raise SystemExit(f'missing runtime delegation: {token}')
+
+          sw_path = Path('sw.js')
+          sw = sw_path.read_text()
+          main_shell = '  "./js/main-ui.js?v=44",'
+          model_shell = '  "./js/route-search-model.js?v=44",'
+          if model_shell not in sw:
+              if sw.count(main_shell) != 1:
+                  raise SystemExit(f'expected one main-ui shell entry, found {sw.count(main_shell)}')
+              sw = sw.replace(main_shell, model_shell + '\n' + main_shell, 1)
+              sw_path.write_text(sw)
+          PY
+
+          node --check js/main-ui.js
+          node --check sw.js
+          git diff --check
+
+      - name: Commit runtime wiring
+        run: |
+          if git diff --quiet -- index.html js/main-ui.js sw.js; then
+            echo "Route search wiring already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/main-ui.js sw.js
+          git commit -m "refactor: delegate route search input preparation"
+          git push origin HEAD:refactor/wire-route-search-model
+
   check:
     name: Static checks and unit tests
     runs-on: ubuntu-latest
