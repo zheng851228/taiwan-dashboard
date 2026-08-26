@@ -1,42 +1,60 @@
-name: Route Summary Wiring
+name: CI
 
 on:
+  pull_request:
   push:
     branches:
-      - refactor/wire-route-summary-model
+      - main
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  wiring:
-    name: Wire route summary model once
+  check:
+    name: Static checks and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Checkout wiring branch
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          ref: refactor/wire-route-summary-model
-          fetch-depth: 0
+          node-version: 22
+          cache: npm
 
-      - name: Apply route summary wiring
-        run: |
-          node scripts/wire-route-summary-runtime.mjs
-          node --check js/main-ui.js
-          node --check js/route-summary-model.js
-          node --check sw.js
-          git diff --check
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Commit runtime wiring
-        run: |
-          if git diff --quiet -- index.html js/main-ui.js sw.js scripts/check.sh; then
-            echo "Route summary wiring already applied."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html js/main-ui.js sw.js scripts/check.sh
-          git commit -m "refactor: delegate route summary presentation"
-          git push origin HEAD:refactor/wire-route-summary-model
+      - name: Run project checks
+        run: npm run check
+
+  desktop-seam-e2e:
+    name: Desktop browser seam regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chrome
+        run: npx playwright install --with-deps chrome
+
+      - name: Run desktop seam regressions
+        run: npx playwright test tests/e2e/desktop-layout.spec.js tests/e2e/maplibre-camera-layer.spec.js tests/e2e/maplibre-route-layer.spec.js tests/e2e/maplibre-condition-layer.spec.js tests/e2e/desktop-route-condition-view-model.spec.js tests/e2e/desktop-route-search-model.spec.js tests/e2e/desktop-route-summary-model.spec.js --project=desktop-chromium
