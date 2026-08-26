@@ -16,6 +16,7 @@ node --check js/route-conditions.js
 node --check js/route-condition-view-model.js
 node --check js/route-search-model.js
 node --check js/route-summary-model.js
+node --check js/route-navigation-model.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
 node --check js/maplibre-camera-layer.js
