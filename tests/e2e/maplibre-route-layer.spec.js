@@ -14,6 +14,7 @@ test.describe('MapLibre route layer seam', () => {
     test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop MapLibre seam verification only.');
   });
 
+  // Route wrapping must compose with the already-installed camera seam.
   test('new renderer instances delegate drawRoute to MapRouteLayer without losing camera seam', async ({ page }) => {
     await openReadyDesktop(page);
 
