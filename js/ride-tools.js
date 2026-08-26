@@ -4,6 +4,7 @@
   'use strict';
 
   var FAVORITES_KEY = 'tw_favorites_v2';
+  var selectedCamera = null;
 
   window.FavoritesMod = {
     load: function() {
@@ -38,7 +39,7 @@
       FavoritesMod.renderAll();
     },
     syncButtons: function() {
-      var selected = InfoMod.current;
+      var selected = selectedCamera;
       Dom.queryAll('.card-favorite-btn').forEach(function(btn) {
         var active = FavoritesMod.has(btn.dataset.favoriteId);
         btn.classList.toggle('active', active);
@@ -81,7 +82,7 @@
           Bus.emit('navigation:request', { page: 'map' });
           Bus.emit('map:request', { action: 'set-view', center: [item.lat, item.lng], zoom: 14 });
           var match = Data.allCams().find(function(cam) { return cam.id === item.id; });
-          if (match) InfoMod.open(match);
+          if (match) Bus.emit('camera:open', match);
         });
       });
       Dom.queryAll('[data-remove-favorite]', el).forEach(function(btn) {
@@ -108,12 +109,17 @@
         if (panel) panel.classList.add('hidden');
       });
       Dom.onId('info-favorite', 'click', function() {
-        FavoritesMod.toggle(InfoMod.current);
+        FavoritesMod.toggle(selectedCamera);
       });
       Bus.on('favorite:toggle', function(cam) {
         FavoritesMod.toggle(cam);
       });
-      Bus.on('camera:selected', function() {
+      Bus.on('camera:selected', function(cam) {
+        selectedCamera = cam || null;
+        FavoritesMod.syncButtons();
+      });
+      Bus.on('camera:closed', function() {
+        selectedCamera = null;
         FavoritesMod.syncButtons();
       });
       Bus.on('filter:changed', function() {

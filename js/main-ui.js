@@ -597,6 +597,7 @@
   var InfoMod = {
     current: null,
     init: function() {
+      Bus.on('camera:open', function(cam) { if (cam) InfoMod.open(cam); });
       Dom.onId('info-close', 'click', function() { InfoMod.close(); });
       Dom.onId('info-play', 'click', function() {
         if (InfoMod.current) ModalMod.open(InfoMod.current);
@@ -678,6 +679,7 @@
       var thumbEl = Dom.byId('info-thumb');
       if (thumbEl) thumbEl.classList.remove('visible');
       InfoMod.current = null;
+      Bus.emit('camera:closed');
     }
   };
 
@@ -1387,7 +1389,6 @@
   };
 
   window.MapMod = MapMod;
-  window.InfoMod = InfoMod;
   window.RouteMod = RouteMod;
 
   window.addEventListener('load', function() {
