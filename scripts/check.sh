@@ -77,7 +77,11 @@ grep -q "Bus.on('vehicle:changed'" js/route-conditions.js
 ! grep -q 'window.ListMod = ListMod' js/main-ui.js
 ! grep -q 'window.ModalMod = ModalMod' js/main-ui.js
 ! grep -q 'window.DesktopElevationMod = DesktopElevationMod' js/desktop-dashboard.js
-grep -q 'window.NavMod = NavMod' js/main-ui.js
+! grep -q 'window.NavMod = NavMod' js/main-ui.js
+grep -q "Bus.on('navigation:request'" js/main-ui.js
+! grep -q 'NavMod' js/desktop-dashboard.js
+! grep -q 'NavMod' js/enhancements.js
+! grep -q 'NavMod' js/ride-tools.js
 grep -q 'window.MapMod = MapMod' js/main-ui.js
 grep -q 'window.InfoMod = InfoMod' js/main-ui.js
 grep -q 'window.RouteMod = RouteMod' js/main-ui.js
