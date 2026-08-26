@@ -657,7 +657,7 @@
       setFlexVisible(info, true);
       if (cnt) {
         cnt.textContent = count > 0
-          ? '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + count + ' \u652f'
+          ? '\u8def\u7dda\u904e\u6ffe\uff1a\u5171 ' + count + ' \u652f\u6cbf\u9014\u73fe\u5834\u756b\u9762'
           : '\u8def\u7dda\u904e\u6ffe\uff1a\u672a\u627e\u5230\u5408\u9069\u651d\u5f71\u6a5f';
       }
       if (summary && AppState.lastRouteInfo) {
@@ -712,25 +712,30 @@
       if (RouteMod.analyzing) return;
       var startEl  = Dom.byId('js-route-start');
       var endEl    = Dom.byId('js-route-end');
-      var startVal = startEl ? startEl.value.trim() : '';
-      var endVal   = endEl   ? endEl.value.trim()   : '';
-      if (!startVal || !endVal) { Toast.show('\u8acb\u5206\u5225\u586b\u5165\u8d77\u9ede\u548c\u7d42\u9ede'); return; }
+      var endpointInput = window.RouteSearchModel.prepareEndpoints(
+        startEl ? startEl.value : '',
+        endEl ? endEl.value : ''
+      );
+      if (!endpointInput.ok) { Toast.show(endpointInput.message); return; }
+      var startVal = endpointInput.startValue;
+      var endVal = endpointInput.endValue;
       var thisAnalysisVersion = ++RouteMod.analysisVersion;
       RouteUiMod.setState('analyzing');
       RouteMod.setAnalyzeBusy(true);
       var status = Dom.byId('js-route-status');
       if (status) status.textContent = '\u89e3\u6790\u5730\u9ede\u2026';
       var uiWaypoints = window.WaypointsMod ? WaypointsMod.getWaypoints() : (AppState.pendingWaypoints || []);
-      var displayAddrs = [startVal]
-        .concat(uiWaypoints.map(function(wp) { return String(wp || '').trim(); }))
-        .concat([endVal]);
-      var allAddrs = displayAddrs.slice();
-      if (startEl && startEl.dataset.routePoint && startEl.dataset.routePointLabel === startVal) {
-        allAddrs[0] = startEl.dataset.routePoint;
-      }
-      if (endEl && endEl.dataset.routePoint && endEl.dataset.routePointLabel === endVal) {
-        allAddrs[allAddrs.length - 1] = endEl.dataset.routePoint;
-      }
+      var addressPlan = window.RouteSearchModel.buildAddressPlan({
+        startValue: startVal,
+        endValue: endVal,
+        waypoints: uiWaypoints,
+        startRoutePoint: startEl && startEl.dataset.routePoint,
+        startRoutePointLabel: startEl && startEl.dataset.routePointLabel,
+        endRoutePoint: endEl && endEl.dataset.routePoint,
+        endRoutePointLabel: endEl && endEl.dataset.routePointLabel
+      });
+      var displayAddrs = addressPlan.displayAddrs;
+      var allAddrs = addressPlan.resolutionAddrs;
       AppState.pendingWaypoints = [];
 
       Promise.all(allAddrs.map(function(addr) { return extractPointFromUrl(addr); }))
@@ -738,19 +743,14 @@
           if (thisAnalysisVersion !== RouteMod.analysisVersion) return null;
           var failedIndex = results.findIndex(function(result) { return !result; });
           if (failedIndex !== -1) {
-            var label = failedIndex === 0
-              ? '\u8d77\u9ede'
-              : (failedIndex === results.length - 1 ? '\u7d42\u9ede' : ('\u7b2c ' + failedIndex + ' \u500b\u505c\u9760\u9ede'));
-            throw new Error(label + '\u7121\u6cd5\u89e3\u6790\uff0c\u8acb\u6539\u7528\u66f4\u5b8c\u6574\u5730\u540d\u6216\u5ea7\u6a19');
+            throw new Error(window.RouteSearchModel.unresolvedPointMessage(failedIndex, results.length));
           }
           Toast.show('\u9a57\u8b49\u724c\u7167\u9650\u5236\u8207\u9053\u8def\u5b89\u5168\u2026');
           if (status) status.textContent = '\u9a57\u8b49\u724c\u7167\u9650\u5236\u2026';
           var finalPoints = results;
           AppState.routeAllPoints = finalPoints;
           AppState.routeInputValues = displayAddrs.slice();
-          var vehicle = RouteMod.mode === 'car'
-            ? { type: 'car' }
-            : { type: 'motorcycle', plate: RouteMod.plate };
+          var vehicle = window.RouteSearchModel.buildVehicle(RouteMod.mode, RouteMod.plate);
           return AppServices.createRoute(finalPoints, vehicle, { strategy: 'balanced' });
         })
         .then(function(payload) {
