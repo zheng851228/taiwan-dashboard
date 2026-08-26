@@ -1,0 +1,49 @@
+name: Remove legacy route overlay (one-time)
+
+on:
+  push:
+    branches:
+      - refactor/remove-legacy-maplibre-route
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/remove-legacy-maplibre-route
+
+      - name: Remove legacy drawRoute only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('js/maplibre-renderer.js')
+          text = path.read_text()
+          block = """      drawRoute: function(coords) {\n        if (!coords || coords.length < 2) return;\n        this.routeCoords = coords.slice();\n        this.routeFitApplied = true;\n        var line = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords.map(toLngLat) } };\n        this._setSourceData('desktop-route', { type: 'FeatureCollection', features: [line] });\n        var bounds = makeBounds(this.module, coords);\n        if (bounds && this.map) this.map.fitBounds(bounds, { padding: this._routePadding(), maxZoom: 11, duration: 0 });\n      },\n"""
+          count = text.count(block)
+          if count != 1:
+              raise SystemExit(f'expected exactly one legacy drawRoute block, found {count}')
+          updated = text.replace(block, '', 1)
+          if '      drawConditionSections: function(sections) {' not in updated:
+              raise SystemExit('condition layer boundary missing after route removal')
+          path.write_text(updated)
+          PY
+
+          git diff --check
+          git diff -- js/maplibre-renderer.js
+
+      - name: Commit cleanup and remove workflow
+        run: |
+          rm -f .github/workflows/remove-legacy-route-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/maplibre-renderer.js .github/workflows/remove-legacy-route-once.yml
+          git commit -m "refactor: remove legacy MapLibre route implementation"
+          git push origin HEAD:refactor/remove-legacy-maplibre-route
