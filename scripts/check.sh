@@ -16,6 +16,7 @@ node --check js/route-conditions.js
 node --check js/ride-tools.js
 node --check js/maplibre-renderer.js
 node --check js/desktop-dashboard.js
+node --check js/desktop-layout.js
 node --check js/map-provider-config.js
 node --check js/pwa.js
 node --check sw.js
@@ -46,7 +47,7 @@ grep -q 'js/ride-tools.js' index.html
 grep -q 'js/pwa.js' index.html
 grep -q 'manifest.json' index.html
 grep -q 'apple-touch-icon.png' index.html
-! grep -Eq '(unpkg|cdnjs|fonts\\.googleapis)\\.com' index.html
+! grep -Eq '(unpkg|cdnjs|fonts\.googleapis)\.com' index.html
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
