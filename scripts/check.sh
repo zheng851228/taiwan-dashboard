@@ -54,6 +54,8 @@ node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.
 grep -q 'js/main-ui.js' index.html
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
+grep -q 'js/route-navigation-model.js' index.html
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-navigation-model.js'); const runtime=s.indexOf('js/route-conditions.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route navigation model must load before route-conditions.js')"
 grep -q 'js/route-conditions.js' index.html
 node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-condition-view-model.js'); const runtime=s.indexOf('js/route-conditions.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route condition view model must load before route-conditions.js')"
 grep -q 'js/ride-tools.js' index.html
@@ -68,12 +70,16 @@ grep -q 'RouteSearchModel.buildVehicle' js/main-ui.js
 grep -q 'RouteSummaryModel.routeUiCopy' js/main-ui.js
 grep -q 'RouteSummaryModel.normalizeRouteInfo' js/main-ui.js
 grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
+grep -q 'RouteNavigationModel.buildNavigation' js/route-conditions.js
+grep -q 'RouteNavigationModel.appleClickIntent' js/route-conditions.js
+grep -q "Bus.on('vehicle:changed'" js/route-conditions.js
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
 grep -q 'taiwan-dashboard-api-production.lucky851228.workers.dev' sw.js
 grep -q 'js/route-search-model.js?v=44' sw.js
 grep -q 'js/route-summary-model.js?v=44' sw.js
+grep -q 'js/route-navigation-model.js?v=44' sw.js
 grep -q 'js/route-condition-view-model.js?v=44' sw.js
 test -s css/tailwind.generated.css
 test -s assets/icons/icon-192.png
