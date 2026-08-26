@@ -278,8 +278,8 @@
     RouteMod.mode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
     RouteMod.routeCoords = mapCoordinates;
     RouteMod.filteredCams = [];
-    MapMod.drawRoute(mapCoordinates, RouteMod.mode);
-    MapMod.drawStartEnd(AppState.routeAllPoints);
+    Bus.emit('map:request', { action: 'draw-route', coords: mapCoordinates, mode: RouteMod.mode });
+    Bus.emit('map:request', { action: 'draw-start-end', points: AppState.routeAllPoints });
 
     var start = Dom.byId('js-route-start');
     var end = Dom.byId('js-route-end');
