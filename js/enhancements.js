@@ -213,7 +213,7 @@ var NearbyMod = {
     Dom.queryAll('.nearby-cam-item', list).forEach(function(item) {
       Dom.on(item, 'click', function() {
         var cam = camMap[item.dataset.id];
-        if (cam) { InfoMod.open(cam); Bus.emit('map:request', { action: 'set-view', center: [cam.lat, cam.lng], zoom: 14 }); }
+        if (cam) { Bus.emit('camera:open', cam); Bus.emit('map:request', { action: 'set-view', center: [cam.lat, cam.lng], zoom: 14 }); }
       });
     });
   },
@@ -589,7 +589,7 @@ var RouteStripMod = {
         var found = null;
         for (var i = 0; i < allCams.length; i++) { if (allCams[i].id === cam.id) { found = allCams[i]; break; } }
         if (!found) return;
-        InfoMod.open(found);
+        Bus.emit('camera:open', found);
         Bus.emit('map:request', { action: 'set-view', center: [found.lat, found.lng], zoom: 13 });
       });
       scroll.appendChild(card);

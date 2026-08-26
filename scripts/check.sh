@@ -78,10 +78,19 @@ grep -q "Bus.on('vehicle:changed'" js/route-conditions.js
 ! grep -q 'window.ModalMod = ModalMod' js/main-ui.js
 ! grep -q 'window.DesktopElevationMod = DesktopElevationMod' js/desktop-dashboard.js
 ! grep -q 'window.NavMod = NavMod' js/main-ui.js
+! grep -q 'window.InfoMod = InfoMod' js/main-ui.js
 grep -q "Bus.on('navigation:request'" js/main-ui.js
+grep -q "Bus.on('camera:open'" js/main-ui.js
+grep -q "Bus.emit('camera:closed'" js/main-ui.js
 ! grep -q 'NavMod' js/desktop-dashboard.js
 ! grep -q 'NavMod' js/enhancements.js
 ! grep -q 'NavMod' js/ride-tools.js
+! grep -q 'InfoMod' js/enhancements.js
+! grep -q 'InfoMod' js/ride-tools.js
+grep -q "Bus.emit('camera:open'" js/enhancements.js
+grep -q "Bus.emit('camera:open'" js/ride-tools.js
+grep -q "Bus.on('camera:selected'" js/ride-tools.js
+grep -q "Bus.on('camera:closed'" js/ride-tools.js
 grep -q "Bus.on('map:request'" js/main-ui.js
 grep -q "action === 'invalidate-size'" js/main-ui.js
 grep -q "action === 'focus-route'" js/main-ui.js
@@ -101,7 +110,6 @@ grep -q "action: 'nearby-overlay-radius'" js/enhancements.js
 grep -q "action: 'nearby-overlay-clear'" js/enhancements.js
 grep -q "action: 'clear-waypoint-overlays'" js/enhancements.js
 grep -q 'window.MapMod = MapMod' js/main-ui.js
-grep -q 'window.InfoMod = InfoMod' js/main-ui.js
 grep -q 'window.RouteMod = RouteMod' js/main-ui.js
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
