@@ -9,17 +9,6 @@
     congested: '#ef5350',
     unknown: '#94a3b8'
   };
-  var EVENT_COLORS = {
-    accident: '#f43f5e',
-    construction: '#f59e0b',
-    congestion: '#ef4444',
-    control: '#8b5cf6',
-    weather: '#38bdf8',
-    disaster: '#be123c',
-    activity: '#22d3ee',
-    hazard: '#fb923c',
-    other: '#64748b'
-  };
   // Mapterhorn publishes a broad TileJSON envelope, but terrain tiles are
   // only available around Taiwan. Limiting the DEM sources to this coverage
   // keeps MapLibre from requesting surrounding sea/Japan tiles that return
@@ -50,26 +39,6 @@
     return maplibrePromise;
   }
 
-  function toLngLat(point) {
-    return [Number(point[1]), Number(point[0])];
-  }
-
-  function sectionFeature(section) {
-    var coordinates = (section.geometry || []).map(toLngLat)
-      .filter(function(point) { return Number.isFinite(point[0]) && Number.isFinite(point[1]); });
-    if (coordinates.length < 2) return null;
-    var traffic = section.traffic || {};
-    return {
-      type: 'Feature',
-      properties: {
-        order: Number(section.order),
-        level: TRAFFIC_COLORS[traffic.level] ? traffic.level : 'unknown',
-        road: section.roadRef || section.roadName || '沿途路段'
-      },
-      geometry: { type: 'LineString', coordinates: coordinates }
-    };
-  }
-
   function makeBounds(maplibregl, coordinates) {
     var bounds = new maplibregl.LngLatBounds();
     (coordinates || []).forEach(function(point) {
@@ -92,53 +61,6 @@
 
   function reduceMotion() {
     return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  }
-
-  function inferEventKind(incident) {
-    if (incident && EVENT_COLORS[incident.kind]) return incident.kind;
-    var text = String((incident && incident.title || '') + ' ' + (incident && incident.description || ''));
-    if (/事故|車禍|追撞|翻覆/.test(text)) return 'accident';
-    if (/施工|工程|養護|修繕|開挖|割草|清掃/.test(text)) return 'construction';
-    if (/壅塞|車多|回堵/.test(text)) return 'congestion';
-    if (/管制|封閉|改道|疏運/.test(text)) return 'control';
-    if (/濃霧|豪雨|強風|颱風|天氣/.test(text)) return 'weather';
-    if (/落石|坍方|淹水|土石流|災害/.test(text)) return 'disaster';
-    if (/活動|遊行|路跑|節慶|進香/.test(text)) return 'activity';
-    if (/散落物|掉落物|異物|坑洞|故障車|逆行|誤闖|異常/.test(text)) return 'hazard';
-    return 'other';
-  }
-
-  function eventCue(section, incident) {
-    if (!incident || incident.locationApproximate) return null;
-    if (!Number.isFinite(Number(incident.lat)) || !Number.isFinite(Number(incident.lng))) return null;
-    var points = (section.geometry || []).map(function(point) {
-      return [Number(point[0]), Number(point[1])];
-    });
-    if (points.length < 2) return null;
-    var target = [Number(incident.lat), Number(incident.lng)];
-    var nearest = 0;
-    var best = Infinity;
-    points.forEach(function(point, index) {
-      var distance = Math.pow(point[0] - target[0], 2) + Math.pow(point[1] - target[1], 2);
-      if (distance < best) { best = distance; nearest = index; }
-    });
-    var start = Math.max(0, nearest - 2);
-    var end = Math.min(points.length - 1, nearest + 2);
-    if (end <= start) return null;
-    var kind = inferEventKind(incident);
-    return {
-      type: 'Feature',
-      properties: {
-        order: Number(section.order),
-        kind: kind,
-        color: EVENT_COLORS[kind] || EVENT_COLORS.other,
-        label: incident.title || kind
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: points.slice(start, end + 1).map(toLngLat)
-      }
-    };
   }
 
   function markerElement(className, label, color) {
@@ -392,59 +314,6 @@
         this.selectedOrder = null;
         this.currentPreset = 'solid';
         this.eventMarkerCount = 0;
-      },
-      drawConditionSections: function(sections) {
-        var self = this;
-        var sectionFeatures = [];
-        var eventFeatures = [];
-        var weatherFeatures = [];
-        this.eventMarkerCount = 0;
-        this.markers.forEach(function(marker) {
-          var element = marker.getElement && marker.getElement();
-          if (element && element.classList.contains('desktop-event-marker')) marker.remove();
-        });
-        this.markers = this.markers.filter(function(marker) {
-          var element = marker.getElement && marker.getElement();
-          return !(element && element.classList.contains('desktop-event-marker'));
-        });
-        (sections || []).forEach(function(section) {
-          var feature = sectionFeature(section);
-          if (!feature) return;
-          sectionFeatures.push(feature);
-          (section.incidents || []).forEach(function(incident) {
-            var cue = eventCue(section, incident);
-            if (cue) eventFeatures.push(cue);
-            if (self.eventMarkerCount < 6 && !incident.locationApproximate && Number.isFinite(Number(incident.lat)) && Number.isFinite(Number(incident.lng))) {
-              self._addEventMarker(incident, section);
-              self.eventMarkerCount += 1;
-            }
-          });
-          var weather = section.weather || {};
-          if ((weather.condition || '').indexOf('雨') !== -1 || Number(weather.rainChance) >= 60) {
-            var middle = section.geometry[Math.floor(section.geometry.length * 0.62)];
-            if (middle) weatherFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: toLngLat(middle) } });
-          }
-        });
-        this._setSourceData('desktop-sections', { type: 'FeatureCollection', features: sectionFeatures });
-        this._setSourceData('desktop-events', { type: 'FeatureCollection', features: eventFeatures });
-        this._setSourceData('desktop-weather', { type: 'FeatureCollection', features: weatherFeatures });
-        var coords = [];
-        sectionFeatures.forEach(function(feature) { coords = coords.concat(feature.geometry.coordinates.map(function(point) { return [point[1], point[0]]; })); });
-        if (!this.routeCoords.length && coords.length) this.routeCoords = coords;
-        var bounds = makeBounds(this.module, coords);
-        if (bounds && this.map && !this.routeFitApplied) {
-          this.routeFitApplied = true;
-          this.map.fitBounds(bounds, { padding: this._routePadding(), maxZoom: 11, duration: 0 });
-        }
-      },
-      _addEventMarker: function(incident, section) {
-        if (!this.module || !this.map) return;
-        var kind = inferEventKind(incident);
-        var label = (section.roadRef || section.roadName || '沿途路段') + ' · ' + (incident.title || kind);
-        var element = markerElement('desktop-event-marker desktop-event-' + kind, label, EVENT_COLORS[kind]);
-        element.innerHTML = '<span class="desktop-event-icon">' + (kind === 'construction' ? '⚠' : kind === 'accident' ? '!' : kind === 'weather' ? '☁' : '•') + '</span><span class="desktop-event-callout">' + escapeHtml(incident.title || kind) + '</span>';
-        element.addEventListener('click', function() { Bus.emit('condition:select', Number(section.order)); });
-        this.markers.push(new this.module.Marker({ element: element, anchor: 'center' }).setLngLat([Number(incident.lng), Number(incident.lat)]).addTo(this.map));
       },
       drawStartEnd: function(points) {
         if (!this.module || !this.map) return;

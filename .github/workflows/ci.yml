@@ -7,113 +7,13 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  cleanup-legacy-condition:
-    name: Remove legacy condition overlay once
-    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/remove-legacy-maplibre-condition'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout cleanup branch
-        uses: actions/checkout@v4
-        with:
-          ref: refactor/remove-legacy-maplibre-condition
-          fetch-depth: 0
-
-      - name: Remove condition-owned legacy code
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('js/maplibre-renderer.js')
-          text = path.read_text()
-
-          def remove_between(value, start, end, label):
-              if value.count(start) != 1:
-                  raise SystemExit(f'{label}: expected one start marker, found {value.count(start)}')
-              if value.count(end) != 1:
-                  raise SystemExit(f'{label}: expected one end marker, found {value.count(end)}')
-              start_index = value.index(start)
-              end_index = value.index(end, start_index)
-              return value[:start_index] + value[end_index:]
-
-          text = remove_between(
-              text,
-              "  var EVENT_COLORS = {\n",
-              "  // Mapterhorn publishes a broad TileJSON envelope, but terrain tiles are\n",
-              'EVENT_COLORS',
-          )
-          text = remove_between(
-              text,
-              "  function toLngLat(point) {\n",
-              "  function makeBounds(maplibregl, coordinates) {\n",
-              'condition geometry helpers',
-          )
-          text = remove_between(
-              text,
-              "  function inferEventKind(incident) {\n",
-              "  function markerElement(className, label, color) {\n",
-              'condition event helpers',
-          )
-          text = remove_between(
-              text,
-              "      drawConditionSections: function(sections) {\n",
-              "      drawStartEnd: function(points) {\n",
-              'legacy condition renderer methods',
-          )
-
-          forbidden = [
-              'var EVENT_COLORS =',
-              'function toLngLat(point)',
-              'function sectionFeature(section)',
-              'function inferEventKind(incident)',
-              'function eventCue(section, incident)',
-              'drawConditionSections: function(sections)',
-              '_addEventMarker: function(incident, section)',
-          ]
-          for token in forbidden:
-              if token in text:
-                  raise SystemExit(f'legacy condition token remains: {token}')
-
-          required = [
-              'var TRAFFIC_COLORS =',
-              'function makeBounds(maplibregl, coordinates)',
-              'function markerElement(className, label, color)',
-              "map.addSource('desktop-sections'",
-              "map.addSource('desktop-events'",
-              "map.addSource('desktop-weather'",
-              'drawStartEnd: function(points)',
-              'focusSection: function(order)',
-              '_cameraForRoute: function(pitch, bearing)',
-          ]
-          for token in required:
-              if token not in text:
-                  raise SystemExit(f'required shared renderer token missing: {token}')
-
-          path.write_text(text)
-          PY
-
-          node --check js/maplibre-renderer.js
-          git diff --check
-          git diff -- js/maplibre-renderer.js
-
-      - name: Restore CI and commit cleanup
-        run: |
-          git fetch origin main
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add js/maplibre-renderer.js .github/workflows/ci.yml
-          git commit -m "refactor: remove legacy MapLibre condition implementation"
-          git push origin HEAD:refactor/remove-legacy-maplibre-condition
-
   check:
     name: Static checks and unit tests
     runs-on: ubuntu-latest
