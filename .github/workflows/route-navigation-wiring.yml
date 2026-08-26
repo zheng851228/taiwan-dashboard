@@ -1,0 +1,42 @@
+name: Route Navigation Wiring
+
+on:
+  push:
+    branches:
+      - refactor/wire-route-navigation-model
+
+permissions:
+  contents: write
+
+jobs:
+  wiring:
+    name: Wire route navigation model once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout wiring branch
+        uses: actions/checkout@v4
+        with:
+          ref: refactor/wire-route-navigation-model
+          fetch-depth: 0
+
+      - name: Apply route navigation wiring
+        run: |
+          node scripts/wire-route-navigation-runtime.mjs
+          node --check js/route-conditions.js
+          node --check js/route-navigation-model.js
+          node --check sw.js
+          git diff --check
+
+      - name: Commit runtime wiring
+        run: |
+          if git diff --quiet -- index.html js/route-conditions.js sw.js scripts/check.sh; then
+            echo "Route navigation wiring already applied."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/route-conditions.js sw.js scripts/check.sh
+          git commit -m "refactor: delegate external navigation handoff"
+          git push origin HEAD:refactor/wire-route-navigation-model
