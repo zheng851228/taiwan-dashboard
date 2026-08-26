@@ -63,6 +63,38 @@ test('legacy map view commands flow through map:request bus events', async ({ pa
   expect(result.focusRouteCalls).toBe(1);
 });
 
+test('PWA route drawing command flows through map:request bus events', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
+  await page.goto('/');
+
+  await expect.poll(() => page.evaluate(() => Boolean(
+    window.Bus && window.MapMod && window.MapMod.map
+  ))).toBe(true);
+
+  const calls = await page.evaluate(() => {
+    const originalDrawRoute = window.MapMod.drawRoute;
+    const observed = [];
+    window.MapMod.drawRoute = function(coords, mode) {
+      observed.push([coords, mode]);
+    };
+
+    window.Bus.emit('map:request', {
+      action: 'draw-route',
+      coords: [[24.1, 120.6], [24.2, 120.7]],
+      mode: 'motorcycle'
+    });
+    window.Bus.emit('map:request', { action: 'draw-route', coords: [[24.1, 120.6]], mode: 'car' });
+    window.Bus.emit('map:request', { action: 'draw-route', coords: null, mode: 'car' });
+
+    window.MapMod.drawRoute = originalDrawRoute;
+    return observed;
+  });
+
+  expect(calls).toEqual([
+    [[[24.1, 120.6], [24.2, 120.7]], 'motorcycle']
+  ]);
+});
+
 test('route-condition map commands flow through map:request bus events', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
   await page.goto('/');

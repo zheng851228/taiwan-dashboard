@@ -295,6 +295,12 @@
           AppState.waypointMapMarkers = [];
           return;
         }
+        if (action === 'draw-route') {
+          var routeCoords = request && request.coords;
+          if (!Array.isArray(routeCoords) || routeCoords.length < 2) return;
+          MapMod.drawRoute(routeCoords, request && request.mode);
+          return;
+        }
         if (action === 'draw-start-end') {
           MapMod.drawStartEnd(request && request.points);
           return;
