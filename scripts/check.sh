@@ -48,6 +48,8 @@ grep -q 'js/services.js' index.html
 grep -q 'js/data.js' index.html
 grep -q 'js/route-search-model.js' index.html
 node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-search-model.js'); const runtime=s.indexOf('js/main-ui.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route search model must load before main-ui.js')"
+grep -q 'js/route-summary-model.js' index.html
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-summary-model.js'); const runtime=s.indexOf('js/main-ui.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route summary model must load before main-ui.js')"
 grep -q 'js/main-ui.js' index.html
 grep -q 'js/enhancements.js' index.html
 grep -q 'js/route-condition-view-model.js' index.html
@@ -62,11 +64,15 @@ grep -q 'RouteSearchModel.prepareEndpoints' js/main-ui.js
 grep -q 'RouteSearchModel.buildAddressPlan' js/main-ui.js
 grep -q 'RouteSearchModel.unresolvedPointMessage' js/main-ui.js
 grep -q 'RouteSearchModel.buildVehicle' js/main-ui.js
+grep -q 'RouteSummaryModel.routeUiCopy' js/main-ui.js
+grep -q 'RouteSummaryModel.normalizeRouteInfo' js/main-ui.js
+grep -q 'RouteSummaryModel.completionMessage' js/main-ui.js
 grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
 grep -q 'taiwan-dashboard-api-production.lucky851228.workers.dev' sw.js
 grep -q 'js/route-search-model.js?v=44' sw.js
+grep -q 'js/route-summary-model.js?v=44' sw.js
 grep -q 'js/route-condition-view-model.js?v=44' sw.js
 test -s css/tailwind.generated.css
 test -s assets/icons/icon-192.png
