@@ -295,6 +295,28 @@
           AppState.waypointMapMarkers = [];
           return;
         }
+        if (action === 'draw-start-end') {
+          MapMod.drawStartEnd(request && request.points);
+          return;
+        }
+        if (action === 'focus-camera') {
+          var camera = request && request.camera;
+          if (!camera) return;
+          MapMod.focusCam(camera);
+          return;
+        }
+        if (action === 'draw-condition-sections') {
+          var conditionSections = request && request.sections;
+          if (!Array.isArray(conditionSections)) return;
+          MapMod.drawConditionSections(conditionSections);
+          return;
+        }
+        if (action === 'focus-section') {
+          var sectionOrder = Number(request && request.order);
+          if (!Number.isFinite(sectionOrder)) return;
+          MapMod.focusSection(sectionOrder);
+          return;
+        }
         if (action === 'set-view') {
           var center = request && request.center;
           var lat = Array.isArray(center) ? Number(center[0]) : NaN;
