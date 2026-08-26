@@ -2,6 +2,13 @@
 
 This repository-only log records user-facing changes, verification evidence, and release caveats. It is intentionally not linked from the App UI or cached by the Service Worker.
 
+## 2026-08-13 — PWA v44 CCTV preview ready state
+
+- 沿途 CCTV 影像成功載入後會移除「載入影像中」遮罩；切換攝影機時也會忽略前一支影像較晚返回的 load／error 事件。
+- 桌面左欄、路線完成狀態與右側 CCTV 輪播統一顯示合併去重後的沿線影像總數，conditions 或全台快照較晚抵達時會即時更新。
+- 新增真實影像 load 事件與數量一致性的桌面回歸測試；不修改 Worker、API schema、路線安全規則或正式 Worker。
+- Service Worker 清除 v43 shell，發布 PWA v44。
+
 ## 2026-08-13 — PWA v43 route CCTV recovery
 
 - 正式網站優先載入 GitHub Pages 的六小時驗證 CCTV 快照，不再先等待公開 Worker 處理全台大型清單；快照維持 network-only，不進離線 App shell，也不會把離線舊資料標成即時。快照尚未發布時才回退 Worker。

@@ -251,7 +251,7 @@
         : '<span class="desktop-muted">建立路線後顯示施工、壅塞、降雨與資料不足。</span>';
     }
     text('desktop-section-count', data && data.sections ? data.sections.length + ' 段' : '--');
-    text('desktop-camera-count', report ? report.cameraCount + ' 支' : '--');
+    syncCameraCount();
     text('desktop-traffic-coverage', Number.isFinite(Number(overall.coveragePercent)) ? Number(overall.coveragePercent) + '%' : '--');
     text('desktop-weather-coverage', Number.isFinite(Number(overall.weatherCoveragePercent)) ? Number(overall.weatherCoveragePercent) + '%' : '--');
     text('desktop-source-note', data && data.dataMode === 'fixture'
@@ -437,6 +437,19 @@
     return uniqueCameras(conditionCameras.concat(globalRouteCameras));
   }
 
+  function syncCameraCount() {
+    var hasRoute = Boolean(AppState.activeRoute || (window.RouteMod && RouteMod.active));
+    var count = hasRoute ? routeCameras().length : 0;
+    text('desktop-camera-count', hasRoute ? count + ' 支' : '--');
+    var routeStatus = Dom.byId('js-route-status');
+    if (hasRoute && routeStatus && /^安全驗證完成/.test(routeStatus.textContent || '')) {
+      routeStatus.textContent = count > 0
+        ? '安全驗證完成 · ' + count + ' 支沿途現場畫面'
+        : '安全驗證完成 · 沿途暫無現場畫面';
+    }
+    return count;
+  }
+
   function renderCctv() {
     var allCameras = routeCameras();
     var selected = state.sections.find(function(item) { return Number(item.order) === Number(state.selectedOrder); });
@@ -460,11 +473,19 @@
     var safeUrl = safeHttpUrl(camera.url || camera.imageUrl || camera.cam_url);
     if (media) {
       if (safeUrl) {
-        media.innerHTML = '<img alt="' + escapeHtml(camera.name || '沿途 CCTV') + '" src="' + escapeHtml(safeUrl + (safeUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now() / 60000)) + '"><span class="desktop-cctv-placeholder">載入影像中</span>';
+        media.innerHTML = '<img alt="' + escapeHtml(camera.name || '沿途 CCTV') + '" referrerpolicy="no-referrer" src="' + escapeHtml(safeUrl + (safeUrl.indexOf('?') !== -1 ? '&' : '?') + 't=' + Math.floor(Date.now() / 60000)) + '"><span class="desktop-cctv-placeholder">載入影像中</span>';
         var image = media.querySelector('img');
         if (image) {
-          image.referrerPolicy = 'no-referrer';
-          image.addEventListener('error', function() { media.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>影像暫時無法載入</span>'; });
+          var markReady = function() {
+            if (!media.contains(image)) return;
+            var placeholder = media.querySelector('.desktop-cctv-placeholder');
+            if (placeholder) placeholder.remove();
+          };
+          image.addEventListener('load', markReady, { once: true });
+          image.addEventListener('error', function() {
+            if (media.contains(image)) media.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>影像暫時無法載入</span>';
+          }, { once: true });
+          if (image.complete && image.naturalWidth > 0) markReady();
         }
       } else {
         media.innerHTML = '<i class="fa-solid fa-camera"></i><span>此攝影機沒有影像來源</span>';
@@ -855,6 +876,7 @@
     Bus.on('route:updated', function() {
       syncHeader();
       state.cctvIndex = 0;
+      syncCameraCount();
       if (state.renderer) {
         var route = routeCoordinates();
         state.renderer.drawRoute(route, RouteMod.mode);
@@ -880,7 +902,11 @@
       renderCctv();
       if (window.DesktopElevationMod) DesktopElevationMod.clear();
     });
-    Bus.on('filter:changed', function() { if (state.renderer) state.renderer.drawCameras(routeCameras()); renderCctv(); });
+    Bus.on('filter:changed', function() {
+      syncCameraCount();
+      if (state.renderer) state.renderer.drawCameras(routeCameras());
+      renderCctv();
+    });
     Bus.on('camera:selected', function(camera) {
       if (camera && state.renderer) state.renderer.focusPoint(camera.lat, camera.lng, 13);
     });
