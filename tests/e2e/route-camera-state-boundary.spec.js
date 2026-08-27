@@ -1,97 +1,66 @@
-import { expect, test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { gotoFixtureApp } from './helpers/fixture-app.js';
 
-test('route camera consumers use route:updated payload instead of RouteMod.filteredCams', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/');
+const ROUTE_CAMS = [
+  {
+    id: 'route-cam-north',
+    name: 'route camera north',
+    lat: 25.032,
+    lng: 121.565,
+    imageUrl: 'https://example.test/route-camera-north.jpg',
+  },
+  {
+    id: 'route-cam-south',
+    name: 'route camera south',
+    lat: 25.022,
+    lng: 121.575,
+    imageUrl: 'https://example.test/route-camera-south.jpg',
+  },
+];
 
-  await expect.poll(() => page.evaluate(() => Boolean(
-    window.Bus
-      && window.AppState
-      && window.RouteMod
-      && window.RouteStripMod
-      && document.getElementById('desktop-camera-count')
-      && document.getElementById('route-camera-strip')
-      && document.getElementById('strip-count')
-  ))).toBe(true);
+const STALE_CONDITION_CAMS = [
+  {
+    id: 'stale-condition-cam',
+    name: 'stale condition camera',
+    lat: 25.03,
+    lng: 121.56,
+    imageUrl: 'https://example.test/stale-condition-camera.jpg',
+  },
+];
 
-  const result = await page.evaluate(() => {
-    const original = {
-      activeRoute: AppState.activeRoute,
-      filteredCams: RouteMod.filteredCams
-    };
-    const stale = [{ id: 'stale-cam', name: 'Stale camera', lat: 24.1, lng: 120.6 }];
-    const fresh = [
-      { id: 'fresh-a', name: 'Fresh A', lat: 24.15, lng: 120.68 },
-      { id: 'fresh-b', name: 'Fresh B', lat: 24.16, lng: 120.69 }
-    ];
+test.describe('route camera state boundary', () => {
+  test('desktop and strip consume the route camera snapshot without exposing it', async ({ page }) => {
+    test.skip(test.info().project.name !== 'desktop-chromium', 'desktop regression coverage');
 
-    AppState.activeRoute = {
-      routeId: 'route-camera-state-boundary',
-      geometry: {
-        type: 'LineString',
-        coordinates: [[120.68, 24.15], [120.69, 24.16]]
-      }
-    };
-    RouteMod.filteredCams = stale.slice();
+    await page.addInitScript(() => {
+      localStorage.setItem('guide_done_v1', '1');
+    });
+    await gotoFixtureApp(page);
+    await page.waitForFunction(() => window.Bus && window.RouteStripMod && window.DesktopApp);
 
-    Bus.emit('route:updated', { cams: fresh.slice() });
-    RouteStripMod.hide();
-    RouteStripMod.toggle();
+    await page.evaluate(({ routeCams, staleCams }) => {
+      window.Bus.emit('route:updated', { coords: [], cams: routeCams });
+      window.Bus.emit('conditions:updated', {
+        events: [],
+        weather: null,
+        cctv: staleCams,
+        cams: staleCams,
+      });
+      window.DesktopApp.updateConditions([], null, staleCams);
+      window.RouteStripMod.toggle();
+    }, { routeCams: ROUTE_CAMS, staleCams: STALE_CONDITION_CAMS });
 
-    const cameraCount = document.getElementById('desktop-camera-count');
-    const stripCount = document.getElementById('strip-count');
-    const scroll = document.getElementById('route-camera-strip-scroll');
-    const afterPayload = {
-      desktopCameraCount: cameraCount.textContent,
-      stripCount: stripCount.textContent,
-      stripText: scroll.textContent,
-      routeCameraSnapshotCount: RouteStripMod.routeCameras.length
-    };
+    await expect(page.locator('#deskCctvCount')).toHaveText('2 支');
+    await expect(page.locator('#route-camera-strip')).toContainText('route camera north');
+    await expect(page.locator('#route-camera-strip')).not.toContainText('stale condition camera');
+    expect(await page.evaluate(() => Object.prototype.hasOwnProperty.call(window.RouteStripMod, 'routeCameras'))).toBe(false);
 
-    RouteMod.filteredCams = stale.slice();
-    Bus.emit('filter:changed');
-    RouteStripMod.hide();
-    RouteStripMod.toggle();
-    const afterLegacyMutation = {
-      desktopCameraCount: cameraCount.textContent,
-      stripCount: stripCount.textContent,
-      stripText: scroll.textContent,
-      routeCameraSnapshotCount: RouteStripMod.routeCameras.length
-    };
+    await page.evaluate(() => {
+      window.Bus.emit('route:cleared', {});
+      window.RouteStripMod.hide();
+      window.RouteStripMod.toggle();
+    });
 
-    AppState.activeRoute = null;
-    Bus.emit('route:cleared');
-    RouteStripMod.hide();
-    RouteStripMod.toggle();
-    const afterClear = {
-      desktopCameraCount: cameraCount.textContent,
-      routeCameraSnapshotCount: RouteStripMod.routeCameras.length
-    };
-
-    AppState.activeRoute = original.activeRoute;
-    RouteMod.filteredCams = original.filteredCams;
-
-    return { afterPayload, afterLegacyMutation, afterClear };
-  });
-
-  expect(result.afterPayload).toEqual({
-    desktopCameraCount: '2 支',
-    stripCount: '共 2 支',
-    stripText: expect.stringContaining('Fresh A'),
-    routeCameraSnapshotCount: 2
-  });
-  expect(result.afterPayload.stripText).toContain('Fresh B');
-
-  expect(result.afterLegacyMutation.desktopCameraCount).toBe('2 支');
-  expect(result.afterLegacyMutation.stripCount).toBe('共 2 支');
-  expect(result.afterLegacyMutation.stripText).toContain('Fresh A');
-  expect(result.afterLegacyMutation.stripText).toContain('Fresh B');
-  expect(result.afterLegacyMutation.stripText).not.toContain('Stale camera');
-  expect(result.afterLegacyMutation.routeCameraSnapshotCount).toBe(2);
-
-  expect(result.afterClear).toEqual({
-    desktopCameraCount: '--',
-    routeCameraSnapshotCount: 0
+    await expect(page.locator('#route-camera-strip')).not.toHaveClass(/visible/);
   });
 });
