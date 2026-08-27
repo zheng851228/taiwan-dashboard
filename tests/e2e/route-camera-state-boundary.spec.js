@@ -37,16 +37,24 @@ test.describe('route camera state boundary', () => {
     });
     await page.goto('/');
     await expect.poll(() => page.evaluate(() => Boolean(
-      window.Bus && window.RouteMod && window.RouteStripMod && window.DesktopApp
+      window.Bus && window.AppState && window.RouteMod && window.RouteStripMod && window.DesktopApp
+        && document.getElementById('desktop-camera-count')
     ))).toBe(true);
 
     await page.evaluate(({ routeCams, staleCams }) => {
+      window.AppState.activeRoute = {
+        routeId: 'route-camera-boundary',
+        geometry: {
+          type: 'LineString',
+          coordinates: [[121.565, 25.032], [121.575, 25.022]],
+        },
+      };
       window.Bus.emit('route:updated', { coords: [], cams: routeCams });
       window.RouteMod.filteredCams = staleCams.slice();
       window.RouteStripMod.toggle();
     }, { routeCams: ROUTE_CAMS, staleCams: STALE_LEGACY_CAMS });
 
-    await expect(page.locator('#deskCctvCount')).toHaveText('2 支');
+    await expect(page.locator('#desktop-camera-count')).toHaveText('2 支');
     await expect(page.locator('#route-camera-strip')).toContainText('route camera north');
     await expect(page.locator('#route-camera-strip')).not.toContainText('stale legacy camera');
     expect(await page.evaluate(() => Object.prototype.hasOwnProperty.call(window.RouteStripMod, 'routeCameras'))).toBe(false);
