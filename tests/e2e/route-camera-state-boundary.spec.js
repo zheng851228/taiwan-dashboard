@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { gotoFixtureApp } from './helpers/fixture-app.js';
 
 const ROUTE_CAMS = [
   {
@@ -32,11 +31,14 @@ test.describe('route camera state boundary', () => {
   test('desktop and strip consume the route camera snapshot without exposing it', async ({ page }) => {
     test.skip(test.info().project.name !== 'desktop-chromium', 'desktop regression coverage');
 
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.addInitScript(() => {
       localStorage.setItem('guide_done_v1', '1');
     });
-    await gotoFixtureApp(page);
-    await page.waitForFunction(() => window.Bus && window.RouteStripMod && window.DesktopApp);
+    await page.goto('/');
+    await expect.poll(() => page.evaluate(() => Boolean(
+      window.Bus && window.RouteStripMod && window.DesktopApp
+    ))).toBe(true);
 
     await page.evaluate(({ routeCams, staleCams }) => {
       window.Bus.emit('route:updated', { coords: [], cams: routeCams });
