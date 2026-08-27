@@ -17,13 +17,13 @@ const ROUTE_CAMS = [
   },
 ];
 
-const STALE_CONDITION_CAMS = [
+const STALE_LEGACY_CAMS = [
   {
-    id: 'stale-condition-cam',
-    name: 'stale condition camera',
+    id: 'stale-legacy-cam',
+    name: 'stale legacy camera',
     lat: 25.03,
     lng: 121.56,
-    imageUrl: 'https://example.test/stale-condition-camera.jpg',
+    imageUrl: 'https://example.test/stale-legacy-camera.jpg',
   },
 ];
 
@@ -37,24 +37,18 @@ test.describe('route camera state boundary', () => {
     });
     await page.goto('/');
     await expect.poll(() => page.evaluate(() => Boolean(
-      window.Bus && window.RouteStripMod && window.DesktopApp
+      window.Bus && window.RouteMod && window.RouteStripMod && window.DesktopApp
     ))).toBe(true);
 
     await page.evaluate(({ routeCams, staleCams }) => {
       window.Bus.emit('route:updated', { coords: [], cams: routeCams });
-      window.Bus.emit('conditions:updated', {
-        events: [],
-        weather: null,
-        cctv: staleCams,
-        cams: staleCams,
-      });
-      window.DesktopApp.updateConditions([], null, staleCams);
+      window.RouteMod.filteredCams = staleCams.slice();
       window.RouteStripMod.toggle();
-    }, { routeCams: ROUTE_CAMS, staleCams: STALE_CONDITION_CAMS });
+    }, { routeCams: ROUTE_CAMS, staleCams: STALE_LEGACY_CAMS });
 
     await expect(page.locator('#deskCctvCount')).toHaveText('2 支');
     await expect(page.locator('#route-camera-strip')).toContainText('route camera north');
-    await expect(page.locator('#route-camera-strip')).not.toContainText('stale condition camera');
+    await expect(page.locator('#route-camera-strip')).not.toContainText('stale legacy camera');
     expect(await page.evaluate(() => Object.prototype.hasOwnProperty.call(window.RouteStripMod, 'routeCameras'))).toBe(false);
 
     // Clearing the route snapshot must keep the strip closed on the next toggle.
