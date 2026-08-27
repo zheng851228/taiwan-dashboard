@@ -55,6 +55,7 @@ test.describe('route camera state boundary', () => {
     await expect(page.locator('#route-camera-strip')).not.toContainText('stale condition camera');
     expect(await page.evaluate(() => Object.prototype.hasOwnProperty.call(window.RouteStripMod, 'routeCameras'))).toBe(false);
 
+    // Clearing the route snapshot must keep the strip closed on the next toggle.
     await page.evaluate(() => {
       window.Bus.emit('route:cleared', {});
       window.RouteStripMod.hide();
