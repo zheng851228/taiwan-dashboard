@@ -37,7 +37,7 @@ test.describe('route camera state boundary', () => {
     });
     await page.goto('/');
     await expect.poll(() => page.evaluate(() => Boolean(
-      window.Bus && window.AppState && window.RouteMod && window.RouteStripMod && window.DesktopApp
+      window.Bus && window.AppState && window.RouteMod && window.RouteStripMod && window.DesktopDashboardMod
         && document.getElementById('desktop-camera-count')
     ))).toBe(true);
 
