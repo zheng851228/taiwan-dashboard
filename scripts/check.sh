@@ -120,6 +120,11 @@ grep -q "action === 'focus-section'" js/main-ui.js
 ! grep -q 'RouteMod.active' js/enhancements.js
 ! grep -q 'RouteMod.active' js/ride-tools.js
 ! grep -q 'RouteMod.filteredCams' js/desktop-dashboard.js
+! grep -q 'RouteMod.mode' js/desktop-dashboard.js
+! grep -q 'RouteMod.plate' js/desktop-dashboard.js
+! grep -q 'RouteMod' js/desktop-dashboard.js
+grep -Fq "vehicle: { mode: 'motorcycle', plate: 'white' }" js/desktop-dashboard.js
+grep -Fq "mode: event && event.mode === 'car' ? 'car' : 'motorcycle'" js/desktop-dashboard.js
 ! grep -q 'RouteMod.filteredCams' js/enhancements.js
 ! grep -q 'RouteMod.mode' js/enhancements.js
 grep -Fq "historyVehicleMode = event && event.mode === 'car' ? 'car' : 'motorcycle';" js/enhancements.js
