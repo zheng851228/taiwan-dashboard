@@ -419,6 +419,11 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   });
 })();
 
+var historyVehicleMode = 'motorcycle';
+Bus.on('vehicle:changed', function(event) {
+  historyVehicleMode = event && event.mode === 'car' ? 'car' : 'motorcycle';
+});
+
 var HistoryMod = {
   KEY: 'tw_route_history', MAX: 10,
   load: function() {
@@ -431,7 +436,7 @@ var HistoryMod = {
     list.unshift({ start:start, end:end, waypoints:wps||[],
       distance: AppState.lastRouteInfo ? AppState.lastRouteInfo.distance : 0,
       duration: AppState.lastRouteInfo ? AppState.lastRouteInfo.duration : 0,
-      mode: RouteMod ? RouteMod.mode : 'motorcycle', time: Date.now() });
+      mode: historyVehicleMode, time: Date.now() });
     if (list.length > HistoryMod.MAX) list = list.slice(0, HistoryMod.MAX);
     HistoryMod.save(list); HistoryMod.updateCount();
   },
