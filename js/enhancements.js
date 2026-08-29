@@ -547,7 +547,9 @@ var WaypointsMod = {
 };
 
 // ===== 沿途影像輪播 =====
-var RouteStripMod = {
+var RouteStripMod = (function() {
+  var routeCameras = [];
+  var api = {
   show: function(cams) {
     var panel   = Dom.byId('route-camera-strip');
     var scroll  = Dom.byId('route-camera-strip-scroll');
@@ -639,10 +641,20 @@ var RouteStripMod = {
     if (isVisible) {
       RouteStripMod.hide();
     } else {
-      RouteStripMod.show(RouteMod.filteredCams);
+      RouteStripMod.show(routeCameras);
     }
   }
-};
+  };
+
+  Bus.on('route:updated', function(payload) {
+    routeCameras = (payload && payload.cams || []).slice();
+  });
+  Bus.on('route:cleared', function() {
+    routeCameras = [];
+  });
+
+  return api;
+})();
 
 // ===== 地名建議模組 =====
 var PlaceSuggest = {

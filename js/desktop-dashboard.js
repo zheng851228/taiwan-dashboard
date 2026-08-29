@@ -23,6 +23,7 @@
     terrainMode: Storage.get(TERRAIN_PREF_KEY, '2d') === '3d' ? '3d' : '2d',
     cameraPreset: Storage.get(CAMERA_PREF_KEY, 'solid'),
     basemap: Storage.get(BASEMAP_PREF_KEY, 'satellite') === 'satellite' ? 'satellite' : 'dark',
+    routeCameras: [],
     cctvIndex: 0,
     layout: null
   };
@@ -273,7 +274,7 @@
   }
 
   function routeCameras() {
-    var globalRouteCameras = (window.RouteMod && RouteMod.filteredCams || []).slice();
+    var globalRouteCameras = state.routeCameras.slice();
     var conditionCameras = state.sections.reduce(function(result, section) {
       return result.concat(section.cameras || []);
     }, []);
@@ -703,7 +704,8 @@
     });
     Bus.on('route-ui:state', function() { syncHeader(); });
     Bus.on('vehicle:changed', syncHeader);
-    Bus.on('route:updated', function() {
+    Bus.on('route:updated', function(payload) {
+      state.routeCameras = (payload && payload.cams || []).slice();
       syncHeader();
       state.cctvIndex = 0;
       syncCameraCount();
@@ -723,6 +725,7 @@
       renderRouteIntelligence(AppState.routeConditions);
     });
     Bus.on('route:cleared', function() {
+      state.routeCameras = [];
       state.sections = [];
       state.selectedOrder = null;
       state.cctvIndex = 0;

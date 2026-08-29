@@ -76,6 +76,7 @@ test('external route-active consumers use AppState.activeRoute instead of RouteM
     // Legacy flag says inactive, authoritative route state contains a route.
     AppState.activeRoute = testRoute;
     RouteMod.active = false;
+    Bus.emit('route:updated', { coords: [], cams: RouteMod.filteredCams.slice() });
     clearMini.classList.add('hidden');
     Bus.emit('filter:changed');
     const hasRoute = {
