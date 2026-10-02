@@ -185,7 +185,7 @@ test -s css/tailwind.generated.css
 test -s assets/icons/icon-192.png
 test -s assets/icons/icon-512.png
 test -s assets/icons/maskable-512.png
-test -s assets/vendor/leaflet/leaflet.js
+! test -e assets/vendor/leaflet
 test -s assets/vendor/maplibre-gl/maplibre-gl.mjs
 test -s assets/vendor/maplibre-gl/maplibre-gl-shared.mjs
 test -s assets/vendor/maplibre-gl/maplibre-gl-worker.mjs

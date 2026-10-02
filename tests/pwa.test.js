@@ -31,7 +31,7 @@ describe('PWA install and offline assets', () => {
   });
 
   it('keeps the complete app shell local and cacheable', async () => {
-    const [html, pwaScript, styles, serviceWorker, developerChangelog, maplibreRenderer, desktopBootstrap, providerConfig] = await Promise.all([
+    const [html, pwaScript, styles, serviceWorker, developerChangelog, maplibreRenderer, desktopBootstrap, providerConfig, distApp2] = await Promise.all([
       readFile(path.join(root, 'index.html'), 'utf8'),
       readFile(path.join(root, 'js/pwa.js'), 'utf8'),
       readFile(path.join(root, 'css/style.css'), 'utf8'),
@@ -39,27 +39,33 @@ describe('PWA install and offline assets', () => {
       readFile(path.join(root, '.github/DEVELOPER_CHANGELOG.md'), 'utf8'),
       readFile(path.join(root, 'js/maplibre-renderer.js'), 'utf8'),
       readFile(path.join(root, 'js/desktop-bootstrap.js'), 'utf8'),
-      readFile(path.join(root, 'js/map-provider-config.js'), 'utf8')
+      readFile(path.join(root, 'js/map-provider-config.js'), 'utf8'),
+      readFile(path.join(root, 'js/dist/app2.js'), 'utf8')
     ]);
     expect(html).not.toMatch(/(?:unpkg|cdnjs|fonts\.googleapis)\.com/);
-    expect(html).toContain('js/pwa.js');
-    expect(serviceWorker).toContain('./assets/vendor/leaflet/leaflet.js');
+    // App sources are bundled: the shell loads the two hashed chunks, never bare sources.
+    expect(html).toMatch(/js\/dist\/app\.js\?v=[0-9a-f]{7,40}/);
+    expect(html).toMatch(/js\/dist\/app2\.js\?v=[0-9a-f]{7,40}/);
+    expect(html).not.toContain('js/pwa.js');
+    // Leaflet removed: the mobile shell now uses MapLibre GL (same engine as desktop).
+    expect(serviceWorker).not.toContain('leaflet');
     expect(serviceWorker).toContain('./assets/vendor/fontawesome/css/all.min.css');
     expect(serviceWorker).toContain('./assets/icons/apple-touch-icon.png');
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
-    expect(serviceWorker).toContain('const CACHE_VERSION = "v44"');
+    expect(serviceWorker).toMatch(/const CACHE_VERSION = "[0-9a-f]{7,40}"/);
     expect(serviceWorker).toContain('./css/tailwind.generated.css?v=44');
     expect(serviceWorker).toContain('./css/style.css?v=44');
-    expect(html).toContain('js/core.js?v=44');
-    expect(html).toContain('js/pwa.js?v=44');
-    expect(serviceWorker).toContain('./js/core.js?v=44');
-    expect(serviceWorker).toContain('./js/pwa.js?v=44');
+    expect(serviceWorker).toMatch(/\.\/js\/dist\/app\.js\?v=[0-9a-f]{7,40}/);
+    expect(serviceWorker).toMatch(/\.\/js\/dist\/app2\.js\?v=[0-9a-f]{7,40}/);
+    expect(serviceWorker).toMatch(/\.\/js\/dist\/desktop\.js\?v=[0-9a-f]{7,40}/);
     expect(serviceWorker).toContain('/\\/cam-list\\.json$/');
     expect(html).toContain('id="tailwind-style-recovery" class="hidden"');
     expect(html).toContain('id="app-style-recovery" class="app-style-sentinel"');
-    expect(html).toContain('js/desktop-bootstrap.js');
-    expect(serviceWorker).toContain('./js/desktop-bootstrap.js');
+    // desktop-bootstrap.js ships inside app2.js; its 7-file chain is rewritten at
+    // build time to one lazy load of dist/desktop.js (assert on the built bundle).
+    expect(distApp2).toMatch(/\.\/js\/dist\/desktop\.js\?v=[0-9a-f]{7,40}/);
+    expect(distApp2).not.toMatch(/js\/map-provider-config\.js\?v=/);
     expect(serviceWorker).not.toContain('./js/maplibre-renderer.js');
     expect(serviceWorker).not.toContain('./js/desktop-dashboard.js');
     expect(serviceWorker).not.toContain('twdash-shell-v24');

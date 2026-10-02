@@ -118,6 +118,26 @@
         });
     },
 
+    // Viewport-scoped camera fetch (D2): GET /v2/cams?bbox=minLng,minLat,maxLng,maxLat.
+    // bbox must already be snapped/clamped by the caller. Returns the raw `cameras`
+    // array (projected fields); callers normalize via Data.normalizeCams().
+    // signal is optional; an AbortError propagates untouched so callers can tell
+    // cancellation apart from real failures.
+    loadCamsByBbox: function(bbox, signal) {
+      var query = bbox.map(function(v) { return Number(v).toFixed(3); }).join(',');
+      var options = signal ? { signal: signal } : null;
+      return requestJson(
+        Config.WORKER_BASE + '/v2/cams?bbox=' + encodeURIComponent(query),
+        options,
+        'cams'
+      ).then(function(payload) {
+        var data = payload && payload.data;
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.cameras)) return data.cameras;
+        return [];
+      });
+    },
+
     loadWeather: function() {
       setDataStatus('weather', 'loading');
       return requestJson(Config.WORKER_BASE + '/v2/weather', null, 'weather')

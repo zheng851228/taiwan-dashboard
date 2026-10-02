@@ -107,11 +107,43 @@
 
   var _cams = [];
 
+  // Normalize raw camera payloads (full list or /v2/cams?bbox= window) into the
+  // shape the list and map expect. Shared so viewport fetches reuse the exact
+  // same county/cat/searchText derivation as the idle full-list load.
+  function normalizeCamList(apiData) {
+    if (!Array.isArray(apiData)) return [];
+    return apiData
+      .filter(function(c) {
+        var longitude = c.lon !== undefined ? c.lon : c.lng;
+        return c.lat > 21 && c.lat < 27 && longitude > 118 && longitude < 123;
+      })
+      .map(function(c) {
+        var longitude = c.lon !== undefined ? c.lon : c.lng;
+        var cat = classifyCam(String(c.id || ''));
+        var county = guessCounty(String(c.name || ''), c.lat, longitude);
+        var mapped = {
+          id:     String(c.id || ''),
+          name:   String(c.name || '未命名攝影機'),
+          county: county,
+          lat:    c.lat,
+          lng:    longitude,
+          url:    c.cam_url || c.imageUrl || c.url || '',
+          type:   'cctv',
+          cat:    cat,
+          status: c.status || 'unknown',
+          source: c.source || 'CCTV'
+        };
+        mapped.searchText = buildCamKeywords(mapped);
+        return mapped;
+      });
+  }
+
   window.Data = {
     weather: {},
     weatherState: 'idle',
     camsState: 'idle',
     allCams: function() { return _cams; },
+    normalizeCams: normalizeCamList,
     loadDynamic: function() {
       Diag.info('開始載入資料...');
       Data.camsState = 'loading';
@@ -125,30 +157,7 @@
       }).then(function(apiData) {
         Diag.info('cam-list 筆數: ' + (Array.isArray(apiData) ? apiData.length : 'NOT ARRAY'));
         if (Array.isArray(apiData)) {
-          _cams = apiData
-            .filter(function(c) {
-              var longitude = c.lon !== undefined ? c.lon : c.lng;
-              return c.lat > 21 && c.lat < 27 && longitude > 118 && longitude < 123;
-            })
-            .map(function(c) {
-              var longitude = c.lon !== undefined ? c.lon : c.lng;
-              var cat = classifyCam(String(c.id || ''));
-              var county = guessCounty(String(c.name || ''), c.lat, longitude);
-              var mapped = {
-                id:     String(c.id || ''),
-                name:   String(c.name || '未命名攝影機'),
-                county: county,
-                lat:    c.lat,
-                lng:    longitude,
-                url:    c.cam_url || c.imageUrl || c.url || '',
-                type:   'cctv',
-                cat:    cat,
-                status: c.status || 'unknown',
-                source: c.source || 'CCTV'
-              };
-              mapped.searchText = buildCamKeywords(mapped);
-              return mapped;
-            });
+          _cams = normalizeCamList(apiData);
           Diag.ok('CCTV: ' + _cams.length + ' 支');
           AppState.updatedAt.cams = AppState.updatedAt.cams || new Date().toISOString();
           Data.camsState = _cams.length > 0 ? 'ready' : (Data.camsState === 'error' ? 'error' : 'empty');
