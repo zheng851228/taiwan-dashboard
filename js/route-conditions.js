@@ -500,6 +500,7 @@
     var previousRouteId = currentRoute && currentRoute.routeId;
     currentRoute = route || currentRoute;
     if (!currentRoute || !currentRoute.routeId) return;
+    startAutoTimer();
     if (currentRoute.routeId !== previousRouteId) {
       userAdjustedCollapse = false;
       if (shouldUseMobileReadyLayout()) {
@@ -608,6 +609,7 @@
 
   function clear() {
     requestVersion += 1;
+    stopAutoTimer();
     currentRoute = null;
     lastRefreshAt = 0;
     userAdjustedCollapse = false;
@@ -641,10 +643,22 @@
       setNavigationLinks();
       renderAppleLegs(false);
     });
+    startAutoTimer();
+  }
+
+  function startAutoTimer() {
+    if (autoTimer) return;
     autoTimer = window.setInterval(function() {
       if (!currentRoute || document.visibilityState !== 'visible') return;
       if (Date.now() - lastRefreshAt >= AUTO_REFRESH_MS) refresh();
     }, 60000);
+  }
+
+  function stopAutoTimer() {
+    if (autoTimer) {
+      window.clearInterval(autoTimer);
+      autoTimer = null;
+    }
   }
 
   window.RouteConditionsMod = {
