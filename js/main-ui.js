@@ -1654,6 +1654,9 @@
       }
     });
     RouteMod.init();
+    // Google Maps 分享匯入：share target 啟動時帶 ?url= 參數（Android 分享選單；iOS 用貼上框）。
+    // share-import.js 已打包進 app.js，直接呼叫即可。
+    if (window.GoogleMapsShare && window.GoogleMapsShare.init) window.GoogleMapsShare.init();
     ListMod.init();
     InfoMod.init();
     Dom.onId('diag-close', 'click', function() {
