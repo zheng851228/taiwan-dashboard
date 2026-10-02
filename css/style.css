@@ -24,7 +24,7 @@
     .glass { background: rgba(15,23,42,0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
 
     /* CARTO's no-labels base lets the app own the place-name language. These
-       lightweight labels stay readable over both Leaflet and MapLibre maps. */
+       lightweight labels stay readable over the MapLibre map. */
     .local-map-place-label {
       display: inline-flex;
       align-items: center;
@@ -45,7 +45,6 @@
       pointer-events: none;
       user-select: none;
     }
-    .leaflet-marker-icon.local-map-place-label { width: 48px !important; height: 24px !important; }
     body.light .local-map-place-label {
       color: #12352a;
       background: rgba(248,250,252,0.86);
@@ -2456,6 +2455,24 @@ body.light .condition-road-event-icon {
   #desktop-map { display: block; z-index: 2; }
   body.desktop-legacy-map #desktop-map { display: none; }
   body.desktop-legacy-map #map { display: block; }
+  /* Static graceful-degradation notice when WebGL2 is unavailable
+     (no second map stack is maintained). */
+  .map-degraded-notice {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem; pointer-events: none;
+  }
+  .map-degraded-card {
+    pointer-events: auto;
+    max-width: 22rem; text-align: center;
+    background: rgba(15,23,42,0.92);
+    border: 1px solid rgba(148,163,184,0.25);
+    border-radius: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  }
+  .map-degraded-title { color: #f1f5f9; font-weight: 800; font-size: 1rem; margin-bottom: 0.5rem; }
+  .map-degraded-desc { color: #94a3b8; font-size: 0.82rem; line-height: 1.6; }
   .maplibregl-ctrl-group { background: rgba(10,19,30,0.88); border: 1px solid rgba(148,163,184,0.25); }
   .maplibregl-ctrl-group button { filter: invert(.9) hue-rotate(80deg); }
   .maplibregl-ctrl-attrib { background: rgba(7,17,27,0.78) !important; color: #94a3b8; font-size: 0.58rem; }
