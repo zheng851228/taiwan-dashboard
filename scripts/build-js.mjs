@@ -43,9 +43,11 @@ const APP_FILES_A = [
   'js/route-search-model.js',
   'js/route-summary-model.js',
   'js/main-ui.js',
+  'js/share-import.js',
 ];
 const APP_FILES_B = [
   'js/enhancements.js',
+  'js/route-filmstrip.js',
   'js/route-condition-view-model.js',
   'js/route-navigation-model.js',
   'js/route-conditions.js',
