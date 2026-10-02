@@ -329,17 +329,6 @@
     restoreOfflineRoute();
   }
 
-  window.PwaMod = {
-    isStandalone: isStandalone,
-    isIOS: isIOS,
-    isSafari: isSafari,
-    openInstallSheet: openInstallSheet,
-    closeInstallSheet: closeInstallSheet,
-    saveRouteSnapshot: saveRouteSnapshot,
-    getRouteSnapshot: getRouteSnapshot,
-    restoreOfflineRoute: restoreOfflineRoute
-  };
-
   window.addEventListener('load', function() {
     initInstallGuidance();
     initServiceWorker();

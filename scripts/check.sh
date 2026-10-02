@@ -27,6 +27,9 @@ node --check js/desktop-layout.js
 node --check js/map-provider-config.js
 node --check js/pwa.js
 node --check sw.js
+node --check js/dist/app.js
+node --check js/dist/app2.js
+node --check js/dist/desktop.js
 node --check worker/src/polyline.js
 node --check worker/src/rules.js
 node --check worker/src/road-events.js
@@ -37,6 +40,7 @@ node --check worker/src/index.js
 node --check scripts/taiwan-route-cases.mjs
 node --check scripts/audit-taiwan-routes.mjs
 node --check scripts/build-provider-snapshot.mjs
+node --check scripts/build-js.mjs
 
 node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); console.log('manifest ok')"
 node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console.log('package ok')"
@@ -165,10 +169,18 @@ grep -q '/v2/routes' js/services.js
 grep -q 'motor_scooter' worker/src/index.js
 grep -q 'https://taiwan-dashboard-api-production.lucky851228.workers.dev' js/core.js
 grep -q 'taiwan-dashboard-api-production.lucky851228.workers.dev' sw.js
-grep -q 'js/route-search-model.js?v=44' sw.js
-grep -q 'js/route-summary-model.js?v=44' sw.js
-grep -q 'js/route-navigation-model.js?v=44' sw.js
-grep -q 'js/route-condition-view-model.js?v=44' sw.js
+# js dist bundle：dist 檔存在、index.html 與 sw.js 引用一致、版號全部相同
+test -s js/dist/app.js
+test -s js/dist/app2.js
+test -s js/dist/desktop.js
+grep -q 'js/dist/app.js?v=' index.html
+grep -q 'js/dist/app2.js?v=' index.html
+grep -q './js/dist/app.js?v=' sw.js
+grep -q './js/dist/app2.js?v=' sw.js
+grep -q './js/dist/desktop.js?v=' sw.js
+! grep -q 'js/core.js?v=' index.html
+! grep -q './js/core.js?v=' sw.js
+node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');const sw=fs.readFileSync('sw.js','utf8');const vs=new Set();for(const m of html.matchAll(/js\/dist\/app2?\.js\?v=([0-9a-f]+)/g))vs.add(m[1]);for(const m of sw.matchAll(/\"\.\/js\/dist\/(?:app|app2|desktop)\.js\?v=([0-9a-f]+)/g))vs.add(m[1]);const cv=(sw.match(/const CACHE_VERSION = \"([^\"]+)\"/)||[])[1];if(cv)vs.add(cv);if(vs.size!==1)throw new Error('js dist version mismatch: '+[...vs].join(','));console.log('js dist version ok:',[...vs][0])"
 test -s css/tailwind.generated.css
 test -s assets/icons/icon-192.png
 test -s assets/icons/icon-512.png

@@ -5,6 +5,25 @@
 (function() {
   'use strict';
 
+  // Shared recovery-card markup for the two style-failure sentinels in
+  // index.html (#tailwind-style-recovery / #app-style-recovery). One source
+  // of truth so the two screens can never drift apart; the shells stay in
+  // static HTML so their CSS hiding hooks (.hidden / .app-style-sentinel)
+  // keep working even before this script runs.
+  function renderStyleRecoveryOverlays() {
+    var card = '<div style="max-width:480px;margin:22vh auto 0;padding:24px;border:1px solid #334155;border-radius:18px;background:#0f172a;box-shadow:0 18px 48px rgba(0,0,0,.45);">'
+      + '<strong style="display:block;margin-bottom:10px;font-size:20px;">介面樣式正在更新</strong>'
+      + '<span style="display:block;margin-bottom:18px;color:#cbd5e1;line-height:1.6;">核心樣式尚未完整載入，已暫停顯示主畫面以避免內容重疊。已保存的路線與收藏不會刪除。</span>'
+      + '<a href="" style="display:inline-block;padding:10px 18px;border-radius:10px;background:#2f9e64;color:#fff;font-weight:800;text-decoration:none;">重新載入</a>'
+      + '</div>';
+    var ids = ['tailwind-style-recovery', 'app-style-recovery'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && !el.firstChild) el.innerHTML = card;
+    }
+  }
+  renderStyleRecoveryOverlays();
+
   var workerOverride = '';
   var DEFAULT_WORKER_ORIGIN = 'https://taiwan-dashboard-api-production.lucky851228.workers.dev';
   var ALLOWED_WORKER_ORIGINS = new Set([
@@ -572,52 +591,6 @@
       });
     }
     return geocodeName(s);
-  };
-
-  window.simplifyAddress = function(addr) {
-    if (!addr) return addr;
-    addr = addr.trim();
-    if (/^-?[0-9]+\.[0-9]+,-?[0-9]+\.[0-9]+$/.test(addr)) return addr;
-    if (addr.indexOf(' ') !== -1) addr = addr.split(' ')[0];
-    var m = addr.match(/^(.+?(?:路|街|道|巧|大道|大學|博物館|車站|機場|公園|廟|寺|館|院|場|橋|站|港|廠|廣場))/);
-    if (m) return m[1];
-    return addr.slice(0, 20);
-  };
-
-  window.getRoadRoute = function(startLatLng, endLatLng, mode) {
-    Diag.info('路線查詢: ' + startLatLng[0].toFixed(4) + ',' + startLatLng[1].toFixed(4) + ' → ' + endLatLng[0].toFixed(4) + ',' + endLatLng[1].toFixed(4));
-
-    return AppServices.parseRoute(startLatLng, endLatLng, mode)
-    .then(function(payload) {
-      var data = payload.data || {};
-      Diag.add('Worker /route HTTP 200', 'ok');
-      return data;
-    })
-    .then(function(data) {
-      if (data.error) throw new Error(data.error);
-      Diag.ok('路線來源: ' + data.source + ' 距離: ' + data.distance + 'km');
-
-      var coords;
-      if (data.source === 'valhalla' && data.shape) {
-        coords = decodePolyline6(data.shape);
-      } else if (data.source === 'osrm' && data.geojson) {
-        coords = data.geojson.map(function(c) { return [c[1], c[0]]; });
-      }
-
-      Diag.info('路線點數: ' + (coords ? coords.length : 0));
-      if (!coords || coords.length < 5) throw new Error('empty route');
-
-      AppState.lastRouteInfo = {
-        distance: data.distance || 0,
-        duration: data.duration || 0
-      };
-      return coords;
-    })
-    .catch(function(err) {
-      Diag.err('路線失敗: ' + err.message);
-      Diag.show();
-      return [startLatLng, endLatLng];
-    });
   };
 
   // Valhalla encoded polyline6 解碼
