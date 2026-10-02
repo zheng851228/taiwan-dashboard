@@ -4,27 +4,35 @@ import { validateRouteEdges } from './rules.js';
 import {
   buildProviderSnapshotDocument,
   isProviderSnapshotFresh,
+  loadLatestCameraSnapshot,
   loadProviderSnapshotHttpEnvelope,
+  loadSnapshotCountyWeather,
   loadSnapshotProviderData,
   packProviderSnapshot,
   packProviderSnapshotHttpEnvelope,
   providerCameraSnapshotSlotKey,
   providerSnapshotHttpSlotKey,
   providerSnapshotSlotKey,
-  selectRouteSnapshotBucketKeys
+  selectRouteSnapshotBucketKeys,
+  sha256Hex,
+  snapshotContentSha256
 } from './provider-snapshot.js';
 
 export {
   buildProviderSnapshotDocument,
   isProviderSnapshotFresh,
+  loadLatestCameraSnapshot,
   loadProviderSnapshotHttpEnvelope,
+  loadSnapshotCountyWeather,
   loadSnapshotProviderData,
   packProviderSnapshot,
   packProviderSnapshotHttpEnvelope,
   providerCameraSnapshotSlotKey,
   providerSnapshotHttpSlotKey,
   providerSnapshotSlotKey,
-  selectRouteSnapshotBucketKeys
+  selectRouteSnapshotBucketKeys,
+  sha256Hex,
+  snapshotContentSha256
 } from './provider-snapshot.js';
 
 const TDX_TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
@@ -457,13 +465,15 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
     incidentCoverage: providerData.incidentCoverage,
     cameraSnapshotRequired: true
   });
-  const routeCameras = buildRouteCameraSnapshot(providerData.cameras);
   const cameraDocument = buildProviderSnapshotDocument({
     detectors: [],
     publishedTraffic: [],
     incidents: [],
     weather: [],
-    cameras: routeCameras
+    // 注意：這裡放「全量」攝影機（非抽稀），同時服務路線攝影機篩選
+    // 與 /v2/cams bbox API。plate 限制用 roadRef 去重後計算，避免
+    // 11.5k 次重複跑規則引擎。
+    cameras: withCameraRestrictionsDeduped(providerData.cameras)
   }, {
     generatedAt: now.toISOString(),
     gridDegrees: 0.05,
@@ -485,31 +495,24 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
       incidents: providerData.incidents.length,
       weather: providerData.weather.length,
       cameras: providerData.cameras.length,
-      routeCameras: routeCameras.length,
       cells: Object.keys(document.cells).length
     }
   };
 }
 
-function buildRouteCameraSnapshot(cameras) {
-  const gridDegrees = 0.015;
-  const selected = new Map();
-  for (const camera of cameras || []) {
-    const restricted = withCameraRestrictions(camera);
-    const key = `${Math.floor(camera.lat / gridDegrees)}:${Math.floor(camera.lng / gridDegrees)}`;
-    const current = selected.get(key);
-    if (!current || cameraSnapshotRank(restricted) < cameraSnapshotRank(current)) {
-      selected.set(key, restricted);
+/**
+ * 對全量攝影機計算 plate 限制。結果只與 roadRef（或名稱）有關，
+ * 因此按 roadRef 去重後計算，避免對 11.5k 台逐一跑規則引擎。
+ */
+function withCameraRestrictionsDeduped(cameras) {
+  const restrictedByRoad = new Map();
+  return (cameras || []).map((camera) => {
+    const roadKey = camera.roadRef || camera.name || '';
+    if (!restrictedByRoad.has(roadKey)) {
+      restrictedByRoad.set(roadKey, withCameraRestrictions(camera).prohibitedFor);
     }
-  }
-  return [...selected.values()];
-}
-
-function cameraSnapshotRank(camera) {
-  const restrictionScore = Array.isArray(camera.prohibitedFor)
-    ? camera.prohibitedFor.length * 10
-    : 0;
-  return restrictionScore + (camera.status === 'offline' ? 5 : 0);
+    return { ...camera, prohibitedFor: restrictedByRoad.get(roadKey) };
+  });
 }
 
 function withCameraRestrictions(camera) {
@@ -526,8 +529,152 @@ function withCameraRestrictions(camera) {
   return { ...camera, prohibitedFor };
 }
 
-function providerBuildStatus(result, nestedIssues = []) {
-  if (result.status !== 'fulfilled') {
+const SNAPSHOT_KV_TTL_SECONDS = 2 * 60 * 60;
+const CAMS_KV_TTL_SECONDS = 18 * 60 * 60;
+// diff-before-write 的最長跳過間隔：超過此時間即使內容不變也要重寫，
+// 保證 reader 的新鮮度視窗（snapshot 15 分鐘 / camera 12 小時）內一定找得到 slot。
+const SNAPSHOT_MAX_SKIP_MS = 10 * 60 * 1000;
+const CAMS_MAX_SKIP_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * 產出要寫入 KV 的 snapshot entries：2 個 keys + sha256 metadata。
+ * scheduled handler 與手動腳本（scripts/build-provider-snapshot.mjs）共用。
+ *
+ * - snapshot：provider 資料（detectors / publishedTraffic / incidents / weather
+ *   cells），縣市氣象併入 header.countyWeather；5 分鐘 slot；TTL 2h。
+ * - cams：全量攝影機清單（2MB，格子索引）；6 小時 slot；TTL 18h。
+ */
+export async function buildSnapshotKvEntries(env, now = new Date()) {
+  const live = await buildLiveProviderSnapshot(env, now);
+  let countyWeather = {};
+  try {
+    const loaded = await loadCountyWeather(env);
+    if (loaded && typeof loaded === 'object') countyWeather = loaded;
+  } catch {
+    countyWeather = {};
+  }
+  const builtAt = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
+  const snapshotDocument = { ...live.document, countyWeather };
+  const snapshotValue = packProviderSnapshot(snapshotDocument);
+  const cameraValue = packProviderSnapshot(live.cameraDocument);
+  const [snapshotSha, cameraSha] = await Promise.all([
+    snapshotContentSha256(snapshotDocument),
+    snapshotContentSha256(live.cameraDocument)
+  ]);
+  return [
+    {
+      key: live.key,
+      value: snapshotValue,
+      metadata: { sha256: snapshotSha, builtAt },
+      expirationTtl: SNAPSHOT_KV_TTL_SECONDS,
+      compareKeys: [live.key, providerSnapshotSlotKey(now, 1)],
+      maxSkipAgeMs: SNAPSHOT_MAX_SKIP_MS
+    },
+    {
+      key: live.cameraKey,
+      value: cameraValue,
+      metadata: { sha256: cameraSha, builtAt },
+      expirationTtl: CAMS_KV_TTL_SECONDS,
+      compareKeys: [live.cameraKey, providerCameraSnapshotSlotKey(now, 1)],
+      maxSkipAgeMs: CAMS_MAX_SKIP_MS
+    }
+  ];
+}
+
+// ---- /v2/cams?bbox= ----
+
+const TAIWAN_BBOX_LIMIT = { minLng: 119.5, maxLng: 122.5, minLat: 21.8, maxLat: 25.4 };
+const BBOX_MAX_RESULTS = 2000;
+
+/**
+ * 解析並驗證 bbox 參數（minLng,minLat,maxLng,maxLat）。
+ * 驗證後 clamp 到台灣範圍（此即面積上限；輸出另有 2,000 點上限）。
+ * 無效時丟出 Error，由呼叫端轉為 400。
+ */
+export function parseCameraBbox(value) {
+  const parts = String(value ?? '').split(',').map((part) => Number(part.trim()));
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+    throw new Error('bbox 格式錯誤，應為 minLng,minLat,maxLng,maxLat 四個數字');
+  }
+  let [minLng, minLat, maxLng, maxLat] = parts;
+  if (!(minLng < maxLng) || !(minLat < maxLat)) {
+    throw new Error('bbox 範圍錯誤：需要 minLng < maxLng 且 minLat < maxLat');
+  }
+  minLng = Math.min(TAIWAN_BBOX_LIMIT.maxLng, Math.max(TAIWAN_BBOX_LIMIT.minLng, minLng));
+  maxLng = Math.min(TAIWAN_BBOX_LIMIT.maxLng, Math.max(TAIWAN_BBOX_LIMIT.minLng, maxLng));
+  minLat = Math.min(TAIWAN_BBOX_LIMIT.maxLat, Math.max(TAIWAN_BBOX_LIMIT.minLat, minLat));
+  maxLat = Math.min(TAIWAN_BBOX_LIMIT.maxLat, Math.max(TAIWAN_BBOX_LIMIT.minLat, maxLat));
+  if (!(minLng < maxLng) || !(minLat < maxLat)) {
+    throw new Error('bbox 經台灣範圍裁切後為空');
+  }
+  return { minLng, minLat, maxLng, maxLat };
+}
+
+function cameraInBbox(camera, bbox) {
+  const lat = Number(camera?.lat);
+  const lng = Number(camera?.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng)
+    && lat >= bbox.minLat && lat <= bbox.maxLat
+    && lng >= bbox.minLng && lng <= bbox.maxLng;
+}
+
+export function filterCameraListByBbox(cameras, bbox) {
+  return (cameras || []).filter((camera) => cameraInBbox(camera, bbox));
+}
+
+/**
+ * 用 snapshot 文件的格子索引做 bbox 過濾：只解析相交格子的 JSON，
+ * 不必 parse 整包 2MB。回傳精確 bbox 內的攝影機（expanded 物件）。
+ */
+export function filterSnapshotCamerasByBbox(decoded, bbox) {
+  const gridDegrees = Number(decoded?.header?.gridDegrees) > 0
+    ? Number(decoded.header.gridDegrees)
+    : 0.05;
+  const latStart = Math.floor(bbox.minLat / gridDegrees);
+  const latEnd = Math.floor(bbox.maxLat / gridDegrees);
+  const lngStart = Math.floor(bbox.minLng / gridDegrees);
+  const lngEnd = Math.floor(bbox.maxLng / gridDegrees);
+  const cameras = [];
+  for (let latCell = latStart; latCell <= latEnd; latCell += 1) {
+    for (let lngCell = lngStart; lngCell <= lngEnd; lngCell += 1) {
+      let cell;
+      try {
+        cell = decoded.readCell(`${latCell}:${lngCell}`);
+      } catch {
+        continue;
+      }
+      if (cell && Array.isArray(cell.cameras)) cameras.push(...cell.cameras);
+    }
+  }
+  return cameras.filter((camera) => cameraInBbox(camera, bbox));
+}
+
+/**
+ * 回傳欄位投影 + 上限。注意：後端攝影機資料沒有 county 欄位
+ *（county 是前端用名稱關鍵字推斷的），此處投影 roadRef/imageUrl 替代。
+ */
+export function projectBboxCameras(cameras, limit = BBOX_MAX_RESULTS) {
+  const items = [];
+  let total = 0;
+  for (const camera of cameras || []) {
+    total += 1;
+    if (items.length < limit) {
+      items.push({
+        id: camera.id,
+        lat: camera.lat,
+        lng: camera.lng,
+        name: camera.name,
+        status: camera.status || 'unknown',
+        roadRef: camera.roadRef || '',
+        imageUrl: camera.imageUrl || '',
+        source: camera.source || 'CCTV'
+      });
+    }
+  }
+  return { items, total, truncated: total > limit };
+}
+
+function providerBuildStatus(result, nestedIssues = []) {  if (result.status !== 'fulfilled') {
     return { status: 'failed', fetchedAt: null };
   }
   return {
