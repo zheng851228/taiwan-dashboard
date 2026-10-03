@@ -113,13 +113,19 @@
   var ClockMod = {
     init: function() {
       var clk = Dom.byId('js-clk');
+      var lastText = '';
       function tick() {
+        if (!clk || document.visibilityState === 'hidden') return;
         var n = new Date();
         var h = String(n.getHours()).padStart(2,'0');
         var m = String(n.getMinutes()).padStart(2,'0');
         var s = String(n.getSeconds()).padStart(2,'0');
         var desktopClock = window.matchMedia && window.matchMedia('(min-width: 1200px)').matches;
-        if (clk) clk.textContent = desktopClock ? h+':'+m : h+':'+m+':'+s;
+        var text = desktopClock ? h+':'+m : h+':'+m+':'+s;
+        if (text !== lastText) {
+          clk.textContent = text;
+          lastText = text;
+        }
       }
       tick(); setInterval(tick, 1000);
     }

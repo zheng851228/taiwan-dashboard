@@ -502,6 +502,15 @@ function rateLimitDescriptor(path, method, url) {
   if (method === 'GET' && (path === '/v2/expand' || (path === '/' && url.searchParams.has('url')))) {
     return { binding: 'LOOKUP_RATE_LIMITER', group: 'map-expand', limit: 60 };
   }
+  if (method === 'GET' && path === '/v2/cams') {
+    return { binding: 'LOOKUP_RATE_LIMITER', group: 'cams', limit: 60 };
+  }
+  if (method === 'GET' && path === '/v2/weather') {
+    return { binding: 'LOOKUP_RATE_LIMITER', group: 'weather', limit: 60 };
+  }
+  if (method === 'GET' && /^\/v2\/routes\/[^/]+\/conditions$/.test(path) && url.searchParams.get('refresh') !== '1') {
+    return { binding: 'LOOKUP_RATE_LIMITER', group: 'conditions', limit: 60 };
+  }
   return null;
 }
 

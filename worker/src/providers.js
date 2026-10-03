@@ -1564,7 +1564,17 @@ export async function expandMapUrl(rawUrl) {
   }
   for (let redirectCount = 0; redirectCount < 5; redirectCount += 1) {
     validateMapUrl(current);
-    const response = await fetch(current.toString(), { redirect: 'manual' });
+    let response;
+    try {
+      response = await fetch(current.toString(), { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    } catch (error) {
+      if (error && error.name === 'TimeoutError') {
+        const timeoutError = new Error('地圖網址請求逾時');
+        timeoutError.status = 504;
+        throw timeoutError;
+      }
+      throw error;
+    }
     if (response.status < 300 || response.status >= 400) return current.toString();
     const location = response.headers.get('location');
     if (!location) return current.toString();

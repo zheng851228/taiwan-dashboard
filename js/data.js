@@ -183,6 +183,20 @@
     }
   };
 
-  window.Data.loadDynamic();
+  // cam-list.json 約 2MB，不在首屏關鍵路徑上：等頁面載入完成、瀏覽器閒置時
+  // 再抓，避免跟首屏 JS/CSS/字型/圖磚搶頻寬。行為不變——資料到達後照常
+  // 觸發 cams:updated，列表與路線攝影機重繪邏輯原本就處理延遲到達。
+  function scheduleCamListLoad() {
+    var run = function() {
+      if (window.Data.camsState === 'idle') window.Data.loadDynamic();
+    };
+    var kick = function() {
+      if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 5000 });
+      else setTimeout(run, 1500);
+    };
+    if (document.readyState === 'complete') kick();
+    else window.addEventListener('load', kick);
+  }
+  scheduleCamListLoad();
   window.Data.fetchWeather();
 })();
