@@ -3466,3 +3466,36 @@ body.light #pwa-install-nudge-close { color: var(--ui-text-secondary); backgroun
   .map-control-stack, #nearby-panel { bottom: calc(var(--desktop-bottom-rail) + .7rem) !important; }
   #desktop-elevation-chart { min-height: 5.2rem; }
 }
+
+/* === route-filmstrip.js：沿途 CCTV 膠卷增強（新鮮度 + 休息站重檢） === */
+/* 卡片放大到手機可視尺寸（覆蓋上方 .strip-cam 140px） */
+.strip-cam { flex: 0 0 240px; width: 240px; }
+.strip-cam-img { height: 135px; }
+/* 新鮮度 badge：左上小藥丸，綠點 = 新鮮 */
+.strip-cam-fresh {
+  position: absolute; top: 6px; left: 6px; z-index: 2;
+  font-size: 9px; font-weight: 800; color: #e2e8f0;
+  background: rgba(2,6,23,0.72);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 2px 7px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px;
+  pointer-events: none; white-space: nowrap;
+}
+.strip-cam-fresh::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e; flex-shrink: 0;
+}
+/* 疑似過期（>15 分鐘未更新）：影像灰階 + 琥珀色 badge */
+.strip-cam.is-stale .strip-cam-img img { filter: grayscale(0.7) brightness(0.75); }
+.strip-cam.is-stale .strip-cam-fresh { color: #fbbf24; border-color: rgba(251,191,36,0.5); }
+.strip-cam.is-stale .strip-cam-fresh::before { background: #f59e0b; }
+/* 路線 banner 內的「休息站重檢」按鈕 */
+.rb-action-btn {
+  font-size: 10px; font-weight: 700; color: #38bdf8;
+  background: transparent; border: none; cursor: pointer;
+  margin-left: 4px; padding: 2px 4px;
+  display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
+.rb-action-btn:hover { color: #7dd3fc; }
+.rb-action-btn:disabled { opacity: 0.5; cursor: wait; }

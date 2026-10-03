@@ -13,6 +13,11 @@
   "background_color": "#060d1f",
   "theme_color": "#f97316",
   "categories": ["navigation", "travel", "utilities"],
+  "share_target": {
+    "action": "./?shared=1",
+    "method": "GET",
+    "params": { "url": "url", "text": "text", "title": "title" }
+  },
   "icons": [
     {
       "src": "assets/icons/icon-192.png",
