@@ -22,7 +22,8 @@
  * desktop-bootstrap.js 的處理：
  *  它原本用 loadScript 逐一載入 7 個桌機檔。build 時把這段鏈改寫成只載入
  *  單一的 js/dist/desktop.js（正則嚴格錨定，找不到就直接報錯停下，不靜默）。
- *  既有的 ≥1200px gating、media 變化監聽、Leaflet fallback 行為完全保留。
+ *  既有的 ≥1200px gating、media 變化監聽完全保留；載入失敗或無 WebGL2 時
+ *  顯示靜態降級訊息（不再維護第二套地圖）。
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -50,6 +51,11 @@ const APP_FILES_B = [
   'js/route-conditions.js',
   'js/ride-tools.js',
   'js/desktop-bootstrap.js',
+  'js/map-geo-utils.js',
+  'js/maplibre-renderer.js',
+  'js/maplibre-camera-layer.js',
+  'js/maplibre-route-layer.js',
+  'js/maplibre-condition-layer.js',
   'js/pwa.js',
 ];
 
@@ -75,7 +81,7 @@ function read(rel) {
  */
 function rewriteBootstrapLoadChain(src, version) {
   const chainRe =
-    /loading = loadScript\('\.\/js\/map-provider-config\.js\?v=[^']*'\)(?:\s*\.then\(function\(\) \{\s*return loadScript\('[^']*'\);\s*\}\))+?\s*\.catch\(function\(\) \{\s*showLeafletFallback\(\);\s*\}\);/;
+    /loading = loadScript\('\.\/js\/map-provider-config\.js\?v=[^']*'\)(?:\s*\.then\(function\(\) \{\s*return loadScript\('[^']*'\);\s*\}\))+?\s*\.catch\(function\(\) \{\s*showMapDegradedNotice\(\);\s*\}\);/;
   if (!chainRe.test(src)) {
     throw new Error(
       'desktop-bootstrap.js: expected 7-file dynamic load chain not found; ' +
@@ -84,7 +90,7 @@ function rewriteBootstrapLoadChain(src, version) {
   }
   return src.replace(
     chainRe,
-    `loading = loadScript('./js/dist/desktop.js?v=${version}').catch(function() { showLeafletFallback(); });`
+    `loading = loadScript('./js/dist/desktop.js?v=${version}').catch(function() { showMapDegradedNotice(); });`
   );
 }
 
@@ -112,16 +118,16 @@ function bundle(files, outRel, version) {
 function injectIndexHtml(version) {
   const file = path.join(ROOT, 'index.html');
   const html = fs.readFileSync(file, 'utf8');
-  // 同時相容「尚未打包（13 個 ?v=…）」與「已打包過（兩個 ?v=<sha>）」兩種狀態，
-  // 讓重複執行 build 是冪等的。
+  // 同時相容「尚未打包（多個 ?v=…）」與「已打包過（兩個 ?v=<sha>）」兩種狀態，
+  // 讓重複執行 build 是冪等的。（Leaflet 已移除，不再以其 script 標籤為錨點。）
   const blockRe =
-    /(<script src="assets\/vendor\/leaflet\/leaflet\.js"><\/script>\r?\n)(?:<script src="js\/(?:[A-Za-z0-9-]+\.js|dist\/app2?\.js)\?v=[^"]*"><\/script>\r?\n)+/;
+    /(?:<script src="js\/(?:[A-Za-z0-9-]+\.js|dist\/app2?\.js)\?v=[^"]*"><\/script>\r?\n)+/;
   const m = html.match(blockRe);
   if (!m) {
     throw new Error('index.html: script block not found; update injectIndexHtml() in scripts/build-js.mjs');
   }
   const replacement =
-    `${m[1]}<script src="js/dist/app.js?v=${version}"></script>\n` +
+    `<script src="js/dist/app.js?v=${version}"></script>\n` +
     `<script src="js/dist/app2.js?v=${version}"></script>\n`;
   fs.writeFileSync(file, html.slice(0, m.index) + replacement + html.slice(m.index + m[0].length));
 }

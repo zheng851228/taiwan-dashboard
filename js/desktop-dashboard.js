@@ -371,7 +371,7 @@
     if (legacyMap) legacyMap.style.display = legacy || !state.desktop ? 'block' : 'none';
     if (legacy) window.setTimeout(function() { Bus.emit('map:request', { action: 'invalidate-size' }); }, 80);
     var setting = Dom.byId('desktop-map-mode-state');
-    if (setting) setting.textContent = legacy ? '傳統地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖');
+    if (setting) setting.textContent = legacy ? '2D 地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖');
     syncCameraControls();
   }
 
@@ -451,7 +451,13 @@
   function enableRenderer() {
     if (!state.desktop) return;
     var preference = Storage.get(MAP_PREF_KEY, 'auto');
-    if (preference === 'legacy' || !window.MapRenderer) {
+    // The Leaflet "traditional map" no longer exists; migrate any stored
+    // 'legacy' preference to the unified MapLibre renderer.
+    if (preference === 'legacy') {
+      Storage.set(MAP_PREF_KEY, 'auto');
+      preference = 'auto';
+    }
+    if (!window.MapRenderer) {
       destroyRenderer();
       showLegacyMap(true);
       return;
@@ -503,7 +509,7 @@
       onFallback: function() {
         destroyRenderer();
         showLegacyMap(true);
-        Toast.show('3D 地圖暫時無法載入，已切換傳統地圖', 4000);
+        Toast.show('3D 地圖暫時無法載入，已切換 2D 地圖', 4000);
       },
       onCameraState: function(camera) {
         if (!camera || camera.preset === 'custom') {
@@ -668,12 +674,6 @@
       syncTerrainControls();
       syncCameraControls();
       DesktopElevationMod.refresh();
-    });
-    Dom.onId('desktop-map-legacy', 'click', function() {
-      Storage.set(MAP_PREF_KEY, 'legacy');
-      destroyRenderer();
-      showLegacyMap(true);
-      syncSettings();
     });
     Dom.onAll('.desktop-vehicle-tab', 'click', function(button) {
       Bus.emit('route:request', { action: 'set-vehicle', mode: button.dataset.desktopMode, plate: button.dataset.desktopPlate || 'white' });

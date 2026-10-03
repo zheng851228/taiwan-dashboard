@@ -35,6 +35,38 @@ export function isProviderSnapshotFresh(
     && age <= Number(maxAgeMs);
 }
 
+/**
+ * 正規化 JSON 序列化：遞迴排序 object keys。浮點數用 JSON.stringify
+ * 本身的 shortest-roundtrip 表示法，對相同 double 值具確定性。
+ * 用於 diff-before-write 的內容雜湊（排除 generatedAt 等揮發欄位）。
+ */
+export function stableStringify(value) {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+export async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(String(text));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Snapshot 內容雜湊（供 diff-before-write）：排除 generatedAt，
+ * 讓相同上游資料在不同次執行下雜湊一致。
+ */
+export async function snapshotContentSha256(document) {
+  const { generatedAt: _ignored, ...stable } = document || {};
+  return sha256Hex(stableStringify(stable));
+}
+
 export function selectRouteSnapshotBucketKeys(sections, bucketConfig = {}) {
   const gridDegrees = positiveNumber(bucketConfig.gridDegrees, DEFAULT_GRID_DEGREES);
   const configuredHalo = Number(bucketConfig.halo);
@@ -331,6 +363,9 @@ export function buildProviderSnapshotDocument(providerData, options = {}) {
     issues: options.issues || providerData.issues || [],
     cameraSnapshotRequired: Boolean(options.cameraSnapshotRequired),
     routeHalo: Number(options.routeHalo) || 1,
+    countyWeather: options.countyWeather && typeof options.countyWeather === 'object'
+      ? options.countyWeather
+      : {},
     cells: Object.fromEntries([...cells.entries()].sort(([a], [b]) => a.localeCompare(b)))
   };
 }
@@ -359,6 +394,9 @@ export function packProviderSnapshot(snapshot) {
     issues: snapshot.issues || [],
     cameraSnapshotRequired: Boolean(snapshot.cameraSnapshotRequired),
     routeHalo: Number(snapshot.routeHalo) || 1,
+    countyWeather: snapshot.countyWeather && typeof snapshot.countyWeather === 'object'
+      ? snapshot.countyWeather
+      : {},
     encoding: 'compact-v1',
     cellIndex
   };
@@ -429,7 +467,7 @@ export async function loadProviderSnapshotHttpEnvelope(kind, env, options = {}) 
   return null;
 }
 
-function decodeProviderSnapshot(raw) {
+export function decodeProviderSnapshot(raw) {
   if (typeof raw === 'object' && raw !== null) {
     return {
       header: raw,
@@ -471,8 +509,85 @@ function decodeProviderSnapshot(raw) {
   };
 }
 
-async function findCameraSnapshot(readSnapshot, now) {
-  const maxAgeMs = 12 * 60 * 60 * 1000;
+/**
+ * 讀取最新的攝影機快照（供 /v2/cams bbox API）。
+ * 回傳 { decoded, sha256, key }；KV miss 或過期時回傳 null。
+ * sha256 來自寫入時的 KV metadata（diff-before-write 留下），供 ETag 使用。
+ */
+export async function loadLatestCameraSnapshot(env, options = {}) {
+  const now = options.now || new Date();
+  const binding = env.PROVIDER_SNAPSHOTS || env.ROUTE_CACHE;
+  if (!binding) return null;
+  const maxAgeMs = positiveNumber(options.maxAgeMs, 12 * 60 * 60 * 1000);
+  for (let offset = 0; offset < 3; offset += 1) {
+    const key = providerCameraSnapshotSlotKey(now, offset);
+    let result;
+    try {
+      result = binding.getWithMetadata
+        ? await binding.getWithMetadata(key, { type: 'text', cacheTtl: 60 })
+        : { value: await binding.get(key, { type: 'text', cacheTtl: 60 }), metadata: null };
+    } catch {
+      continue;
+    }
+    const raw = result && typeof result === 'object' && 'value' in result ? result.value : result;
+    if (raw === null || raw === undefined) continue;
+    try {
+      const decoded = decodeProviderSnapshot(raw);
+      if (
+        decoded.header.schemaVersion === SNAPSHOT_SCHEMA_VERSION
+        && isProviderSnapshotFresh(decoded.header, now, maxAgeMs)
+      ) {
+        const metadata = result && typeof result === 'object' ? result.metadata : null;
+        return {
+          decoded,
+          sha256: metadata && typeof metadata.sha256 === 'string' ? metadata.sha256 : null,
+          key
+        };
+      }
+    } catch {
+      // Try the previous immutable camera slot.
+    }
+  }
+  return null;
+}
+
+/**
+ * 讀取最新的縣市氣象（供 /v2/weather 快照模式）。
+ * 縣市氣象併入 provider snapshot 文件的 header.countyWeather。
+ */
+export async function loadSnapshotCountyWeather(env, options = {}) {
+  const now = options.now || new Date();
+  const binding = env.PROVIDER_SNAPSHOTS || env.ROUTE_CACHE;
+  if (!binding) return null;
+  const maxAgeMs = positiveNumber(options.maxAgeMs, 60 * 60 * 1000);
+  const attempts = Math.max(2, Math.ceil(maxAgeMs / SNAPSHOT_SLOT_MS) + 1);
+  for (let offset = 0; offset < attempts; offset += 1) {
+    let raw;
+    try {
+      raw = await binding.get(providerSnapshotSlotKey(now, offset), { type: 'text', cacheTtl: 60 });
+    } catch {
+      continue;
+    }
+    if (raw === null || raw === undefined) continue;
+    try {
+      const decoded = decodeProviderSnapshot(raw);
+      if (
+        decoded.header.schemaVersion === SNAPSHOT_SCHEMA_VERSION
+        && isProviderSnapshotFresh(decoded.header, now, maxAgeMs)
+        && decoded.header.countyWeather
+        && typeof decoded.header.countyWeather === 'object'
+        && Object.keys(decoded.header.countyWeather).length > 0
+      ) {
+        return decoded.header.countyWeather;
+      }
+    } catch {
+      // Try the previous immutable slot.
+    }
+  }
+  return null;
+}
+
+async function findCameraSnapshot(readSnapshot, now) {  const maxAgeMs = 12 * 60 * 60 * 1000;
   for (let offset = 0; offset < 3; offset += 1) {
     let raw;
     try {

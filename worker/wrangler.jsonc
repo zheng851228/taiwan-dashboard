@@ -3,6 +3,9 @@
   "name": "taiwan-dashboard-api",
   "main": "src/index.js",
   "compatibility_date": "2026-07-01",
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "vars": {
     "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
     "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",

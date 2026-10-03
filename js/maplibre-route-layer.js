@@ -6,10 +6,13 @@
   'use strict';
 
   function toLngLat(point) {
-    return [Number(point[1]), Number(point[0])];
+    return window.MapGeoUtils
+      ? window.MapGeoUtils.toLngLat(point)
+      : [Number(point[1]), Number(point[0])];
   }
 
   function makeBounds(maplibregl, coordinates) {
+    if (window.MapGeoUtils) return window.MapGeoUtils.makeBounds(maplibregl, coordinates);
     if (!maplibregl || typeof maplibregl.LngLatBounds !== 'function') return null;
     var bounds = new maplibregl.LngLatBounds();
     (coordinates || []).forEach(function(point) {

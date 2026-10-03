@@ -1,12 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  buildLiveProviderSnapshot,
-  loadCountyWeather,
-  packProviderSnapshotHttpEnvelope,
-  providerSnapshotHttpSlotKey
-} from '../worker/src/providers.js';
+import { buildSnapshotKvEntries } from '../worker/src/providers.js';
 
+/**
+ * 手動備援：本機建置 provider snapshot 的 2 個 KV keys（snapshot + cams），
+ * 輸出 JSON 可直接餵給 `wrangler kv bulk put`（格式 {key, value, expiration, metadata}）。
+ *
+ * 用法：
+ *   node scripts/build-provider-snapshot.mjs [--now=ISO] [--vars-file=worker/.dev.vars] [--output=/tmp/...]
+ *   wrangler kv bulk put --namespace-id <id> --env staging /tmp/taiwan-dashboard-provider-snapshot.json
+ *
+ * 注意：cron 的 scheduled() 才是主要寫入路徑（自動 diff-before-write）；
+ * 此腳本是 workflow_dispatch / 手動回填用的備援。
+ */
 const options = parseArgs(process.argv.slice(2));
 const now = options.now ? new Date(options.now) : new Date();
 if (Number.isNaN(now.getTime())) throw new Error('Invalid --now value');
@@ -24,64 +30,24 @@ const env = {
   ...parseVarsFile(fs.readFileSync(varsFile, 'utf8'))
 };
 
-const live = await buildLiveProviderSnapshot(env, now);
-let countyWeather = {};
-let weatherIssue = '';
-try {
-  countyWeather = await loadCountyWeather(env);
-} catch (error) {
-  weatherIssue = error.message || 'unavailable';
-}
+// 與 Worker scheduled() 共用同一份 builder：2 keys（snapshot + cams）。
+const entries = await buildSnapshotKvEntries(env, now);
 
-const updatedAt = now.toISOString();
-const camerasEnvelope = {
-  status: live.providerData.cameras.length ? 'ok' : 'partial',
-  updatedAt,
-  data: live.providerData.cameras,
-  message: live.providerData.cameras.length ? '' : '攝影機快照暫時沒有資料'
-};
-const weatherEnvelope = {
-  status: Object.keys(countyWeather).length ? 'ok' : 'partial',
-  updatedAt,
-  data: countyWeather,
-  message: Object.keys(countyWeather).length
-    ? ''
-    : `氣象快照暫時沒有資料${weatherIssue ? `：${weatherIssue}` : ''}`
-};
-
-const entries = [
-  {
-    key: live.key,
-    value: live.value,
-    expiration: unixSeconds(now.getTime() + 2 * 60 * 60 * 1000)
-  },
-  {
-    key: live.cameraKey,
-    value: live.cameraValue,
-    expiration: unixSeconds(now.getTime() + 18 * 60 * 60 * 1000)
-  },
-  {
-    key: providerSnapshotHttpSlotKey('cams', now),
-    value: packProviderSnapshotHttpEnvelope(camerasEnvelope, updatedAt),
-    expiration: unixSeconds(now.getTime() + 18 * 60 * 60 * 1000)
-  },
-  {
-    key: providerSnapshotHttpSlotKey('weather', now),
-    value: packProviderSnapshotHttpEnvelope(weatherEnvelope, updatedAt),
-    expiration: unixSeconds(now.getTime() + 3 * 60 * 60 * 1000)
-  }
-];
+const output = entries.map((entry) => ({
+  key: entry.key,
+  value: entry.value,
+  expiration: unixSeconds(now.getTime() + entry.expirationTtl * 1000),
+  metadata: entry.metadata
+}));
 
 fs.mkdirSync(path.dirname(outputFile), { recursive: true });
-fs.writeFileSync(outputFile, JSON.stringify(entries));
+fs.writeFileSync(outputFile, JSON.stringify(output));
 
-const bytes = entries.reduce((sum, entry) => sum + Buffer.byteLength(entry.value), 0);
+const bytes = output.reduce((sum, entry) => sum + Buffer.byteLength(entry.value), 0);
 console.log(JSON.stringify({
   output: outputFile,
-  generatedAt: updatedAt,
-  keys: entries.map((entry) => entry.key),
-  counts: live.counts,
-  issues: live.providerData.issues,
+  generatedAt: now.toISOString(),
+  keys: output.map((entry) => ({ key: entry.key, sha256: entry.metadata.sha256 })),
   bytes
 }, null, 2));
 

@@ -4,14 +4,14 @@
 (function() {
   'use strict';
 
-  var TRAFFIC_COLORS = {
+  var TRAFFIC_COLORS = window.MapGeoUtils ? window.MapGeoUtils.TRAFFIC_COLORS : {
     clear: '#52b788',
     slow: '#f6c945',
     congested: '#ef5350',
     unknown: '#94a3b8'
   };
 
-  var EVENT_COLORS = {
+  var EVENT_COLORS = window.MapGeoUtils ? window.MapGeoUtils.EVENT_COLORS : {
     accident: '#f43f5e',
     construction: '#f59e0b',
     congestion: '#ef4444',
@@ -24,7 +24,9 @@
   };
 
   function toLngLat(point) {
-    return [Number(point[1]), Number(point[0])];
+    return window.MapGeoUtils
+      ? window.MapGeoUtils.toLngLat(point)
+      : [Number(point[1]), Number(point[0])];
   }
 
   function escapeHtmlValue(value) {
@@ -54,6 +56,7 @@
   }
 
   function inferEventKind(incident) {
+    if (window.MapGeoUtils) return window.MapGeoUtils.inferRoadEventKind(incident);
     if (incident && EVENT_COLORS[incident.kind]) return incident.kind;
     var text = String((incident && incident.title || '') + ' ' + (incident && incident.description || ''));
     if (/事故|車禍|追撞|翻覆/.test(text)) return 'accident';
@@ -124,6 +127,7 @@
   }
 
   function makeBounds(maplibregl, coordinates) {
+    if (window.MapGeoUtils) return window.MapGeoUtils.makeBounds(maplibregl, coordinates);
     if (!maplibregl || typeof maplibregl.LngLatBounds !== 'function') return null;
     var bounds = new maplibregl.LngLatBounds();
     (coordinates || []).forEach(function(point) {

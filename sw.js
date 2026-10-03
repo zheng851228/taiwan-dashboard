@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v44";
+const CACHE_VERSION = "4fa5930";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -13,30 +13,15 @@ const SHELL_URLS = [
   "./assets/icons/icon-192.png",
   "./assets/icons/icon-512.png",
   "./assets/icons/maskable-512.png",
-  "./assets/vendor/leaflet/leaflet.css",
-  "./assets/vendor/leaflet/leaflet.js",
-  "./assets/vendor/leaflet/images/marker-icon.png",
-  "./assets/vendor/leaflet/images/marker-icon-2x.png",
-  "./assets/vendor/leaflet/images/marker-shadow.png",
   "./assets/vendor/fontawesome/css/all.min.css",
   "./assets/vendor/fontawesome/webfonts/fa-solid-900.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
   "./css/tailwind.generated.css?v=44",
   "./css/style.css?v=44",
-  "./js/core.js?v=44",
-  "./js/services.js?v=44",
-  "./js/data.js?v=44",
-  "./js/route-search-model.js?v=44",
-  "./js/route-summary-model.js?v=44",
-  "./js/main-ui.js?v=44",
-  "./js/enhancements.js?v=44",
-  "./js/route-condition-view-model.js?v=44",
-  "./js/route-navigation-model.js?v=44",
-  "./js/route-conditions.js?v=44",
-  "./js/ride-tools.js?v=44",
-  "./js/desktop-bootstrap.js?v=44",
-  "./js/pwa.js?v=44"
+  "./js/dist/app.js?v=4fa5930",
+  "./js/dist/app2.js?v=4fa5930",
+  "./js/dist/desktop.js?v=4fa5930",
 ];
 
 const API_PATTERNS = [

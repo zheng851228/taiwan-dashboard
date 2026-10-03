@@ -51,7 +51,10 @@
     return !/^無(?:(?:占用|封閉|阻斷|影響)(?:任何)?(?:車道|道路))?$/.test(text);
   }
 
+  // Event-kind inference lives in js/map-geo-utils.js (single source of truth,
+  // shared with the map layers). Kept as a local alias for existing callers.
   function inferRoadEventKind(incident) {
+    if (window.MapGeoUtils) return window.MapGeoUtils.inferRoadEventKind(incident);
     incident = incident || {};
     if (ROAD_EVENT_KINDS[incident.kind]) return incident.kind;
     var text = String((incident.title || '') + ' ' + (incident.description || ''));

@@ -1,9 +1,10 @@
-// Desktop MapLibre renderer. The existing Leaflet map remains the mobile and
-// WebGL fallback renderer; this module only owns the desktop map surface.
+// Desktop MapLibre renderer. Also used by the mobile shell since the
+// Leaflet removal; pass { simple: true } on mobile to skip desktop-only
+// terrain/hillshade/satellite sources.
 (function() {
   'use strict';
 
-  var TRAFFIC_COLORS = {
+  var TRAFFIC_COLORS = window.MapGeoUtils ? window.MapGeoUtils.TRAFFIC_COLORS : {
     clear: '#52b788',
     slow: '#f6c945',
     congested: '#ef5350',
@@ -40,6 +41,7 @@
   }
 
   function makeBounds(maplibregl, coordinates) {
+    if (window.MapGeoUtils) return window.MapGeoUtils.makeBounds(maplibregl, coordinates);
     var bounds = new maplibregl.LngLatBounds();
     (coordinates || []).forEach(function(point) {
       if (point && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]))) {
@@ -85,6 +87,9 @@
 
   function createRenderer(options) {
     var initialTerrainMode = options.terrainMode === '3d' ? '3d' : '2d';
+    // Mobile shell passes { simple: true }: skip desktop-only terrain,
+    // hillshade and satellite sources so phones don't pay for them.
+    var simpleMode = !!options.simple;
     var renderer = {
       map: null,
       module: null,
@@ -111,7 +116,7 @@
         return loadMapLibre().then(function(module) {
           self.module = module;
           var maplibregl = module;
-          var satellite = satelliteTiles();
+          var satellite = simpleMode ? [] : satelliteTiles();
           self.satelliteAvailable = satellite.length > 0;
           var sources = {
             base: {
@@ -125,22 +130,24 @@
               tileSize: 256,
               attribution: '&copy; OpenStreetMap &copy; CARTO',
               maxzoom: 19
-            },
-            terrainSource: {
-              type: 'raster-dem',
-              url: 'https://tiles.mapterhorn.com/tilejson.json',
-              tileSize: 512,
-              encoding: 'terrarium',
-              bounds: TERRAIN_BOUNDS
-            },
-            hillshadeSource: {
-              type: 'raster-dem',
-              url: 'https://tiles.mapterhorn.com/tilejson.json',
-              tileSize: 512,
-              encoding: 'terrarium',
-              bounds: TERRAIN_BOUNDS
             }
           };
+          if (!simpleMode) {
+            sources.terrainSource = {
+              type: 'raster-dem',
+              url: 'https://tiles.mapterhorn.com/tilejson.json',
+              tileSize: 512,
+              encoding: 'terrarium',
+              bounds: TERRAIN_BOUNDS
+            };
+            sources.hillshadeSource = {
+              type: 'raster-dem',
+              url: 'https://tiles.mapterhorn.com/tilejson.json',
+              tileSize: 512,
+              encoding: 'terrarium',
+              bounds: TERRAIN_BOUNDS
+            };
+          }
           if (self.satelliteAvailable) {
             sources.satellite = {
               type: 'raster',
@@ -158,7 +165,7 @@
             // timeouts without blocking labels, route data, or controls.
             self.satelliteAvailable ? { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } } : null,
             { id: 'base', type: 'raster', source: 'base', layout: { visibility: 'visible' } },
-            {
+            simpleMode ? null : {
               id: 'hillshade',
               type: 'hillshade',
               source: 'hillshadeSource',
@@ -200,12 +207,14 @@
           self.map.on('load', function() {
             self._addDataLayers();
             self._addPlaceLabels();
-            self.terrainTimer = window.setTimeout(function() {
-              if (self.mode === '3d' && self.map && !self.map.isSourceLoaded('terrainSource')) {
-                self.setTerrainMode('2d');
-                self.onStatus('terrain-unavailable');
-              }
-            }, 8000);
+            if (!simpleMode) {
+              self.terrainTimer = window.setTimeout(function() {
+                if (self.mode === '3d' && self.map && !self.map.isSourceLoaded('terrainSource')) {
+                  self.setTerrainMode('2d');
+                  self.onStatus('terrain-unavailable');
+                }
+              }, 8000);
+            }
             self._syncProviderLogo();
             self.onReady(self);
             if (self.satelliteAvailable && self.basemap === 'satellite') {
@@ -437,7 +446,7 @@
         return this.setCameraPreset('reset');
       },
       setTerrainMode: function(mode) {
-        if (!this.map) return;
+        if (!this.map || simpleMode) return;
         this.mode = mode === '3d' ? '3d' : '2d';
         if (this.mode === '3d') {
           this.map.setTerrain({ source: 'terrainSource', exaggeration: 1 });

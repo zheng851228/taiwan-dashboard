@@ -10,13 +10,20 @@ import {
   buildFixtureCameras,
   buildFixtureCountyWeather,
   buildFixtureRoute,
+  buildSnapshotKvEntries,
   expandMapUrl,
+  filterCameraListByBbox,
+  filterSnapshotCamerasByBbox,
   geocodePlace,
   getValhallaRoute,
   loadCameras,
   loadCountyWeather,
+  loadLatestCameraSnapshot,
   loadLiveProviderData,
-  loadProviderSnapshotHttpEnvelope,
+  loadSnapshotCountyWeather,
+  parseCameraBbox,
+  projectBboxCameras,
+  sha256Hex,
   traceRouteAttributes
 } from './providers.js';
 import { buildAvoidLocations, validateRouteEdges } from './rules.js';
@@ -62,8 +69,159 @@ export default {
         message: publicMessage
       }, status), request);
     }
+  },
+  async scheduled(event, env, ctx) {
+    await scheduled(event, env, ctx);
   }
 };
+
+/**
+ * Cloudflare Workers Cron Trigger：每 5 分鐘重建 provider snapshot
+ * 並以 diff-before-write 寫入 KV（2 個 keys：snapshot + cams）。
+ * 供 wrangler.jsonc 的 triggers.crons 使用；測試也可直接呼叫。
+ */
+export async function scheduled(event, env, ctx) {
+  const binding = env.PROVIDER_SNAPSHOTS || env.ROUTE_CACHE;
+  if (!binding) {
+    console.error('scheduled snapshot: 沒有可用的 KV binding（PROVIDER_SNAPSHOTS/ROUTE_CACHE）');
+    return { ok: false, reason: 'no-kv-binding' };
+  }
+  // 非快照模式（PROVIDER_SNAPSHOT_MODE != kv）的環境不寫入，避免燒掉 KV 寫入額度；
+  // jack 開啟該環境的 kv 模式後，下一個 cron tick 會自動開始寫入。
+  if (!isSnapshotMode(env)) {
+    console.log('scheduled snapshot: skipped（PROVIDER_SNAPSHOT_MODE 不是 kv）');
+    return { ok: true, skipped: true, reason: 'not-snapshot-mode' };
+  }
+  const now = new Date(event && event.scheduledTime ? event.scheduledTime : Date.now());
+  const entries = await buildSnapshotKvEntries(env, now);
+  const results = [];
+  for (const entry of entries) {
+    results.push(await putSnapshotEntryIfChanged(binding, entry, now));
+  }
+  const summary = {
+    at: now.toISOString(),
+    results: results.map((r) => `${r.key}: ${r.status}`)
+  };
+  console.log('scheduled snapshot complete', JSON.stringify(summary));
+  return { ok: true, ...summary };
+}
+
+/**
+ * diff-before-write：用 KV metadata 的 sha256 比對內容雜湊。
+ * 內容相同且上次寫入在 maxSkipAgeMs 內 → 跳過 put（省 KV 寫入額度）。
+ * 超過最長跳過間隔仍會寫入，保 reader 的新鮮度視窗內一定找得到 slot。
+ */
+async function putSnapshotEntryIfChanged(binding, entry, now) {
+  const { key, value, metadata, expirationTtl, compareKeys, maxSkipAgeMs } = entry;
+  const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  for (const compareKey of compareKeys || [key]) {
+    let prevMeta = null;
+    try {
+      const existing = typeof binding.getWithMetadata === 'function'
+        ? await binding.getWithMetadata(compareKey, { type: 'text' })
+        : null;
+      prevMeta = existing && existing.metadata;
+    } catch {
+      prevMeta = null;
+    }
+    if (!prevMeta || typeof prevMeta.sha256 !== 'string') continue;
+    if (prevMeta.sha256 !== metadata.sha256) break; // 內容變了 → 寫入
+    const builtAt = new Date(prevMeta.builtAt).getTime();
+    if (Number.isFinite(builtAt) && nowMs - builtAt < maxSkipAgeMs) {
+      return { key, status: 'skipped', matchedKey: compareKey };
+    }
+    break; // 超過最長跳過間隔 → 寫入
+  }
+  await binding.put(key, value, { expirationTtl, metadata });
+  return { key, status: 'written' };
+}
+
+/**
+ * GET /v2/cams?bbox=minLng,minLat,maxLng,maxLat：
+ * 用 cams snapshot 的格子索引做記憶體過濾，回傳欄位投影。
+ * KV miss 時 fallback 即時抓取（沿用 loadCameras）。
+ */
+async function handleCamsBbox(bboxParam, env, request) {
+  let bbox;
+  try {
+    bbox = parseCameraBbox(bboxParam);
+  } catch (error) {
+    throw new HttpError(400, error.message);
+  }
+  let cameras = null;
+  let etagSeed = null;
+  if (!isFixtureMode(env) && isSnapshotMode(env)) {
+    const snapshot = await loadLatestCameraSnapshot(env);
+    if (snapshot) {
+      cameras = filterSnapshotCamerasByBbox(snapshot.decoded, bbox);
+      etagSeed = snapshot.sha256;
+    }
+  }
+  if (!cameras) {
+    const list = isFixtureMode(env) ? buildFixtureCameras() : await loadCameras(env);
+    cameras = filterCameraListByBbox(list, bbox);
+  }
+  const { items, total, truncated } = projectBboxCameras(cameras);
+  const etag = `"${etagSeed || await sha256Hex(JSON.stringify(items))}"`;
+  const cacheHeaders = {
+    'Cache-Control': 'public, max-age=60, s-maxage=300',
+    ETag: etag
+  };
+  const ifNoneMatch = request.headers.get('If-None-Match');
+  if (ifNoneMatch && ifNoneMatch.split(',').map((part) => part.trim()).includes(etag)) {
+    return new Response(null, { status: 304, headers: cacheHeaders });
+  }
+  const body = envelope('ok', { cameras: items, total, truncated, bbox }, '');
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { ...cacheHeaders, 'Content-Type': 'application/json; charset=utf-8' }
+  });
+}
+
+/**
+ * 快照模式下讀取全量攝影機清單（供無 bbox 的 /v2/cams）。
+ * KV miss 或 slot 過期時回傳 null，由呼叫端降級。
+ */
+async function loadSnapshotCamerasFull(env) {
+  const snapshot = await loadLatestCameraSnapshot(env);
+  if (!snapshot) return null;
+  const cameras = collectSnapshotCameras(snapshot.decoded);
+  const projected = [];
+  for (const camera of cameras) {
+    projected.push({
+      id: camera.id,
+      lat: camera.lat,
+      lng: camera.lng,
+      name: camera.name,
+      status: camera.status || 'unknown',
+      roadRef: camera.roadRef || '',
+      imageUrl: camera.imageUrl || '',
+      source: camera.source || 'CCTV'
+    });
+  }
+  return projected;
+}
+
+/**
+ * 走訪 snapshot 文件的所有格子，收集全部攝影機（expanded 物件）。
+ */
+function collectSnapshotCameras(decoded) {
+  const header = decoded.header || {};
+  const cellIds = header.cellIndex && typeof header.cellIndex === 'object'
+    ? Object.keys(header.cellIndex)
+    : (header.cells && typeof header.cells === 'object' ? Object.keys(header.cells) : []);
+  const cameras = [];
+  for (const cellId of cellIds) {
+    let cell;
+    try {
+      cell = decoded.readCell(cellId);
+    } catch {
+      continue;
+    }
+    if (cell && Array.isArray(cell.cameras)) cameras.push(...cell.cameras);
+  }
+  return cameras;
+}
 
 async function routeRequest(request, env) {
   const url = new URL(request.url);
@@ -83,10 +241,15 @@ async function routeRequest(request, env) {
   }
 
   if (path === '/v2/cams' && request.method === 'GET') {
+    const bboxParam = url.searchParams.get('bbox');
+    if (bboxParam !== null && bboxParam !== '') {
+      return handleCamsBbox(bboxParam, env, request);
+    }
+    // 快照模式：改讀 2MB cams KV value（全量攝影機清單），取代 HTTP envelope。
     if (!isFixtureMode(env) && isSnapshotMode(env)) {
-      const cached = await loadProviderSnapshotHttpEnvelope('cams', env);
-      return cached
-        ? jsonTextResponse(cached)
+      const cameras = await loadSnapshotCamerasFull(env);
+      return cameras
+        ? jsonResponse(envelope('ok', cameras, ''))
         : jsonResponse(envelope('partial', [], '攝影機快照暫時無法取得'));
     }
     const cameras = isFixtureMode(env) ? buildFixtureCameras() : await loadCameras(env);
@@ -94,10 +257,11 @@ async function routeRequest(request, env) {
   }
 
   if (path === '/v2/weather' && request.method === 'GET') {
+    // 快照模式：縣市氣象已併入 provider snapshot value，改讀 header.countyWeather。
     if (!isFixtureMode(env) && isSnapshotMode(env)) {
-      const cached = await loadProviderSnapshotHttpEnvelope('weather', env);
-      return cached
-        ? jsonTextResponse(cached)
+      const countyWeather = await loadSnapshotCountyWeather(env);
+      return countyWeather
+        ? jsonResponse(envelope('ok', countyWeather, ''))
         : jsonResponse(envelope('partial', {}, '氣象快照暫時無法取得'));
     }
     const weather = isFixtureMode(env) ? buildFixtureCountyWeather() : await loadCountyWeather(env);
@@ -133,9 +297,9 @@ async function routeRequest(request, env) {
   }
   if (path === '/weather' && request.method === 'GET') {
     if (!isFixtureMode(env) && isSnapshotMode(env)) {
-      const cached = await loadProviderSnapshotHttpEnvelope('weather', env);
-      return cached
-        ? jsonTextResponse(cached)
+      const countyWeather = await loadSnapshotCountyWeather(env);
+      return countyWeather
+        ? jsonResponse(envelope('ok', countyWeather))
         : jsonResponse(envelope('partial', {}, '氣象快照暫時無法取得'));
     }
     const weather = isFixtureMode(env) ? buildFixtureCountyWeather() : await loadCountyWeather(env);
@@ -484,7 +648,9 @@ function withCors(response, request) {
   headers.set('Vary', 'Origin');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'no-referrer');
-  headers.set('Cache-Control', 'no-store');
+  // 個別路由已設定 public 快取時（如 /v2/cams?bbox=）予以保留，
+  // 否則預設 no-store（API 資料預設不快取）。
+  if (!headers.has('Cache-Control')) headers.set('Cache-Control', 'no-store');
   if (response.status === 429) headers.set('Retry-After', '60');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
