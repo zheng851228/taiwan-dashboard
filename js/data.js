@@ -159,7 +159,8 @@
         if (Array.isArray(apiData)) {
           _cams = normalizeCamList(apiData);
           Diag.ok('CCTV: ' + _cams.length + ' 支');
-          AppState.updatedAt.cams = AppState.updatedAt.cams || new Date().toISOString();
+          // 資料時間由 AppServices.loadCams 的 setDataStatus 寫入（真實 fetched_at）；
+          // 這裡不再用「現在」偽造，時間未知就顯示未知。
           Data.camsState = _cams.length > 0 ? 'ready' : (Data.camsState === 'error' ? 'error' : 'empty');
         }
         var statEl = Dom.byId('js-stat-cams');
@@ -181,7 +182,8 @@
           Object.keys(result).forEach(function(county) {
             Data.weather[county] = result[county];
           });
-          AppState.updatedAt.weather = payload.updatedAt || new Date().toISOString();
+          // 資料時間只用真實 fetched_at；未知就不寫，UI 顯示「時間未知」。
+          if (payload.updatedAt) AppState.updatedAt.weather = payload.updatedAt;
           Data.weatherState = Object.keys(Data.weather).length > 0 ? 'ready' : 'empty';
           Bus.emit('weather:updated');
         })

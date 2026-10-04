@@ -54,8 +54,8 @@ describe('PWA install and offline assets', () => {
     expect(serviceWorker).toContain('cache: "reload"');
     expect(serviceWorker).toContain('SKIP_WAITING');
     expect(serviceWorker).toMatch(/const CACHE_VERSION = "[0-9a-f]{7,40}"/);
-    expect(serviceWorker).toContain('./css/tailwind.generated.css?v=44');
-    expect(serviceWorker).toContain('./css/style.css?v=44');
+    expect(serviceWorker).toContain('./css/tailwind.generated.css?v=45');
+    expect(serviceWorker).toContain('./css/style.css?v=45');
     expect(serviceWorker).toMatch(/\.\/js\/dist\/app\.js\?v=[0-9a-f]{7,40}/);
     expect(serviceWorker).toMatch(/\.\/js\/dist\/app2\.js\?v=[0-9a-f]{7,40}/);
     expect(serviceWorker).toMatch(/\.\/js\/dist\/desktop\.js\?v=[0-9a-f]{7,40}/);

@@ -1,5 +1,6 @@
 import { decodePolyline6, encodePolyline6, haversineKm } from './polyline.js';
 import { roadEventIdentity } from './road-events.js';
+import { validateSnapshotHonesty } from './snapshot-honesty.js';
 
 const SNAPSHOT_SCHEMA_VERSION = 1;
 const SNAPSHOT_PREFIX = 'provider-snapshot:v1:live:';
@@ -59,11 +60,17 @@ export async function sha256Hex(text) {
 }
 
 /**
- * Snapshot 內容雜湊（供 diff-before-write）：排除 generatedAt，
+ * Snapshot 內容雜湊（供 diff-before-write）：排除 generatedAt / fetched_at
+ *（寫入時間）與 providers（各來源的抓取時間戳記為 build 當下時間），
  * 讓相同上游資料在不同次執行下雜湊一致。
  */
 export async function snapshotContentSha256(document) {
-  const { generatedAt: _ignored, ...stable } = document || {};
+  const {
+    generatedAt: _ignored,
+    fetched_at: _ignoredFetchedAt,
+    providers: _ignoredProviders,
+    ...stable
+  } = document || {};
   return sha256Hex(stableStringify(stable));
 }
 
@@ -160,11 +167,15 @@ export async function loadSnapshotProviderData(sections, env, options = {}) {
     }
     try {
       const candidate = decodeProviderSnapshot(raw);
+      const honesty = validateSnapshotHonesty(candidate.header);
       if (
         candidate.header.schemaVersion !== SNAPSHOT_SCHEMA_VERSION
+        || !honesty.ok
         || !isProviderSnapshotFresh(candidate.header, now, maxAgeMs)
       ) {
-        lastIssue = 'provider snapshot stale or unsupported';
+        lastIssue = honesty.ok
+          ? 'provider snapshot stale or unsupported'
+          : `provider snapshot rejected: ${honesty.reason}`;
         continue;
       }
       decoded = candidate;
@@ -351,9 +362,14 @@ export function buildProviderSnapshotDocument(providerData, options = {}) {
     if (cellId) ensureCell(`w:${cellId}`).weather.push(weather);
   }
 
+  const generatedAt = options.generatedAt || new Date().toISOString();
   return {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-    generatedAt: options.generatedAt || new Date().toISOString(),
+    generatedAt,
+    // 快照誠實欄位（寫入強制、讀取 gate）：缺任一欄位讀取端拒絕使用。
+    fetched_at: options.fetchedAt || generatedAt,
+    source: options.source || 'unknown',
+    stale_after: positiveNumber(options.staleAfterSeconds, 15 * 60),
     gridDegrees,
     weatherGridDegrees: WEATHER_GRID_DEGREES,
     publishedByRoad: true,
@@ -385,6 +401,9 @@ export function packProviderSnapshot(snapshot) {
   const header = {
     schemaVersion: snapshot.schemaVersion,
     generatedAt: snapshot.generatedAt,
+    fetched_at: snapshot.fetched_at,
+    source: snapshot.source,
+    stale_after: snapshot.stale_after,
     gridDegrees: snapshot.gridDegrees,
     weatherGridDegrees: snapshot.weatherGridDegrees,
     publishedByRoad: Boolean(snapshot.publishedByRoad),
@@ -427,8 +446,18 @@ export function providerSnapshotHttpSlotKey(kind, now = new Date(), previousSlot
   return `provider-snapshot:v1:http:${kind}:${new Date(slot).toISOString().replace(/[-:]/g, '').slice(0, 13)}Z`;
 }
 
-export function packProviderSnapshotHttpEnvelope(envelope, generatedAt = new Date().toISOString()) {
-  return `${JSON.stringify({ schemaVersion: SNAPSHOT_SCHEMA_VERSION, generatedAt })}\n${JSON.stringify(envelope)}`;
+export function packProviderSnapshotHttpEnvelope(
+  envelope,
+  generatedAt = new Date().toISOString(),
+  honesty = {}
+) {
+  return `${JSON.stringify({
+    schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+    generatedAt,
+    fetched_at: honesty.fetched_at || generatedAt,
+    source: honesty.source || 'unknown',
+    stale_after: positiveNumber(honesty.stale_after, 15 * 60)
+  })}\n${JSON.stringify(envelope)}`;
 }
 
 export async function loadProviderSnapshotHttpEnvelope(kind, env, options = {}) {
@@ -456,6 +485,7 @@ export async function loadProviderSnapshotHttpEnvelope(kind, env, options = {}) 
       const header = JSON.parse(value.slice(0, lineBreak));
       if (
         header.schemaVersion === SNAPSHOT_SCHEMA_VERSION
+        && validateSnapshotHonesty(header).ok
         && isProviderSnapshotFresh(header, now, maxAgeMs)
       ) {
         return value.slice(lineBreak + 1);
@@ -535,6 +565,7 @@ export async function loadLatestCameraSnapshot(env, options = {}) {
       const decoded = decodeProviderSnapshot(raw);
       if (
         decoded.header.schemaVersion === SNAPSHOT_SCHEMA_VERSION
+        && validateSnapshotHonesty(decoded.header).ok
         && isProviderSnapshotFresh(decoded.header, now, maxAgeMs)
       ) {
         const metadata = result && typeof result === 'object' ? result.metadata : null;
@@ -554,6 +585,7 @@ export async function loadLatestCameraSnapshot(env, options = {}) {
 /**
  * 讀取最新的縣市氣象（供 /v2/weather 快照模式）。
  * 縣市氣象併入 provider snapshot 文件的 header.countyWeather。
+ * 回傳 { countyWeather, fetchedAt }；KV miss 或過期時回傳 null。
  */
 export async function loadSnapshotCountyWeather(env, options = {}) {
   const now = options.now || new Date();
@@ -573,12 +605,16 @@ export async function loadSnapshotCountyWeather(env, options = {}) {
       const decoded = decodeProviderSnapshot(raw);
       if (
         decoded.header.schemaVersion === SNAPSHOT_SCHEMA_VERSION
+        && validateSnapshotHonesty(decoded.header).ok
         && isProviderSnapshotFresh(decoded.header, now, maxAgeMs)
         && decoded.header.countyWeather
         && typeof decoded.header.countyWeather === 'object'
         && Object.keys(decoded.header.countyWeather).length > 0
       ) {
-        return decoded.header.countyWeather;
+        return {
+          countyWeather: decoded.header.countyWeather,
+          fetchedAt: decoded.header.fetched_at || decoded.header.generatedAt
+        };
       }
     } catch {
       // Try the previous immutable slot.
@@ -600,6 +636,7 @@ async function findCameraSnapshot(readSnapshot, now) {  const maxAgeMs = 12 * 60
       const decoded = decodeProviderSnapshot(raw);
       if (
         decoded.header.schemaVersion === SNAPSHOT_SCHEMA_VERSION
+        && validateSnapshotHonesty(decoded.header).ok
         && isProviderSnapshotFresh(decoded.header, now, maxAgeMs)
       ) {
         return decoded;

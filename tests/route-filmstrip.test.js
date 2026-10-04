@@ -31,20 +31,20 @@ describe('RouteFilmstrip.formatFreshness', () => {
   it('formats elapsed time in Traditional Chinese', async () => {
     const m = await loadModule();
     const now = 1_700_000_000_000;
-    expect(m.formatFreshness(now - 10 * 1000, now)).toBe('剛剛');
-    expect(m.formatFreshness(now - 59 * 1000, now)).toBe('剛剛');
-    expect(m.formatFreshness(now - 60 * 1000, now)).toBe('1 分鐘前');
-    expect(m.formatFreshness(now - 5 * 60 * 1000, now)).toBe('5 分鐘前');
-    expect(m.formatFreshness(now - 59 * 60 * 1000, now)).toBe('59 分鐘前');
-    expect(m.formatFreshness(now - 60 * 60 * 1000, now)).toBe('1 小時前');
-    expect(m.formatFreshness(now - 3 * 60 * 60 * 1000, now)).toBe('3 小時前');
+    expect(m.formatFreshness(now - 10 * 1000, now)).toBe('剛剛載入');
+    expect(m.formatFreshness(now - 59 * 1000, now)).toBe('剛剛載入');
+    expect(m.formatFreshness(now - 60 * 1000, now)).toBe('1 分鐘前載入');
+    expect(m.formatFreshness(now - 5 * 60 * 1000, now)).toBe('5 分鐘前載入');
+    expect(m.formatFreshness(now - 59 * 60 * 1000, now)).toBe('59 分鐘前載入');
+    expect(m.formatFreshness(now - 60 * 60 * 1000, now)).toBe('1 小時前載入');
+    expect(m.formatFreshness(now - 3 * 60 * 60 * 1000, now)).toBe('3 小時前載入');
   });
 
   it('treats future or invalid timestamps as 剛剛', async () => {
     const m = await loadModule();
     const now = 1_700_000_000_000;
-    expect(m.formatFreshness(now + 60 * 1000, now)).toBe('剛剛');
-    expect(m.formatFreshness(NaN, now)).toBe('剛剛');
+    expect(m.formatFreshness(now + 60 * 1000, now)).toBe('剛剛載入');
+    expect(m.formatFreshness(NaN, now)).toBe('剛剛載入');
   });
 });
 

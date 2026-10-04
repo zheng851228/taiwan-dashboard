@@ -30,13 +30,14 @@
   // ---------- 純函式（可單元測試） ----------
 
   // 新鮮度文字：ts 為影像載入時間戳，now 預設 Date.now()（測試可注入）
+  // 誠實表述：這是「客戶端載入時間」不是拍攝時間，文案一律加「載入」避免誤導。
   function formatFreshness(ts, now) {
     now = (typeof now === 'number') ? now : Date.now();
     var diff = now - ts;
-    if (!(diff >= 0)) return '剛剛';
-    if (diff < 60 * 1000) return '剛剛';
-    if (diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + ' 分鐘前';
-    return Math.floor(diff / 3600000) + ' 小時前';
+    if (!(diff >= 0)) return '剛剛載入';
+    if (diff < 60 * 1000) return '剛剛載入';
+    if (diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + ' 分鐘前載入';
+    return Math.floor(diff / 3600000) + ' 小時前載入';
   }
 
   function isStale(ts, now) {

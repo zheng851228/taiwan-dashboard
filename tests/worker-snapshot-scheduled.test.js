@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { scheduled } from '../worker/src/index.js';
 import { providerCameraSnapshotSlotKey, providerSnapshotSlotKey } from '../worker/src/provider-snapshot.js';
+import { clearJsonResponseCache } from '../worker/src/providers.js';
+import { SNAPSHOT_HEALTH_KEY } from '../worker/src/snapshot-honesty.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  clearJsonResponseCache();
 });
 
 function createSnapshotKv() {
@@ -34,61 +37,107 @@ function kvEnv(kv, extra = {}) {
   };
 }
 
-// 上游全部失敗 → 空 provider 資料（具確定性，雜湊穩定）
+// 上游全部失敗 → 空 provider 資料
 function stubFetchFail() {
   vi.stubGlobal('fetch', vi.fn(async () => {
     throw new Error('upstream down');
   }));
 }
 
-// 只有 twipcam 回傳 1 台攝影機，其餘上游失敗
-function stubFetchOneCamera() {
+// 只有 twipcam 回傳 N 台攝影機，其餘上游失敗
+function stubFetchCameras(count) {
   vi.stubGlobal('fetch', vi.fn(async (url) => {
     if (String(url).includes('twipcam')) {
-      return new Response(JSON.stringify([{
-        id: 'cam-x1', name: '測試攝影機', lat: 25.05, lng: 121.52,
-        roadRef: '台1線', cam_url: 'https://example.com/x1.jpg', status: 'online'
-      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      const cameras = Array.from({ length: count }, (_, i) => ({
+        id: `cam-x${i + 1}`,
+        name: `測試攝影機${i + 1}`,
+        lat: 25.05,
+        lng: 121.52,
+        roadRef: '台1線',
+        cam_url: `https://example.com/x${i + 1}.jpg`,
+        status: 'online'
+      }));
+      return new Response(JSON.stringify(cameras), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     throw new Error('upstream down');
   }));
 }
 
+function healthRecord(kv) {
+  const entry = kv.store.get(SNAPSHOT_HEALTH_KEY);
+  expect(entry).toBeDefined();
+  return JSON.parse(entry.value);
+}
+
+function putKeys(kv) {
+  return kv.put.mock.calls.map((call) => call[0]);
+}
+
 const EVENT_TIME = '2026-10-03T00:02:00.000Z';
 
 describe('scheduled snapshot', () => {
-  it('寫入 2 個 keys 並帶 sha256 metadata 與 TTL', async () => {
+  it('上游全掛時不寫空快照，只寫健康告警', async () => {
     stubFetchFail();
     const kv = createSnapshotKv();
     const now = new Date(EVENT_TIME);
 
     const result = await scheduled({ scheduledTime: Date.parse(EVENT_TIME) }, kvEnv(kv), {});
 
-    expect(result.ok).toBe(true);
-    expect(kv.put).toHaveBeenCalledTimes(2);
-    const snapshotKey = providerSnapshotSlotKey(now);
-    const cameraKey = providerCameraSnapshotSlotKey(now);
-    const snapshotEntry = kv.store.get(snapshotKey);
-    const cameraEntry = kv.store.get(cameraKey);
-    expect(snapshotEntry).toBeDefined();
-    expect(cameraEntry).toBeDefined();
-    expect(snapshotEntry.expirationTtl).toBe(2 * 60 * 60);
-    expect(cameraEntry.expirationTtl).toBe(18 * 60 * 60);
-    for (const entry of [snapshotEntry, cameraEntry]) {
-      expect(entry.metadata.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(entry.metadata.builtAt).toBe(now.toISOString());
-    }
+    // 空快照不得覆蓋舊快照：兩個 snapshot key 都沒寫
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('empty-snapshot');
+    expect(kv.store.has(providerSnapshotSlotKey(now))).toBe(false);
+    expect(kv.store.has(providerCameraSnapshotSlotKey(now))).toBe(false);
     expect(result.results).toHaveLength(2);
+    expect(result.results.every((line) => line.endsWith(': skipped-empty'))).toBe(true);
+
+    // 但健康／告警紀錄一定要寫，讓 health check 讀得到最後失敗時間
+    const health = healthRecord(kv);
+    expect(health.ok).toBe(false);
+    expect(health.reason).toBe('empty-snapshot');
+    expect(health.lastFailureAt).toBe(now.toISOString());
+    expect(health.lastSuccessAt).toBeNull();
+    expect(health.failures.length).toBeGreaterThan(0);
+    expect(health.failures.map((f) => f.scope)).toContain('TDX');
+    expect(health.entries).toHaveLength(2);
+    expect(health.entries.every((entry) => entry.status === 'skipped-empty')).toBe(true);
+    expect(putKeys(kv)).toEqual([SNAPSHOT_HEALTH_KEY]);
   });
 
-  it('內容不變時跳過寫入（diff-before-write）', async () => {
-    stubFetchFail();
+  it('部分成功時只寫非空快照並記錄告警', async () => {
+    stubFetchCameras(1);
+    const kv = createSnapshotKv();
+    const now = new Date(EVENT_TIME);
+
+    const result = await scheduled({ scheduledTime: Date.parse(EVENT_TIME) }, kvEnv(kv), {});
+
+    expect(result.ok).toBe(true);
+    // cams 有資料 → 寫入；snapshot 空 → 跳過不覆蓋
+    expect(kv.store.has(providerCameraSnapshotSlotKey(now))).toBe(true);
+    expect(kv.store.has(providerSnapshotSlotKey(now))).toBe(false);
+    expect(result.results.find((line) => line.includes('cameras'))).toMatch(/written$/);
+
+    const health = healthRecord(kv);
+    expect(health.ok).toBe(true);
+    expect(health.lastFailureAt).toBe(now.toISOString());
+    expect(health.lastSuccessAt).toBe(now.toISOString());
+    expect(health.failures.map((f) => f.scope)).toContain('snapshot');
+    expect(health.providers.CCTV.status).toBe('ok');
+    expect(health.providers.TDX.status).toBe('failed');
+  });
+
+  it('內容不變時跳過寫入（diff-before-write），但健康紀錄照寫', async () => {
+    stubFetchCameras(1);
     const kv = createSnapshotKv();
     const event = { scheduledTime: Date.parse(EVENT_TIME) };
 
     await scheduled(event, kvEnv(kv), {});
     kv.put.mockClear();
-    // 下一個 5 分鐘 slot：比對上一 slot 的 metadata，內容相同 → 跳過
+    clearJsonResponseCache();
+    // 下一個 5 分鐘 slot：cams 仍在同一個 6 小時 slot，內容相同 → 跳過
     const result = await scheduled(
       { scheduledTime: Date.parse('2026-10-03T00:07:00.000Z') },
       kvEnv(kv),
@@ -96,50 +145,57 @@ describe('scheduled snapshot', () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(kv.put).not.toHaveBeenCalled();
-    expect(result.results.every((line) => line.endsWith(': skipped'))).toBe(true);
+    const keys = putKeys(kv);
+    expect(keys).not.toContain(providerCameraSnapshotSlotKey(new Date('2026-10-03T00:07:00.000Z')));
+    // 健康紀錄每次執行都更新
+    expect(keys).toEqual([SNAPSHOT_HEALTH_KEY]);
+    expect(result.results.some((line) => line.endsWith(': skipped'))).toBe(true);
+    expect(result.results.some((line) => line.endsWith(': skipped-empty'))).toBe(true);
   });
 
   it('內容變化時重新寫入', async () => {
-    stubFetchFail();
+    stubFetchCameras(1);
     const kv = createSnapshotKv();
 
     await scheduled({ scheduledTime: Date.parse(EVENT_TIME) }, kvEnv(kv), {});
     kv.put.mockClear();
+    clearJsonResponseCache();
 
-    stubFetchOneCamera();
+    stubFetchCameras(2);
     const result = await scheduled(
       { scheduledTime: Date.parse('2026-10-03T00:07:00.000Z') },
       kvEnv(kv),
       {}
     );
 
-    expect(kv.put).toHaveBeenCalledTimes(2);
-    expect(result.results.every((line) => line.endsWith(': written'))).toBe(true);
+    const cameraKey = providerCameraSnapshotSlotKey(new Date('2026-10-03T00:07:00.000Z'));
+    expect(putKeys(kv)).toContain(cameraKey);
+    expect(result.results.find((line) => line.startsWith(cameraKey))).toMatch(/written$/);
+    expect(result.ok).toBe(true);
   });
 
   it('超過最長跳過間隔仍會寫入（保 reader 新鮮度）', async () => {
-    stubFetchFail();
+    stubFetchCameras(1);
     const kv = createSnapshotKv();
 
     await scheduled({ scheduledTime: Date.parse(EVENT_TIME) }, kvEnv(kv), {});
     kv.put.mockClear();
 
-    // 把 metadata 的 builtAt 改為 11 分鐘前（超過 snapshot 的 10 分鐘上限）
-    const now = new Date(EVENT_TIME);
-    for (const key of [providerSnapshotSlotKey(now), providerCameraSnapshotSlotKey(now)]) {
-      const entry = kv.store.get(key);
-      entry.metadata = { ...entry.metadata, builtAt: new Date(Date.parse(EVENT_TIME) - 11 * 60 * 1000).toISOString() };
-    }
+    // 把 cams metadata 的 builtAt 改為 7 小時前（超過 cams 的 6 小時上限）
+    const cameraKey = providerCameraSnapshotSlotKey(new Date(EVENT_TIME));
+    const entry = kv.store.get(cameraKey);
+    entry.metadata = {
+      ...entry.metadata,
+      builtAt: new Date(Date.parse(EVENT_TIME) - 7 * 60 * 60 * 1000).toISOString()
+    };
 
     const result = await scheduled(
       { scheduledTime: Date.parse('2026-10-03T00:07:00.000Z') },
       kvEnv(kv),
       {}
     );
-    // snapshot key（10 分鐘上限）會重寫；cams key（6 小時上限）仍跳過
-    const writtenKeys = kv.put.mock.calls.map((call) => call[0]);
-    expect(writtenKeys).toContain(providerSnapshotSlotKey(new Date('2026-10-03T00:07:00.000Z')));
+    expect(putKeys(kv)).toContain(cameraKey);
+    expect(result.results.find((line) => line.startsWith(cameraKey))).toMatch(/written$/);
     expect(result.ok).toBe(true);
   });
 

@@ -19,9 +19,10 @@
     if (raw && typeof raw === 'object' && raw.status && raw.data !== undefined) {
       return raw;
     }
+    // 沒有時間戳就不偽造：updatedAt 保持 null，UI 顯示「時間未知」。
     return {
       status: 'ok',
-      updatedAt: new Date().toISOString(),
+      updatedAt: null,
       data: raw && raw[fallbackKey] !== undefined ? raw[fallbackKey] : raw,
       message: ''
     };
@@ -94,14 +95,20 @@
           null,
           'cams',
           6000,
-          '\u5373\u6642 CCTV \u6e05\u55ae\u56de\u61c9\u903e\u6642',
+          '\u5feb\u7167 CCTV \u6e05\u55ae\u56de\u61c9\u903e\u6642',
           'CAMS_TIMEOUT'
         );
       }
       var localWorker = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(Config.WORKER_BASE);
       var cameraRequest = localWorker
         ? loadWorkerCameras()
-        : requestJson(snapshotUrl, null, 'cams').catch(loadWorkerCameras);
+        : requestJson(snapshotUrl, null, 'cams').then(function(payload) {
+          // 本地靜態快照沒有逐包時間戳：誠實的資料時間是 6 小時 slot 起點，不是「現在」。
+          if (!payload.updatedAt) {
+            payload.updatedAt = new Date(slot * 6 * 60 * 60 * 1000).toISOString();
+          }
+          return payload;
+        }).catch(loadWorkerCameras);
       return cameraRequest
         .catch(function(err) {
           if (err.status === 404) return requestJson(Config.WORKER_BASE + '/cam-list', null, 'cams');

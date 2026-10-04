@@ -31,7 +31,12 @@
       return;
     }
     if (state === 'error') {
-      grid.innerHTML = '<div class="col-span-2 text-center text-amber-400 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+      // 降級 UX（行動 7）：誠實的缺席——說清楚發生什麼事、該怎麼辦（含重試）
+      var wxNotice = (typeof window !== 'undefined' && window.SnapshotHonesty)
+        ? window.SnapshotHonesty.noticeHtml('weather-error')
+        : '';
+      grid.innerHTML = '<div class="col-span-2">' + (wxNotice
+        || '<div class="text-center text-amber-400 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>') + '</div>';
       return;
     }
     if (!hasData) {
@@ -70,8 +75,13 @@
     });
     var updEl = Dom.byId('wx-updated');
     if (updEl) {
-      var now = new Date();
-      updEl.textContent = '\u66f4\u65b0\u6642\u9593\uff1a' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+      // 誠實表述：顯示天氣快照的資料時間，不用「現在」偽造更新時間
+      var wxUpdatedAt = (typeof window !== 'undefined' && window.AppState && window.AppState.updatedAt)
+        ? window.AppState.updatedAt.weather
+        : null;
+      updEl.textContent = (typeof window !== 'undefined' && window.SnapshotHonesty)
+        ? window.SnapshotHonesty.formatSnapshotLabel(wxUpdatedAt)
+        : ('\u66f4\u65b0\u6642\u9593\uff1a' + formatUpdatedAt(wxUpdatedAt));
     }
   }
   window.addEventListener('load', function() {

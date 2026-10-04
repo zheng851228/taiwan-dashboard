@@ -1,6 +1,7 @@
 import { encodePolyline6, haversineKm, mergeLegShapes } from './polyline.js';
 import { classifyRoadEvent, roadEventIdentity } from './road-events.js';
 import { validateRouteEdges } from './rules.js';
+import { assertSnapshotHonestForWrite } from './snapshot-honesty.js';
 import {
   buildProviderSnapshotDocument,
   isProviderSnapshotFresh,
@@ -355,16 +356,21 @@ export function buildFixtureCameras() {
     roadRef: item[4],
     imageUrl: '',
     status: index === 3 ? 'offline' : 'unknown',
-    source: 'DEMO'
+    source: 'DEMO',
+    isProxy: true
   }));
 }
 
 export function buildFixtureCountyWeather(now = new Date()) {
+  const at = now.toISOString();
+  const entry = (temp, weather, name, rainChance) => ({
+    temp, weather, name, town: '', rainChance, observedAt: at, source: 'DEMO', isProxy: true
+  });
   return {
-    '\u53f0\u5317\u5e02': { temp: 27, weather: '\u591a\u96f2', name: '\u53f0\u5317\u5e02', town: '', rainChance: 20, observedAt: now.toISOString(), source: 'DEMO' },
-    '\u5b9c\u862d\u7e23': { temp: 25, weather: '\u77ed\u66ab\u96e8', name: '\u5b9c\u862d\u7e23', town: '', rainChance: 70, observedAt: now.toISOString(), source: 'DEMO' },
-    '\u53f0\u4e2d\u5e02': { temp: 29, weather: '\u6674\u6642\u591a\u96f2', name: '\u53f0\u4e2d\u5e02', town: '', rainChance: 10, observedAt: now.toISOString(), source: 'DEMO' },
-    '\u9ad8\u96c4\u5e02': { temp: 30, weather: '\u591a\u96f2', name: '\u9ad8\u96c4\u5e02', town: '', rainChance: 30, observedAt: now.toISOString(), source: 'DEMO' }
+    '\u53f0\u5317\u5e02': entry(27, '\u591a\u96f2', '\u53f0\u5317\u5e02', 20),
+    '\u5b9c\u862d\u7e23': entry(25, '\u77ed\u66ab\u96e8', '\u5b9c\u862d\u7e23', 70),
+    '\u53f0\u4e2d\u5e02': entry(29, '\u6674\u6642\u591a\u96f2', '\u53f0\u4e2d\u5e02', 10),
+    '\u9ad8\u96c4\u5e02': entry(30, '\u591a\u96f2', '\u9ad8\u96c4\u5e02', 30)
   };
 }
 
@@ -460,6 +466,9 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
     cameras: []
   }, {
     generatedAt: now.toISOString(),
+    fetchedAt: now.toISOString(),
+    source: 'TDX/THB/CWA',
+    staleAfterSeconds: 15 * 60,
     providers,
     issues,
     incidentCoverage: providerData.incidentCoverage,
@@ -476,6 +485,9 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
     cameras: withCameraRestrictionsDeduped(providerData.cameras)
   }, {
     generatedAt: now.toISOString(),
+    fetchedAt: now.toISOString(),
+    source: 'CCTV',
+    staleAfterSeconds: 12 * 60 * 60,
     gridDegrees: 0.05,
     routeHalo: 1,
     providers: { CCTV: providers.CCTV },
@@ -489,6 +501,7 @@ export async function buildLiveProviderSnapshot(env, now = new Date()) {
     document,
     cameraDocument,
     providerData,
+    providers,
     counts: {
       detectors: providerData.detectors.length,
       publishedTraffic: providerData.publishedTraffic.length,
@@ -555,28 +568,53 @@ export async function buildSnapshotKvEntries(env, now = new Date()) {
   }
   const builtAt = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
   const snapshotDocument = { ...live.document, countyWeather };
+  // 寫入強制誠實：缺 fetched_at / source / stale_after 直接丟錯，不進 KV。
+  assertSnapshotHonestForWrite(snapshotDocument);
+  assertSnapshotHonestForWrite(live.cameraDocument);
   const snapshotValue = packProviderSnapshot(snapshotDocument);
   const cameraValue = packProviderSnapshot(live.cameraDocument);
   const [snapshotSha, cameraSha] = await Promise.all([
     snapshotContentSha256(snapshotDocument),
     snapshotContentSha256(live.cameraDocument)
   ]);
+  // 空快照判定（供 scheduled 拒絕覆蓋舊快照）：provider 計數全零
+  // 且縣市氣象為空 → snapshot entry 為空；攝影機數為零 → cams entry 為空。
+  const snapshotCounts = {
+    detectors: live.counts.detectors,
+    publishedTraffic: live.counts.publishedTraffic,
+    incidents: live.counts.incidents,
+    weather: live.counts.weather,
+    countyWeather: Object.keys(countyWeather).length
+  };
+  const snapshotEmpty = Object.values(snapshotCounts).every((count) => count === 0);
+  const cameraCounts = {
+    cameras: live.counts.cameras,
+    cells: Object.keys(live.cameraDocument.cells || {}).length
+  };
   return [
     {
       key: live.key,
+      kind: 'snapshot',
       value: snapshotValue,
       metadata: { sha256: snapshotSha, builtAt },
       expirationTtl: SNAPSHOT_KV_TTL_SECONDS,
       compareKeys: [live.key, providerSnapshotSlotKey(now, 1)],
-      maxSkipAgeMs: SNAPSHOT_MAX_SKIP_MS
+      maxSkipAgeMs: SNAPSHOT_MAX_SKIP_MS,
+      empty: snapshotEmpty,
+      counts: snapshotCounts,
+      providers: live.providers
     },
     {
       key: live.cameraKey,
+      kind: 'cameras',
       value: cameraValue,
       metadata: { sha256: cameraSha, builtAt },
       expirationTtl: CAMS_KV_TTL_SECONDS,
       compareKeys: [live.cameraKey, providerCameraSnapshotSlotKey(now, 1)],
-      maxSkipAgeMs: CAMS_MAX_SKIP_MS
+      maxSkipAgeMs: CAMS_MAX_SKIP_MS,
+      empty: live.counts.cameras === 0,
+      counts: cameraCounts,
+      providers: { CCTV: live.providers.CCTV }
     }
   ];
 }
@@ -584,7 +622,36 @@ export async function buildSnapshotKvEntries(env, now = new Date()) {
 // ---- /v2/cams?bbox= ----
 
 const TAIWAN_BBOX_LIMIT = { minLng: 119.5, maxLng: 122.5, minLat: 21.8, maxLat: 25.4 };
-const BBOX_MAX_RESULTS = 2000;
+export const BBOX_MAX_RESULTS = 2000;
+/**
+ * /v2/cams?bbox= 護欄：
+ * - BBOX_MIN_ZOOM：zoom 閘門（前端 marker 只在 zoom >= 10 繪製，API 側同步）。
+ * - BBOX_MAX_AREA_DEG2：bbox 面積上限（平方度，clamp 後計算；台灣全境約 10.8）。
+ */
+export const BBOX_MIN_ZOOM = 10;
+export const BBOX_MAX_AREA_DEG2 = 4.0;
+
+/**
+ * bbox API 護欄檢查：zoom 太小或面積過大時丟錯，由呼叫端轉為 400。
+ * zoom 為選填參數；面積以 clamp 到台灣範圍後的 bbox 計算。
+ */
+export function assertBboxGuardrails(bbox, zoomParam) {
+  let zoom = null;
+  if (zoomParam !== null && zoomParam !== undefined && String(zoomParam).trim() !== '') {
+    zoom = Number(zoomParam);
+    if (!Number.isFinite(zoom)) throw new Error('zoom 必須是數字');
+    if (zoom < BBOX_MIN_ZOOM) {
+      throw new Error(`zoom 太小（${zoomParam}），請放大到 ${BBOX_MIN_ZOOM} 以上再查詢攝影機`);
+    }
+  }
+  const area = (bbox.maxLng - bbox.minLng) * (bbox.maxLat - bbox.minLat);
+  if (!(area > 0) || area > BBOX_MAX_AREA_DEG2) {
+    throw new Error(
+      `查詢範圍過大（約 ${area.toFixed(1)} 平方度，上限 ${BBOX_MAX_AREA_DEG2}），請縮小範圍或提高 zoom`
+    );
+  }
+  return { zoom, area };
+}
 
 /**
  * 解析並驗證 bbox 參數（minLng,minLat,maxLng,maxLat）。
@@ -667,7 +734,9 @@ export function projectBboxCameras(cameras, limit = BBOX_MAX_RESULTS) {
         status: camera.status || 'unknown',
         roadRef: camera.roadRef || '',
         imageUrl: camera.imageUrl || '',
-        source: camera.source || 'CCTV'
+        source: camera.source || 'CCTV',
+        // 誠實標記要穿透投影：示範／推估攝影機不可在投影後變成「真資料」。
+        ...(camera.isProxy === true ? { isProxy: true } : {})
       });
     }
   }
@@ -1791,6 +1860,12 @@ async function requestJson(url, options = {}, timeoutMs = 12000) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** 測試用：清空 HTTP JSON 快取（避免跨測試的上游快取污染）。 */
+export function clearJsonResponseCache() {
+  jsonResponseCache.clear();
+  jsonResponsePromises.clear();
 }
 
 export async function requestJsonCached(url, options = {}, timeoutMs = 12000, ttlMs = 60000) {

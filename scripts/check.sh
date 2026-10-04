@@ -48,22 +48,13 @@ node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console
 grep -q 'css/style.css' index.html
 grep -q 'css/tailwind.generated.css' index.html
 ! grep -q 'cdn.tailwindcss.com' index.html
-grep -q 'js/core.js' index.html
-grep -q 'js/services.js' index.html
-grep -q 'js/data.js' index.html
-grep -q 'js/route-search-model.js' index.html
-node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-search-model.js'); const runtime=s.indexOf('js/main-ui.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route search model must load before main-ui.js')"
-grep -q 'js/route-summary-model.js' index.html
-node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-summary-model.js'); const runtime=s.indexOf('js/main-ui.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route summary model must load before main-ui.js')"
-grep -q 'js/main-ui.js' index.html
-grep -q 'js/enhancements.js' index.html
-grep -q 'js/route-condition-view-model.js' index.html
-grep -q 'js/route-navigation-model.js' index.html
-node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-navigation-model.js'); const runtime=s.indexOf('js/route-conditions.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route navigation model must load before route-conditions.js')"
-grep -q 'js/route-conditions.js' index.html
-node -e "const s=require('fs').readFileSync('index.html','utf8'); const model=s.indexOf('js/route-condition-view-model.js'); const runtime=s.indexOf('js/route-conditions.js'); if(model<0 || runtime<0 || model>runtime) throw new Error('route condition view model must load before route-conditions.js')"
-grep -q 'js/ride-tools.js' index.html
-grep -q 'js/pwa.js' index.html
+# #76 起前端已打包為 js/dist 產物：index.html 只載入 bundle，不再逐檔引用源碼
+! grep -q 'src="js/core.js' index.html
+! grep -q 'src="js/services.js' index.html
+! grep -q 'src="js/data.js' index.html
+! grep -q 'src="js/main-ui.js' index.html
+! grep -q 'src="js/pwa.js' index.html
+node -e "const s=require('fs').readFileSync('index.html','utf8'); const a=s.indexOf('js/dist/app.js'); const b=s.indexOf('js/dist/app2.js'); if(a<0 || b<0 || a>b) throw new Error('dist app.js must load before app2.js')"
 grep -q 'manifest.json' index.html
 grep -q 'apple-touch-icon.png' index.html
 ! grep -Eq '(unpkg|cdnjs|fonts\.googleapis)\.com' index.html

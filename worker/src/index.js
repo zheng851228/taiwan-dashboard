@@ -22,11 +22,18 @@ import {
   loadLiveProviderData,
   loadSnapshotCountyWeather,
   parseCameraBbox,
+  assertBboxGuardrails,
   projectBboxCameras,
   sha256Hex,
   traceRouteAttributes
 } from './providers.js';
 import { buildAvoidLocations, validateRouteEdges } from './rules.js';
+import {
+  SNAPSHOT_HEALTH_KEY,
+  SNAPSHOT_HEALTH_TTL_SECONDS,
+  buildSnapshotHealthRecord,
+  readSnapshotHealth
+} from './snapshot-honesty.js';
 
 const ROUTE_TTL_SECONDS = 6 * 60 * 60;
 const MAX_JSON_BODY_BYTES = 32 * 1024;
@@ -62,9 +69,11 @@ export default {
         });
       }
       const publicMessage = status >= 500 ? '上游資料暫時無法使用，請稍後重試。' : error.message;
+      const nowIso = new Date().toISOString();
       return withCors(jsonResponse({
         status: status === 422 ? 'blocked' : 'error',
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
+        fetchedAt: nowIso,
         data: error.data || null,
         message: publicMessage
       }, status), request);
@@ -79,6 +88,12 @@ export default {
  * Cloudflare Workers Cron Trigger：每 5 分鐘重建 provider snapshot
  * 並以 diff-before-write 寫入 KV（2 個 keys：snapshot + cams）。
  * 供 wrangler.jsonc 的 triggers.crons 使用；測試也可直接呼叫。
+ *
+ * 誠實規則：
+ * - 空快照（上游全掛或抓到空資料）絕不覆蓋 KV 裡的舊快照：該 key 跳過寫入，
+ *   reader 會自動回退到較舊的 slot。
+ * - 每次執行都更新健康紀錄（SNAPSHOT_HEALTH_KEY）：寫入狀態、provider 狀態、
+ *   失敗清單與 lastFailureAt / lastSuccessAt，供 GET /v2/health 查詢。
  */
 export async function scheduled(event, env, ctx) {
   const binding = env.PROVIDER_SNAPSHOTS || env.ROUTE_CACHE;
@@ -93,17 +108,82 @@ export async function scheduled(event, env, ctx) {
     return { ok: true, skipped: true, reason: 'not-snapshot-mode' };
   }
   const now = new Date(event && event.scheduledTime ? event.scheduledTime : Date.now());
-  const entries = await buildSnapshotKvEntries(env, now);
-  const results = [];
-  for (const entry of entries) {
-    results.push(await putSnapshotEntryIfChanged(binding, entry, now));
+  let entries = [];
+  let providers = {};
+  let buildError = null;
+  try {
+    entries = await buildSnapshotKvEntries(env, now);
+    providers = entries[0]?.providers || {};
+  } catch (error) {
+    buildError = error;
   }
+  const results = [];
+  const entryStatuses = [];
+  const failures = [];
+  let wroteAny = false;
+  let skippedUnchanged = false;
+  if (buildError) {
+    failures.push({ scope: 'build', message: buildError.message || 'snapshot build failed' });
+  } else {
+    for (const entry of entries) {
+      if (entry.empty) {
+        // 空快照不覆蓋舊快照：跳過寫入，只記錄告警。
+        results.push(`${entry.key}: skipped-empty`);
+        entryStatuses.push('skipped-empty');
+        failures.push({
+          scope: entry.kind || entry.key,
+          message: 'snapshot empty (upstream failed or no data); kept previous snapshot'
+        });
+        continue;
+      }
+      const putResult = await putSnapshotEntryIfChanged(binding, entry, now);
+      results.push(`${putResult.key}: ${putResult.status}`);
+      entryStatuses.push(putResult.status);
+      if (putResult.status === 'written') wroteAny = true;
+      if (putResult.status === 'skipped') skippedUnchanged = true;
+    }
+    for (const [name, status] of Object.entries(providers)) {
+      if (status && status.status === 'failed') {
+        failures.push({ scope: name, message: `${name} provider fetch failed` });
+      }
+    }
+  }
+  const ok = !buildError && (wroteAny || skippedUnchanged);
+  const reason = buildError
+    ? 'build-error'
+    : (ok ? null : 'empty-snapshot');
   const summary = {
     at: now.toISOString(),
-    results: results.map((r) => `${r.key}: ${r.status}`)
+    results: results.map((r) => `${r}`)
   };
+  // 健康／告警紀錄：每次執行都寫，讓 health check 讀得到最後失敗時間。
+  const previous = await readSnapshotHealth(binding);
+  const healthRecord = buildSnapshotHealthRecord({
+    now,
+    ok,
+    reason,
+    entries: entries.map((entry, index) => ({
+      kind: entry.kind,
+      key: entry.key,
+      status: entryStatuses[index] || 'unknown',
+      empty: entry.empty,
+      counts: entry.counts
+    })),
+    providers,
+    failures,
+    previous
+  });
+  try {
+    await binding.put(
+      SNAPSHOT_HEALTH_KEY,
+      JSON.stringify(healthRecord),
+      { expirationTtl: SNAPSHOT_HEALTH_TTL_SECONDS }
+    );
+  } catch (error) {
+    console.error('scheduled snapshot: 健康紀錄寫入失敗', error.message);
+  }
   console.log('scheduled snapshot complete', JSON.stringify(summary));
-  return { ok: true, ...summary };
+  return { ok, reason, ...summary };
 }
 
 /**
@@ -137,24 +217,35 @@ async function putSnapshotEntryIfChanged(binding, entry, now) {
 }
 
 /**
- * GET /v2/cams?bbox=minLng,minLat,maxLng,maxLat：
+ * GET /v2/cams?bbox=minLng,minLat,maxLng,maxLat[&zoom=]:
  * 用 cams snapshot 的格子索引做記憶體過濾，回傳欄位投影。
+ * 護欄：zoom < 10 拒絕、bbox 面積 > 4 平方度拒絕、回應上限 2000 點、
+ * public 快取 + ETag（沿用既有慣例）。
  * KV miss 時 fallback 即時抓取（沿用 loadCameras）。
  */
-async function handleCamsBbox(bboxParam, env, request) {
+async function handleCamsBbox(bboxParam, env, request, url) {
   let bbox;
   try {
     bbox = parseCameraBbox(bboxParam);
   } catch (error) {
     throw new HttpError(400, error.message);
   }
+  try {
+    assertBboxGuardrails(bbox, url.searchParams.get('zoom'));
+  } catch (error) {
+    throw new HttpError(400, error.message);
+  }
   let cameras = null;
   let etagSeed = null;
+  let fetchedAt = new Date().toISOString();
   if (!isFixtureMode(env) && isSnapshotMode(env)) {
     const snapshot = await loadLatestCameraSnapshot(env);
     if (snapshot) {
       cameras = filterSnapshotCamerasByBbox(snapshot.decoded, bbox);
       etagSeed = snapshot.sha256;
+      fetchedAt = snapshot.decoded.header.fetched_at
+        || snapshot.decoded.header.generatedAt
+        || fetchedAt;
     }
   }
   if (!cameras) {
@@ -171,7 +262,7 @@ async function handleCamsBbox(bboxParam, env, request) {
   if (ifNoneMatch && ifNoneMatch.split(',').map((part) => part.trim()).includes(etag)) {
     return new Response(null, { status: 304, headers: cacheHeaders });
   }
-  const body = envelope('ok', { cameras: items, total, truncated, bbox }, '');
+  const body = envelope('ok', { cameras: items, total, truncated, bbox }, '', { fetchedAt });
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { ...cacheHeaders, 'Content-Type': 'application/json; charset=utf-8' }
@@ -181,6 +272,7 @@ async function handleCamsBbox(bboxParam, env, request) {
 /**
  * 快照模式下讀取全量攝影機清單（供無 bbox 的 /v2/cams）。
  * KV miss 或 slot 過期時回傳 null，由呼叫端降級。
+ * 回傳 { cameras, fetchedAt }。
  */
 async function loadSnapshotCamerasFull(env) {
   const snapshot = await loadLatestCameraSnapshot(env);
@@ -199,7 +291,40 @@ async function loadSnapshotCamerasFull(env) {
       source: camera.source || 'CCTV'
     });
   }
-  return projected;
+  return {
+    cameras: projected,
+    fetchedAt: snapshot.decoded.header.fetched_at
+      || snapshot.decoded.header.generatedAt
+      || new Date().toISOString()
+  };
+}
+
+/**
+ * GET /v2/health：排程健康檢查。
+ * 讀取 cron 每次執行寫入的 SNAPSHOT_HEALTH_KEY：寫入狀態、provider 狀態、
+ * 失敗清單、lastFailureAt / lastSuccessAt。無紀錄時回 partial（不偽造）。
+ */
+async function handleHealth(env) {
+  const binding = env.PROVIDER_SNAPSHOTS || env.ROUTE_CACHE;
+  const record = await readSnapshotHealth(binding);
+  const data = {
+    snapshotMode: isSnapshotMode(env),
+    fetchedAt: new Date().toISOString(),
+    ...(record || {
+      ok: null,
+      reason: 'no-health-record',
+      entries: [],
+      providers: {},
+      failures: [],
+      lastFailureAt: null,
+      lastSuccessAt: null
+    })
+  };
+  return jsonResponse(envelope(
+    record ? 'ok' : 'partial',
+    data,
+    record ? '' : '尚無排程健康紀錄'
+  ));
 }
 
 /**
@@ -231,7 +356,9 @@ async function routeRequest(request, env) {
 
   if (path === '/v2/routes' && request.method === 'POST') {
     const record = await createRouteRecord(await readJson(request), env);
-    return jsonResponse(envelope('ok', publicRoute(record), routeMessage(record)));
+    const data = publicRoute(record);
+    if (record.dataMode === 'fixture') data.isProxy = true;
+    return jsonResponse(envelope('ok', data, routeMessage(record)));
   }
 
   const conditionsMatch = path.match(/^\/v2\/routes\/([^/]+)\/conditions$/);
@@ -243,25 +370,29 @@ async function routeRequest(request, env) {
   if (path === '/v2/cams' && request.method === 'GET') {
     const bboxParam = url.searchParams.get('bbox');
     if (bboxParam !== null && bboxParam !== '') {
-      return handleCamsBbox(bboxParam, env, request);
+      return handleCamsBbox(bboxParam, env, request, url);
     }
     // 快照模式：改讀 2MB cams KV value（全量攝影機清單），取代 HTTP envelope。
     if (!isFixtureMode(env) && isSnapshotMode(env)) {
-      const cameras = await loadSnapshotCamerasFull(env);
-      return cameras
-        ? jsonResponse(envelope('ok', cameras, ''))
+      const full = await loadSnapshotCamerasFull(env);
+      return full
+        ? jsonResponse(envelope('ok', full.cameras, '', { fetchedAt: full.fetchedAt }))
         : jsonResponse(envelope('partial', [], '攝影機快照暫時無法取得'));
     }
     const cameras = isFixtureMode(env) ? buildFixtureCameras() : await loadCameras(env);
     return jsonResponse(envelope(cameras.length ? 'ok' : 'partial', cameras, cameras.length ? '' : '目前沒有攝影機資料'));
   }
 
+  if (path === '/v2/health' && request.method === 'GET') {
+    return handleHealth(env);
+  }
+
   if (path === '/v2/weather' && request.method === 'GET') {
     // 快照模式：縣市氣象已併入 provider snapshot value，改讀 header.countyWeather。
     if (!isFixtureMode(env) && isSnapshotMode(env)) {
-      const countyWeather = await loadSnapshotCountyWeather(env);
-      return countyWeather
-        ? jsonResponse(envelope('ok', countyWeather, ''))
+      const loaded = await loadSnapshotCountyWeather(env);
+      return loaded
+        ? jsonResponse(envelope('ok', loaded.countyWeather, '', { fetchedAt: loaded.fetchedAt }))
         : jsonResponse(envelope('partial', {}, '氣象快照暫時無法取得'));
     }
     const weather = isFixtureMode(env) ? buildFixtureCountyWeather() : await loadCountyWeather(env);
@@ -297,9 +428,9 @@ async function routeRequest(request, env) {
   }
   if (path === '/weather' && request.method === 'GET') {
     if (!isFixtureMode(env) && isSnapshotMode(env)) {
-      const countyWeather = await loadSnapshotCountyWeather(env);
-      return countyWeather
-        ? jsonResponse(envelope('ok', countyWeather))
+      const loaded = await loadSnapshotCountyWeather(env);
+      return loaded
+        ? jsonResponse(envelope('ok', loaded.countyWeather, '', { fetchedAt: loaded.fetchedAt }))
         : jsonResponse(envelope('partial', {}, '氣象快照暫時無法取得'));
     }
     const weather = isFixtureMode(env) ? buildFixtureCountyWeather() : await loadCountyWeather(env);
@@ -435,7 +566,10 @@ async function handleConditions(routeId, env, forceRefresh) {
   const message = fixtureMode
     ? '示範資料模式：僅供介面測試，不代表即時路況或合法導航。'
     : (providerData.issues?.length ? '部分官方資料暫時無法取得，未知路段已保留灰色。' : '');
-  const response = envelope(isPartial ? 'partial' : 'ok', conditionData, message);
+  if (fixtureMode) conditionData.isProxy = true;
+  // fetched_at：快照模式用快照實際抓取時間；即時／示範模式用本次取得時間。
+  const fetchedAt = providerData.snapshotGeneratedAt || now.toISOString();
+  const response = envelope(isPartial ? 'partial' : 'ok', conditionData, message, { fetchedAt });
   await cachePut(env, cachedKey, response, ROUTE_TTL_SECONDS);
   return jsonResponse(response);
 }
@@ -480,6 +614,7 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
       next.traffic = {
         ...previous.traffic,
         lastKnown: true,
+        isProxy: true,
         message: '\u4e0a\u6e38\u66ab\u6642\u5931\u6548\uff0c\u986f\u793a\u5341\u5206\u9418\u5167\u7684\u6700\u5f8c\u6210\u529f\u8cc7\u6599'
       };
     }
@@ -492,6 +627,7 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
       next.weather = {
         ...previous.weather,
         lastKnown: true,
+        isProxy: true,
         message: '\u4e0a\u6e38\u66ab\u6642\u5931\u6548\uff0c\u986f\u793a\u6700\u5f8c\u6210\u529f\u7684\u6c23\u8c61\u8cc7\u6599'
       };
     }
@@ -506,7 +642,8 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
         .map((incident) => ({
           ...incident,
           status: roadEventState(incident, now),
-          lastKnown: true
+          lastKnown: true,
+          isProxy: true
         }));
     }
     if (
@@ -515,7 +652,7 @@ export function mergeLastKnownConditions(current, cachedEnvelope, issues, now = 
       && previous.cameras?.length
       && isFresh(cacheUpdatedAt, 10, now)
     ) {
-      next.cameras = previous.cameras.map((camera) => ({ ...camera, lastKnown: true }));
+      next.cameras = previous.cameras.map((camera) => ({ ...camera, lastKnown: true, isProxy: true }));
     }
     return next;
   });
@@ -619,8 +756,13 @@ async function readJson(request) {
   }
 }
 
-function envelope(status, data, message = '') {
-  return { status, updatedAt: new Date().toISOString(), data, message };
+function envelope(status, data, message = '', options = {}) {
+  const body = { status, updatedAt: new Date().toISOString(), data, message };
+  // 對外回應契約：頂層 fetched_at 為資料實際取得時間（非回應時間）；
+  // 未指定時預設為回應時間（適用即時運算／即時查詢端點）。
+  const fetchedAt = options.fetchedAt || body.updatedAt;
+  body.fetchedAt = fetchedAt;
+  return body;
 }
 
 function jsonResponse(value, status = 200) {
@@ -673,6 +815,9 @@ function rateLimitDescriptor(path, method, url) {
   }
   if (method === 'GET' && path === '/v2/weather') {
     return { binding: 'LOOKUP_RATE_LIMITER', group: 'weather', limit: 60 };
+  }
+  if (method === 'GET' && path === '/v2/health') {
+    return { binding: 'LOOKUP_RATE_LIMITER', group: 'health', limit: 60 };
   }
   if (method === 'GET' && /^\/v2\/routes\/[^/]+\/conditions$/.test(path) && url.searchParams.get('refresh') !== '1') {
     return { binding: 'LOOKUP_RATE_LIMITER', group: 'conditions', limit: 60 };

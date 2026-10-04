@@ -203,7 +203,7 @@
     if (offline) closeInstallNudge(false);
     if (!offline) {
       var message = Dom.byId('pwa-network-message');
-      if (message) message.textContent = '目前離線，只顯示已保存內容；即時路況、天氣與影像暫停更新。';
+      if (message) message.textContent = '目前離線，只顯示已保存內容；快照路況、天氣與影像暫停更新。';
       maybeShowInstallNudge(latestLiveConditions);
     }
   }
@@ -296,7 +296,7 @@
     }
     var status = Dom.byId('js-route-status');
     if (status) {
-      status.textContent = '離線快照 · 儲存於 ' + formatSnapshotTime(snapshot.savedAt) + '；即時資料暫停更新';
+      status.textContent = '離線快照 · 儲存於 ' + formatSnapshotTime(snapshot.savedAt) + '；快照資料暫停更新';
     }
     var banner = Dom.byId('js-route-banner');
     if (banner) {
@@ -304,7 +304,7 @@
       banner.classList.add('flex');
     }
     var bannerLabel = Dom.byId('js-route-banner-label');
-    if (bannerLabel) bannerLabel.textContent = '已保存路線 · 非即時';
+    if (bannerLabel) bannerLabel.textContent = '已保存路線 · 快照資料';
     var clear = Dom.byId('js-route-clear-small');
     if (clear) clear.classList.remove('hidden');
 
@@ -322,7 +322,7 @@
     window.addEventListener('offline', updateNetworkUi);
     window.addEventListener('online', function() {
       updateNetworkUi();
-      Toast.show('連線已恢復，可重新整理即時路況', 3500);
+      Toast.show('連線已恢復，可重新整理快照路況', 3500);
     });
     Bus.on('route:updated', saveRouteSnapshot);
     Bus.on('conditions:updated', saveRouteSnapshot);
