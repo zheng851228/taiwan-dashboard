@@ -85,6 +85,13 @@
     return ['https://api.maptiler.com/maps/' + tileset + '/{z}/{x}/{y}.jpg?key=' + key];
   }
 
+  function baseTiles(tileset) {
+    if (PROVIDER_CONFIG.provider !== 'maptiler' || !PROVIDER_CONFIG.key) return [];
+    var ts = encodeURIComponent(tileset);
+    var key = encodeURIComponent(PROVIDER_CONFIG.key);
+    return ['https://api.maptiler.com/maps/' + ts + '/{z}/{x}/{y}.png?key=' + key];
+  }
+
   function createRenderer(options) {
     var initialTerrainMode = options.terrainMode === '3d' ? '3d' : '2d';
     // Mobile shell passes { simple: true }: skip desktop-only terrain,
@@ -121,14 +128,9 @@
           var sources = {
             base: {
               type: 'raster',
-              tiles: [
-                'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
-                'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'
-              ],
+              tiles: baseTiles('dataviz-dark'),
               tileSize: 256,
-              attribution: '&copy; OpenStreetMap &copy; CARTO',
+              attribution: '<a href="https://www.maptiler.com/" target="_blank" rel="noopener noreferrer">MapTiler</a> &copy; OpenStreetMap contributors',
               maxzoom: 19
             }
           };
