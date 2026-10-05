@@ -395,14 +395,13 @@
       var map = MapMod.map;
       if (!map || map.getSource('mobile-cameras')) return;
       // Light basemap for the light theme (the renderer's 'base' is dark).
+      // Uses MapTiler (key from window.TWMapProviderConfig) since CARTO now requires API keys.
       if (!map.getSource('mobile-base-light')) {
+        var mtKey = (window.TWMapProviderConfig && window.TWMapProviderConfig.key) || '';
         map.addSource('mobile-base-light', {
           type: 'raster',
           tiles: [
-            'https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
-            'https://b.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
-            'https://c.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png',
-            'https://d.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png'
+            'https://api.maptiler.com/maps/dataviz-light/{z}/{x}/{y}.png?key=' + encodeURIComponent(mtKey)
           ],
           tileSize: 256,
           maxzoom: 19
