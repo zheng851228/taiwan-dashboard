@@ -324,7 +324,7 @@
 
     _initRenderer: function() {
       var renderer = window.MapRenderer.create({
-        containerId: 'map',
+        container: 'map',
         center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]],
         zoom: Config.MAP_ZOOM,
         terrainMode: '2d',
