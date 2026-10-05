@@ -53,12 +53,13 @@
     SIMPLIFY_STEP: 2,
     CONDITIONS_TIMEOUT_MS: 20000,
     WORKER_BASE: workerOverride || DEFAULT_WORKER_ORIGIN,
-    // CARTO supplies the road/land base without baked-in English labels;
+    // MapTiler supplies the road/land base (CARTO now requires API keys);
     // localized labels are rendered by the app so desktop and mobile stay
-    // consistently in Traditional Chinese.
-    TILE_DARK:  'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    TILE_LIGHT: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-    TILE_ATTR:  '&copy; OpenStreetMap &copy; CARTO',
+    // consistently in Traditional Chinese. Key injected at runtime from
+    // window.TWMapProviderConfig (see MapMod.setTile).
+    TILE_DARK:  'https://api.maptiler.com/maps/dataviz-dark/{z}/{x}/{y}.png?key={k}',
+    TILE_LIGHT: 'https://api.maptiler.com/maps/dataviz-light/{z}/{x}/{y}.png?key={k}',
+    TILE_ATTR:  '&copy; MapTiler &copy; OpenStreetMap contributors',
     MAP_LABELS: [
       ['台北', 25.0330, 121.5654], ['基隆', 25.1283, 121.7419],
       ['桃園', 24.9937, 121.3010], ['新竹', 24.8138, 120.9675],
