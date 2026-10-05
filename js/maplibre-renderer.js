@@ -296,7 +296,13 @@
         if (!this.module || !this.map || !Array.isArray(Config.MAP_LABELS)) return;
         var self = this;
         this.placeMarkers.forEach(function(marker) { marker.remove(); });
-        this.placeMarkers = Config.MAP_LABELS.map(function(item) {
+        // 手機版只顯示 6 個主要城市，避免標籤擁擠
+        var isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+        var majorCities = ['台北', '台中', '高雄', '宜蘭', '花蓮', '台東'];
+        var labels = isMobile
+          ? Config.MAP_LABELS.filter(function(item) { return majorCities.indexOf(item[0]) >= 0; })
+          : Config.MAP_LABELS;
+        this.placeMarkers = labels.map(function(item) {
           var element = document.createElement('div');
           element.className = 'local-map-place-label desktop-map-place-label';
           element.textContent = item[0];
