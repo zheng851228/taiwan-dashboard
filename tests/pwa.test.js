@@ -78,7 +78,7 @@ describe('PWA install and offline assets', () => {
     expect(developerChangelog).toContain('PWA v34');
     expect(maplibreRenderer).toContain('var TERRAIN_BOUNDS = [117.5, 20.5, 123.4, 26.7]');
     expect(maplibreRenderer).toContain('bounds: TERRAIN_BOUNDS');
-    expect(maplibreRenderer).toContain('dark_nolabels');
+    expect(maplibreRenderer).toContain('dataviz-dark');
     expect(maplibreRenderer).toContain('_addPlaceLabels');
     expect(maplibreRenderer).toContain('setCameraPreset');
     expect(maplibreRenderer).toContain('setBasemap');
