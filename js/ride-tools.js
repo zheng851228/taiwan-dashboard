@@ -143,7 +143,12 @@
       if (distanceEl) distanceEl.textContent = routeInfo ? (routeInfo.distance + ' km / ' + routeInfo.duration + ' 分') : '未規劃';
       if (cameraEl) cameraEl.textContent = report ? (report.cameraCount + ' 支') : '0 支';
       if (weatherEl) weatherEl.textContent = weatherText;
-      if (updatedEl) updatedEl.textContent = formatUpdatedAt(updatedLabel);
+      if (updatedEl) {
+        updatedEl.textContent = window.SnapshotHonesty
+          ? window.SnapshotHonesty.formatSnapshotLabel(updatedLabel)
+          : formatUpdatedAt(updatedLabel);
+        updatedEl.setAttribute('title', '資料時間（快照）');
+      }
       if (inline) inline.textContent = report && report.riskNotes.length
         ? report.riskNotes[0]
         : '尚未建立路線，先貼上 Google Maps 或手動輸入起終點。';
@@ -227,9 +232,9 @@
       if (overall.rainSections > 0) riskNotes.push(overall.rainSections + ' 段有降雨提醒，請準備雨具。');
       if (overall.incidentCount > 0) riskNotes.push(overall.incidentCount + ' 件道路事件需要留意。');
       if (trafficCoverage < 60) {
-        riskNotes.push('即時交通覆蓋偏低，灰色路段不可視為順暢。');
+        riskNotes.push('交通快照覆蓋偏低，灰色路段不可視為順暢。');
       } else if (trafficCoverage < 100) {
-        riskNotes.push('部分路段沒有即時交通資料，請保守判斷灰色路段。');
+        riskNotes.push('部分路段沒有交通快照資料，請保守判斷灰色路段。');
       }
       if (weatherCoverage < 60) {
         riskNotes.push('沿途氣象覆蓋偏低，無資料路段不可視為無雨。');
@@ -251,7 +256,8 @@
         coveragePercent: trafficCoverage,
         weatherCoveragePercent: weatherCoverage
       };
-      AppState.updatedAt.route = new Date().toISOString();
+      // 路線報告衍生自路況快照：顯示資料時間（conditions fetched_at），不用計算當下時間。
+      AppState.updatedAt.route = AppState.updatedAt.conditions || null;
       RideInsightsMod.updateStatusCard();
       RideInsightsMod.updateRiskPanel();
       RideInsightsMod.updateChecklist();

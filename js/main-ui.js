@@ -1498,7 +1498,10 @@
         if (Data.camsState === 'loading' || Data.camsState === 'idle') {
           el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
         } else if (Data.camsState === 'error') {
-          el.innerHTML = '<div class="text-center text-amber-400 py-12 text-sm">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+          // 降級 UX（行動 7）：誠實的缺席——說清楚發生什麼事、該怎麼辦（含重試）
+          el.innerHTML = (typeof window !== 'undefined' && window.SnapshotHonesty)
+            ? window.SnapshotHonesty.noticeHtml('cams-error')
+            : '<div class="text-center text-amber-400 py-12 text-sm">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
         } else {
           el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
         }

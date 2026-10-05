@@ -66,6 +66,9 @@ function freshSnapshot(overrides = {}) {
   return {
     schemaVersion: 1,
     generatedAt: '2026-07-27T03:55:00.000Z',
+    fetched_at: '2026-07-27T03:55:00.000Z',
+    source: 'TDX/THB/CWA',
+    stale_after: 900,
     gridDegrees: 0.1,
     cells: {},
     ...overrides

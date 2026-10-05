@@ -396,7 +396,7 @@ test('distinguishes a checked route with no incidents from unavailable event sou
   await expect(page.locator('#condition-collapsed-summary')).toHaveText('沿途未發現狀況');
   await expect(page.locator('#condition-collapsed-summary')).not.toContainText('未回報');
   await expect(page.locator('#condition-incidents')).toHaveText('0 處');
-  await expect(page.locator('#condition-event-coverage')).toContainText('高速公路即時');
+  await expect(page.locator('#condition-event-coverage')).toContainText('高速公路快照');
   await expect(page.locator('#condition-event-status')).toContainText('在已回報來源中');
 });
 
@@ -423,7 +423,7 @@ test('keeps legacy Worker event failures partial and unknown', async ({ page }, 
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
 
-  await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
+  await expect(page.locator('#condition-source-badge')).toHaveText('部分快照');
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
   await expect(page.locator('#condition-event-status')).toContainText('未將缺少資料視為「沿途無事件」');
   await expect(page.locator('#condition-event-status')).not.toContainText('沿途未配對到道路事件');
@@ -454,7 +454,7 @@ test('keeps missing legacy coverage partial even without explicit issues', async
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
 
-  await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
+  await expect(page.locator('#condition-source-badge')).toHaveText('部分快照');
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
   await expect(page.locator('#condition-event-status')).not.toContainText('沿途未配對到道路事件');
   await expect(page.locator('#condition-incidents')).toHaveText('未回報');
@@ -490,7 +490,7 @@ test('does not claim no incidents when every reported event scope failed', async
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
 
-  await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
+  await expect(page.locator('#condition-source-badge')).toHaveText('部分快照');
   await expect(page.locator('#condition-event-coverage')).toContainText('道路事件來源目前無法取得');
   await expect(page.locator('#condition-event-status')).not.toContainText('沿途未配對到道路事件');
   await expect(page.locator('#condition-incidents')).toHaveText('未回報');
@@ -526,7 +526,7 @@ test('marks a zero incident count as partially unknown when some event scopes fa
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
 
-  await expect(page.locator('#condition-source-badge')).toHaveText('部分即時');
+  await expect(page.locator('#condition-source-badge')).toHaveText('部分快照');
   await expect(page.locator('#condition-incidents')).toHaveText('部分未知');
   await expect(page.locator('#condition-event-coverage')).toContainText('暫時失效');
   await expect(page.locator('#condition-collapsed-summary')).toHaveText('部分事件來源未回報');
@@ -762,7 +762,7 @@ test('turns a hanging conditions request into an actionable timeout', async ({ p
   await expect(page.locator('#condition-error')).toBeVisible({ timeout: 3000 });
   await expect(page.locator('#condition-error')).toContainText('逾時');
   await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
-  await expect(page.locator('#condition-event-status')).toContainText('目前不是即時資料');
+  await expect(page.locator('#condition-event-status')).toContainText('目前沒有可用的快照資料');
 });
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
@@ -1263,7 +1263,7 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
   await expect(page.locator('#pwa-network-banner')).toBeVisible();
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#route-summary')).toContainText('離線快照');
-  await expect(page.locator('#js-route-status')).toContainText('即時資料暫停更新');
+  await expect(page.locator('#js-route-status')).toContainText('快照資料暫停更新');
   await expect.poll(() => page.evaluate(() =>
     Array.isArray(MapMod.routeLayer)
       && MapMod.routeLayer.length === 3

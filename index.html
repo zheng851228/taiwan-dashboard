@@ -19,9 +19,9 @@
   <meta name="theme-color" content="#f97316" />
   <meta name="apple-mobile-web-app-title" content="路況指揮" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://taiwan-dashboard-api-production.lucky851228.workers.dev https://taiwan-dashboard-api-staging.lucky851228.workers.dev http://localhost:8787 http://127.0.0.1:8787 http://localhost:8790 http://127.0.0.1:8790 https://*.basemaps.cartocdn.com https://tiles.mapterhorn.com https://api.maptiler.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com; object-src 'none'; base-uri 'self'; form-action 'self';" />
-  <link rel="stylesheet" href="css/tailwind.generated.css?v=44" />
+  <link rel="stylesheet" href="css/tailwind.generated.css?v=45" />
   <link rel="stylesheet" href="assets/vendor/fontawesome/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css?v=44" />
+  <link rel="stylesheet" href="css/style.css?v=45" />
 </head>
 <body class="text-slate-100" data-route-state="empty">
 <!-- Style-failure sentinels: the card markup is injected by renderStyleRecoveryOverlays()
@@ -33,7 +33,7 @@
 
   <div id="pwa-network-banner" class="pwa-network-banner hidden" role="status" aria-live="polite">
     <i class="fa-solid fa-cloud-arrow-down"></i>
-    <span id="pwa-network-message">目前離線，只顯示已保存內容；即時路況、天氣與影像暫停更新。</span>
+    <span id="pwa-network-message">目前離線，只顯示已保存內容；快照路況、天氣與影像暫停更新。</span>
   </div>
 
   <div id="pwa-update-banner" class="pwa-action-banner hidden" role="status" aria-live="polite">
@@ -94,7 +94,7 @@
         </span>
         <span class="brand-copy">
           <h1 class="text-sm font-black tracking-tighter leading-none">環島路況指揮中心</h1>
-          <small>摩托車路線安全與即時路況</small>
+          <small>摩托車路線安全與快照路況</small>
         </span>
       </button>
       <div id="desktop-header-route" class="desktop-only-header" aria-live="polite">
@@ -159,6 +159,15 @@
       <span class="active" role="tab" aria-selected="true">URL 貼上</span>
       <span role="tab" aria-selected="false">起點 / 終點</span>
     </div>
+    <!-- 30 秒總結條（行動 10）：依據快照資料計算的一句話結論；回饋入口為 GitHub issue 連結，站內表單後端待接（TODO） -->
+    <section id="ride-verdict-bar" class="ride-verdict-shell glass rounded-[24px] px-3 py-2.5 shadow-xl" aria-live="polite" data-verdict="idle">
+      <span id="ride-verdict-dot" class="ride-verdict-dot is-idle" aria-hidden="true"></span>
+      <div class="flex-1 min-w-0">
+        <div id="ride-verdict-headline" class="ride-verdict-headline">還沒規劃路線</div>
+        <div id="ride-verdict-sub" class="ride-verdict-sub">規劃路線後，這裡 30 秒告訴你今天能不能騎</div>
+      </div>
+      <a id="ride-verdict-feedback" class="ride-verdict-feedback" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener" title="回報問題或許願新功能">💬 回報</a>
+    </section>
     <div id="route-collapsed" class="route-shell route-shell-collapsed glass px-3 py-2.5 rounded-[24px] shadow-xl flex items-center gap-3">
       <div class="route-shell-icon">
         <i class="fa-solid fa-route text-orange-400 text-sm shrink-0"></i>
@@ -308,9 +317,9 @@
     <section class="desktop-support-section desktop-source-section">
       <div class="desktop-panel-heading"><span>4</span><h2>資料來源</h2></div>
       <div class="desktop-source-list">
-        <div><i class="desktop-source-dot"></i><span>交通部 TDX</span><b>（即時）</b></div>
-        <div><i class="desktop-source-dot"></i><span>公路局路況</span><b>（即時）</b></div>
-        <div><i class="desktop-source-dot"></i><span>中央氣象署</span><b>（即時）</b></div>
+        <div><i class="desktop-source-dot"></i><span>交通部 TDX</span><b><span class="snapshot-chip" data-snapshot-for="conditions">快照</span></b></div>
+        <div><i class="desktop-source-dot"></i><span>公路局路況</span><b><span class="snapshot-chip" data-snapshot-for="conditions">快照</span></b></div>
+        <div><i class="desktop-source-dot"></i><span>中央氣象署</span><b><span class="snapshot-chip" data-snapshot-for="weather">快照</span></b></div>
         <div><i class="desktop-source-dot is-muted"></i><span>警政署</span><b>（延遲）</b></div>
         <div><i class="desktop-source-dot is-muted"></i><span>CCTV／各縣市</span><b>（部分未知）</b></div>
       </div>
@@ -353,7 +362,7 @@
     </div>
     <div id="condition-demo-warning" class="condition-demo-warning hidden">
       <i class="fa-solid fa-flask"></i>
-      示範資料僅供介面測試，不代表即時路況、天氣或合法導航。
+      示範資料僅供介面測試，不代表真實路況、天氣或合法導航。
     </div>
     <div id="condition-loading" class="condition-loading hidden">
       <span class="condition-skeleton wide"></span>
@@ -508,7 +517,7 @@
     </div>
   </div>
   <aside class="map-legend glass">
-    <div class="map-legend-title">即時路況</div>
+    <div class="map-legend-title">快照路況<span class="snapshot-age" data-snapshot-for="conditions"></span></div>
     <div class="map-legend-item">
       <div class="map-legend-dot traffic-clear"></div>
       <span>順暢</span>
@@ -700,7 +709,7 @@
         <span><i class="fa-solid fa-circle-info mr-2 text-slate-400"></i>路線完成提示</span>
         <span id="js-route-banner-setting-state" class="ui-setting-state">顯示中</span>
       </button>
-      <p class="text-[11px] text-slate-500 leading-relaxed">可在這裡重新開啟已關閉的頂端資訊；路線與即時路況不受影響。</p>
+      <p class="text-[11px] text-slate-500 leading-relaxed">可在這裡重新開啟已關閉的頂端資訊；路線與快照路況不受影響。</p>
     </div>
 
     <div class="glass p-6 rounded-3xl space-y-3">
@@ -713,6 +722,7 @@
       <p class="text-xs text-slate-400 leading-relaxed">
         整合官方路況、氣象與 CCTV 現場畫面，提供出發前及途中停靠判斷。灰色路段代表資料不足；攝影機不做 AI 自動判讀，仍請依現場標誌與實際狀況騎乘。
       </p>
+      <a class="ride-verdict-feedback ride-verdict-feedback-block" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener">💬 回報問題 / 許願新功能</a>
       <div class="grid grid-cols-2 gap-3 mt-2">
         <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
           <div class="text-orange-500 font-black text-2xl" id="js-stat-cams">0</div>
@@ -787,8 +797,8 @@
       </div>
       <div id="m-med" class="aspect-video bg-black flex items-center justify-center relative min-h-[180px]"></div>
       <div class="p-4 bg-slate-900/50 text-[10px] text-slate-500 flex justify-between items-center">
-        <span>&#9888;&#65039; 影像若無畫面，可能為 HTTP 混合內容攔截。</span>
-        <span class="text-orange-500 font-bold animate-pulse">&#9679; LIVE</span>
+        <span>&#9888;&#65039; 影像若無畫面，可能為 HTTP 混合內容攔截。各攝影機實際拍攝時間以來源單位公布為準。</span>
+        <span class="snapshot-chip is-snapshot">&#9679; 快照影像</span>
       </div>
     </div>
   </div>
@@ -824,8 +834,8 @@
 
 </div>
 
-<script src="js/dist/app.js?v=a771135"></script>
-<script src="js/dist/app2.js?v=a771135"></script>
+<script src="js/dist/app.js?v=607dc16"></script>
+<script src="js/dist/app2.js?v=607dc16"></script>
 
 </body>
 </html>

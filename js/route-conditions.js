@@ -78,9 +78,9 @@
       return '\u9053\u8def\u4e8b\u4ef6\u4f86\u6e90\u672a\u56de\u5831\u6db5\u84cb\u7bc4\u570d\uff1b\u672a\u5c07\u7f3a\u5c11\u8cc7\u6599\u8996\u70ba\u300c\u6cbf\u9014\u7121\u4e8b\u4ef6\u300d\u3002';
     }
     var labels = {
-      'highway:live': '\u7701\u9053\u5373\u6642',
+      'highway:live': '\u7701\u9053\u5feb\u7167',
       'highway:scheduled': '\u7701\u9053\u9810\u544a',
-      'freeway:live': '\u9ad8\u901f\u516c\u8def\u5373\u6642'
+      'freeway:live': '\u9ad8\u901f\u516c\u8def\u5feb\u7167'
     };
     var ready = (coverage.readyScopes || []).map(function(scope) {
       return labels[scope] || scope;
@@ -128,7 +128,16 @@
     setVisible('condition-content', false);
     setVisible('condition-error', true);
     var error = Dom.query('#condition-error span');
-    if (error) error.textContent = message || '\u6cbf\u9014\u72c0\u6cc1\u66ab\u6642\u7121\u6cd5\u8f09\u5165\u3002';
+    if (error) {
+      // 降級 UX（行動 7）：誠實的缺席——說清楚發生什麼事、該怎麼辦
+      if (window.SnapshotHonesty) {
+        var ntc = window.SnapshotHonesty.notice('conditions-error');
+        error.innerHTML = '<strong>' + escapeHtml(ntc.title) + '</strong><br>'
+          + '<span style="font-weight:400">' + escapeHtml(ntc.body) + '</span>';
+      } else {
+        error.textContent = message || '\u6cbf\u9014\u72c0\u6cc1\u66ab\u6642\u7121\u6cd5\u8f09\u5165\u3002';
+      }
+    }
     var summary = Dom.byId('condition-collapsed-summary');
     if (summary) {
       summary.textContent = '\u66f4\u65b0\u5931\u6557';
@@ -140,7 +149,7 @@
       badge.classList.remove('demo');
       badge.classList.add('error');
     }
-    setText('condition-event-status', '\u6cbf\u9014\u72c0\u6cc1\u66f4\u65b0\u5931\u6557\uff0c\u76ee\u524d\u4e0d\u662f\u5373\u6642\u8cc7\u6599');
+    setText('condition-event-status', '\u6cbf\u9014\u72c0\u6cc1\u66f4\u65b0\u5931\u6557\uff0c\u76ee\u524d\u6c92\u6709\u53ef\u7528\u7684\u5feb\u7167\u8cc7\u6599');
     var toggle = Dom.byId('condition-toggle');
     if (toggle) {
       toggle.setAttribute('aria-expanded', 'true');
@@ -163,7 +172,7 @@
     if (!alerts.length) {
       var clear = document.createElement('div');
       clear.className = 'condition-alert weather';
-      clear.innerHTML = '<i class="fa-solid fa-circle-check"></i><span>\u76ee\u524d\u6240\u5f97\u7701\u9053\u5373\u6642\u8207\u9810\u544a\u8cc7\u6599\u672a\u986f\u793a\u660e\u986f\u58c5\u585e\u3001\u964d\u96e8\u6216\u9053\u8def\u4e8b\u4ef6\uff1b\u5e02\u5340\u9053\u8def\u53ef\u80fd\u672a\u6db5\u84cb\u3002</span>';
+      clear.innerHTML = '<i class="fa-solid fa-circle-check"></i><span>\u76ee\u524d\u6240\u5f97\u7701\u9053\u5feb\u7167\u8207\u9810\u544a\u8cc7\u6599\u672a\u986f\u793a\u660e\u986f\u58c5\u585e\u3001\u964d\u96e8\u6216\u9053\u8def\u4e8b\u4ef6\uff1b\u5e02\u5340\u9053\u8def\u53ef\u80fd\u672a\u6db5\u84cb\u3002</span>';
       wrap.appendChild(clear);
       return;
     }
@@ -425,7 +434,10 @@
             : (failedIncidentScopes.length ? '\u90e8\u5206\u672a\u77e5' : '0 \u8655')))
     );
     setText('condition-coverage', Number(overall.coveragePercent || 0) + '%');
-    setText('condition-updated', '\u66f4\u65b0 ' + formatUpdatedAt(payload.updatedAt));
+    // 誠實表述：顯示資料時間的快照標籤，不用「更新 HH:MM」暗示資料很新
+    setText('condition-updated', window.SnapshotHonesty
+      ? window.SnapshotHonesty.formatSnapshotLabel(payload.updatedAt)
+      : ('\u66f4\u65b0 ' + formatUpdatedAt(payload.updatedAt)));
     setText('condition-event-coverage', roadEventCoverageText(data.incidentCoverage));
 
     var validationText = currentRoute.validation && currentRoute.validation.rerouted
@@ -479,9 +491,14 @@
     if (badge) {
       badge.classList.toggle('demo', data.dataMode === 'fixture');
       badge.classList.remove('error');
-      badge.textContent = data.dataMode === 'fixture'
+      // 誠實表述：官方快照 / 部分快照 + 資料時間（title），不再自稱最新資料
+      var badgeLabel = data.dataMode === 'fixture'
         ? 'DEMO \u793a\u7bc4'
-        : (effectivePartial ? '\u90e8\u5206\u5373\u6642' : '\u5b98\u65b9\u5373\u6642');
+        : (effectivePartial ? '\u90e8\u5206\u5feb\u7167' : '\u5b98\u65b9\u5feb\u7167');
+      badge.textContent = badgeLabel;
+      if (window.SnapshotHonesty) {
+        badge.setAttribute('title', window.SnapshotHonesty.formatSnapshotLabel(payload.updatedAt));
+      }
     }
     var refresh = Dom.byId('condition-refresh');
     if (refresh) refresh.classList.remove('loading');

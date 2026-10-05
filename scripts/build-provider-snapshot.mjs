@@ -31,7 +31,14 @@ const env = {
 };
 
 // 與 Worker scheduled() 共用同一份 builder：2 keys（snapshot + cams）。
-const entries = await buildSnapshotKvEntries(env, now);
+// 空快照不寫入（避免覆蓋 KV 裡的舊快照），只印警告。
+const entries = (await buildSnapshotKvEntries(env, now)).filter((entry) => {
+  if (entry.empty) {
+    console.warn(`skip empty snapshot entry: ${entry.key} (${entry.kind})`);
+    return false;
+  }
+  return true;
+});
 
 const output = entries.map((entry) => ({
   key: entry.key,

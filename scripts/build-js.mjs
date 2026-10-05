@@ -46,6 +46,9 @@ const APP_FILES_A = [
   'js/share-import.js',
 ];
 const APP_FILES_B = [
+  // 快照誠實化模組放 B 段開頭：純全域 + DOMContentLoaded 初始化，
+  // 與 A 段無執行期依賴；拆分點不影響語義（A 段 raw 需 <128KB）。
+  'js/snapshot-honesty.js',
   'js/enhancements.js',
   'js/route-filmstrip.js',
   'js/route-condition-view-model.js',

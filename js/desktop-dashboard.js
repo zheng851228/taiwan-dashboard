@@ -86,7 +86,7 @@
     var report = AppState.routeReport;
     var route = AppState.activeRoute;
     text('desktop-validation-summary', route && route.validation && route.validation.status === 'safe'
-      ? ('安全路線已驗證 · ' + (route.dataMode === 'fixture' ? '示範資料' : 'live'))
+      ? ('安全路線已驗證 · ' + (route.dataMode === 'fixture' ? '示範資料' : '官方快照'))
       : '尚未完成安全驗證');
     var attention = Dom.byId('desktop-attention-list');
     if (attention) {
@@ -100,9 +100,13 @@
     text('desktop-traffic-coverage', Number.isFinite(Number(overall.coveragePercent)) ? Number(overall.coveragePercent) + '%' : '--');
     text('desktop-weather-coverage', Number.isFinite(Number(overall.weatherCoveragePercent)) ? Number(overall.weatherCoveragePercent) + '%' : '--');
     text('desktop-source-note', data && data.dataMode === 'fixture'
-      ? '示範資料僅供介面測試，不代表即時路況。'
+      ? '示範資料僅供介面測試，不代表真實路況。'
       : '資料來源：TDX、THB、CWA、各縣市 CCTV。灰色資料不足，不代表順暢。');
-    text('desktop-support-updated', data && data.updatedAt ? formatUpdatedAt(data.updatedAt) : '--:--:--');
+    // 誠實表述：顯示路況快照的資料時間（conditions fetched_at），非「現在」
+    var supportUpdated = AppState.updatedAt && AppState.updatedAt.conditions;
+    text('desktop-support-updated', window.SnapshotHonesty
+      ? window.SnapshotHonesty.formatDataTime(supportUpdated)
+      : formatUpdatedAt(supportUpdated));
     syncDesktopNavigation();
   }
 
@@ -307,8 +311,16 @@
     var prev = Dom.byId('desktop-cctv-prev');
     var next = Dom.byId('desktop-cctv-next');
     if (!camera) {
-      if (media) media.innerHTML = '<i class="fa-solid fa-camera"></i><span>目前沒有可用的沿線影像</span>';
-      text('desktop-cctv-status', '未知');
+      // 降級 UX（行動 7）：誠實的缺席——載入失敗 vs 沿線本來就沒影像，文案不同
+      if (media) {
+        if (window.SnapshotHonesty) {
+          var emptyKind = (window.Data && window.Data.camsState === 'error') ? 'cams-error' : 'cams-empty';
+          media.innerHTML = window.SnapshotHonesty.noticeHtml(emptyKind);
+        } else {
+          media.innerHTML = '<i class="fa-solid fa-camera"></i><span>目前沒有可用的沿線影像</span>';
+        }
+      }
+      text('desktop-cctv-status', '無影像');
       text('desktop-cctv-name', '--');
       if (open) open.disabled = true;
       if (prev) prev.disabled = true;
@@ -328,7 +340,8 @@
           };
           image.addEventListener('load', markReady, { once: true });
           image.addEventListener('error', function() {
-            if (media.contains(image)) media.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>影像暫時無法載入</span>';
+            // 單張影像載入失敗：誠實告知 + 該怎麼辦，不留白
+            if (media.contains(image)) media.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>影像暫時無法載入，可改用天氣快照與道路事件判斷</span>';
           }, { once: true });
           if (image.complete && image.naturalWidth > 0) markReady();
         }

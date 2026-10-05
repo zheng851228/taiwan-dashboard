@@ -1,4 +1,4 @@
-const CACHE_VERSION = "a771135";
+const CACHE_VERSION = "607dc16";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -17,11 +17,11 @@ const SHELL_URLS = [
   "./assets/vendor/fontawesome/webfonts/fa-solid-900.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-regular-400.woff2",
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
-  "./css/tailwind.generated.css?v=44",
-  "./css/style.css?v=44",
-  "./js/dist/app.js?v=a771135",
-  "./js/dist/app2.js?v=a771135",
-  "./js/dist/desktop.js?v=a771135",
+  "./css/tailwind.generated.css?v=45",
+  "./css/style.css?v=45",
+  "./js/dist/app.js?v=607dc16",
+  "./js/dist/app2.js?v=607dc16",
+  "./js/dist/desktop.js?v=607dc16",
 ];
 
 const API_PATTERNS = [
@@ -124,9 +124,10 @@ async function apiNetworkOnly(request) {
   } catch (error) {
     return new Response(JSON.stringify({
       status: "error",
-      updatedAt: new Date().toISOString(),
+      // 誠實：離線錯誤回應沒有資料時間，不偽造 updatedAt
+      updatedAt: null,
       data: null,
-      message: "目前處於離線狀態，即時路況與天氣無法更新。"
+      message: "目前處於離線狀態，快照路況與天氣無法更新。"
     }), {
       status: 503,
       headers: {
