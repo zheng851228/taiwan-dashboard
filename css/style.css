@@ -1844,6 +1844,13 @@ body.light .condition-road-event-icon {
     left: 0.65rem;
     right: 0.65rem;
   }
+  /* 手機版頂部收納：隱藏副標、壓縮 verdict bar，減少地圖被擠壓 */
+  .brand-copy small { display: none; }
+  .brand-copy { gap: 0; }
+  #ride-verdict-bar { padding: 0.45rem 0.7rem; border-radius: 18px; }
+  #ride-verdict-bar .ride-verdict-sub { display: none; }
+  #ride-verdict-bar .ride-verdict-headline { font-size: 0.8rem; }
+  #route-collapsed { padding: 0.5rem 0.7rem; border-radius: 18px; margin-top: 0.4rem; }
   #route-expanded.route-shell-expanded {
     max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 7rem);
     overflow-y: auto;
