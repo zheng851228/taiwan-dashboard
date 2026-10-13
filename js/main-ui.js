@@ -6,8 +6,8 @@
   var THEME_KEY = 'tw_theme';
   var ROUTE_BTN_IDLE_HTML = '<i class="fa-solid fa-shield-halved" aria-hidden="true"></i> \u5efa\u7acb\u5b89\u5168\u8def\u7dda';
   var ROUTE_BTN_BUSY_HTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> \u5206\u6790\u4e2d\u2026';
-  var THEME_ICON_DARK = '<i class="ico ico-moon" aria-hidden="true"></i>';
-  var THEME_ICON_LIGHT = '<i class="fa-solid fa-sun" aria-hidden="true"></i>';
+  var THEME_ICON_DARK = '<svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6a8.6 8.6 0 1 0 11 11z" fill="currentColor"/></svg>';
+  var THEME_ICON_LIGHT = '<svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.4" fill="currentColor"/><path d="M12 2.6v2.7M12 18.7v2.7M2.6 12h2.7M18.7 12h2.7M5.35 5.35l1.9 1.9M16.75 16.75l1.9 1.9M5.35 18.65l1.9-1.9M16.75 7.25l1.9-1.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   var REGION_LABELS = {
     north: '\u5317\u90e8',
     central: '\u4e2d\u90e8',
@@ -1232,8 +1232,8 @@
       var hints = (SEARCH_HINTS[ListMod.region] || SEARCH_HINTS.all).slice();
       if (ListMod.regionCounty !== 'all') hints.unshift(ListMod.regionCounty);
       hints = hints.filter(function(value, index, arr) { return arr.indexOf(value) === index; }).slice(0, 6);
-      wrap.innerHTML = '<span class="text-[10px] text-slate-500 py-1">\u63d0\u793a\uff1a</span>' + hints.map(function(hint) {
-        return '<button class="hint-chip px-2.5 py-1 text-[11px] font-bold rounded-full transition-all" data-hint="' + hint + '">' + hint + '</button>';
+      wrap.innerHTML = '<span class="list-chip-label">\u63d0\u793a\uff1a</span>' + hints.map(function(hint) {
+        return '<button class="hint-chip" data-hint="' + hint + '">' + hint + '</button>';
       }).join('');
       Dom.onAll('.hint-chip', 'click', function(btn) {
         ListMod.applySearch(btn.dataset.hint || '');
@@ -1347,10 +1347,10 @@
         return;
       }
       var regionLabel = REGION_LABELS[ListMod.region] || '\u5340\u57df';
-      var html = '<button data-county="all" class="county-rtab px-3 py-1.5 text-[11px] font-bold rounded-full transition-all">'
+      var html = '<button data-county="all" class="county-rtab">'
         + regionLabel + '\u5168\u90e8</button>';
       counties.forEach(function(county) {
-        html += '<button data-county="' + county + '" class="county-rtab px-3 py-1.5 text-[11px] font-bold rounded-full transition-all">'
+        html += '<button data-county="' + county + '" class="county-rtab">'
           + county + '</button>';
       });
       wrap.innerHTML = html;
@@ -1372,10 +1372,7 @@
       Dom.queryAll('.county-rtab', wrap).forEach(function(btn) {
         var isActive = btn.dataset.county === ListMod.regionCounty;
         btn.classList.toggle('active', isActive);
-        btn.classList.toggle('bg-orange-500', isActive);
-        btn.classList.toggle('text-white', isActive);
-        btn.classList.toggle('bg-white/5', !isActive);
-        btn.classList.toggle('text-slate-300', !isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
       });
     },
     init: function() {
@@ -1499,14 +1496,14 @@
             : '可切換區域、縣市或搜尋關鍵字來縮小範圍。';
         }
         if (Data.camsState === 'loading' || Data.camsState === 'idle') {
-          el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
+          el.innerHTML = '<div class="list-empty">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
         } else if (Data.camsState === 'error') {
           // 降級 UX（行動 7）：誠實的缺席——說清楚發生什麼事、該怎麼辦（含重試）
           el.innerHTML = (typeof window !== 'undefined' && window.SnapshotHonesty)
             ? window.SnapshotHonesty.noticeHtml('cams-error')
-            : '<div class="text-center text-amber-400 py-12 text-sm">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+            : '<div class="list-empty is-warn">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
         } else {
-          el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
+          el.innerHTML = '<div class="list-empty">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
         }
         return;
       }
@@ -1537,26 +1534,26 @@
         if (NearbyMod.userLat !== null && NearbyMod.userLng !== null) {
           distLabel = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng).toFixed(1) + 'km';
         }
-        html += '<div class="cam-card rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+escapeHtml(cam.id)+'">'
-          + '<div class="cam-card-top w-full">'
-          + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
-          + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
-          + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+escapeHtml(_ts)+'" />'
+        html += '<div class="cam-card" data-id="'+escapeHtml(cam.id)+'">'
+          + '<div class="cam-card-top">'
+          + '<div class="cam-tw">'
+          + '<i class="fa-solid fa-camera cam-tw-ph" aria-hidden="true"></i>'
+          + '<img class="cam-th" alt="" data-src="'+escapeHtml(_ts)+'" />'
           + '</div>'
-          + '<div class="flex-1 min-w-0">'
-          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+escapeHtml(cam.name)+'</div>'
-          + '<div class="text-[10px] text-slate-400 mt-0.5">'+escapeHtml(cam.county)+(wt?' \u00B7 '+escapeHtml(wt):'')+'</div>'
+          + '<div class="cam-card-body">'
+          + '<div class="cam-card-name">'+escapeHtml(cam.name)+'</div>'
+          + '<div class="cam-card-sub">'+escapeHtml(cam.county)+(wt?' \u00B7 '+escapeHtml(wt):'')+'</div>'
           + '<div class="cam-card-meta">'
           + '<span class="meta-chip">'+escapeHtml(catLabel)+'</span>'
           + (isRouteCam ? '<span class="meta-chip">\u6cbf\u9014</span>' : '')
           + (distLabel ? '<span class="meta-chip">\u8ddd\u96e2 ' + distLabel + '</span>' : '')
           + '</div>'
           + '</div>'
-          + '<button class="card-favorite-btn" data-favorite-id="' + escapeHtml(cam.id) + '"><i class="fa-regular fa-bookmark text-xs"></i></button>'
-          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div></div>';
+          + '<button class="card-favorite-btn" data-favorite-id="' + escapeHtml(cam.id) + '" aria-label="\u6536\u85cf ' + escapeHtml(cam.name) + '"><i class="fa-regular fa-bookmark" aria-hidden="true"></i></button>'
+          + '</div></div>';
       });
       if (hasMore) {
-        html += '<button type="button" class="list-load-more w-full text-center text-xs py-4">'
+        html += '<button type="button" class="list-load-more">'
           + '目前顯示 ' + listCams.length + ' / ' + cams.length + ' 支 · 載入更多'
           + '</button>';
       }
@@ -1698,5 +1695,33 @@
     // 沿途影像按鈕
     Dom.onId('js-strip-btn', 'click', function() { RouteStripMod.toggle(); });
     Dom.onId('route-strip-close', 'click', function() { RouteStripMod.hide(); });
+
+    // Mobile: the toast sits directly below the merged top card, never over it.
+    var topCard = document.querySelector('.map-top-panel');
+    var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 1199px)') : null;
+    window.Toast.anchor = function() {
+      var root = document.documentElement;
+      if (!topCard || !mobileQuery || !mobileQuery.matches || !topCard.offsetParent) {
+        root.style.removeProperty('--toast-top');
+        return;
+      }
+      root.style.setProperty('--toast-top', Math.round(topCard.getBoundingClientRect().bottom + 8) + 'px');
+    };
+    if (topCard && window.ResizeObserver) new ResizeObserver(function() { window.Toast.anchor(); }).observe(topCard);
+    window.addEventListener('resize', function() { window.Toast.anchor(); });
+
+    // Mobile map: MapLibre opens its attribution on first paint. Keep the
+    // compact "i" button collapsed until the rider taps it (presentation only).
+    var mobileMap = document.getElementById('map');
+    if (mobileMap && window.MutationObserver) {
+      var attributionWatch = new MutationObserver(function() {
+        var attribution = mobileMap.querySelector('.maplibregl-ctrl-attrib');
+        if (!attribution) return;
+        attribution.removeAttribute('open');
+        attribution.classList.remove('maplibregl-compact-show');
+        attributionWatch.disconnect();
+      });
+      attributionWatch.observe(mobileMap, { childList: true, subtree: true });
+    }
   });
 })();

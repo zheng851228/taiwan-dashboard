@@ -175,6 +175,7 @@
       var el = document.getElementById('toast');
       if (!el) return;
       el.textContent = msg;
+      if (typeof window.Toast.anchor === 'function') window.Toast.anchor();
       el.classList.add('is-visible');
       clearTimeout(window.Toast._timer);
       window.Toast._timer = setTimeout(function() {

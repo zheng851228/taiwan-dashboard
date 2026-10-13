@@ -127,7 +127,7 @@
         <button id="desktop-favorites-toggle" class="desktop-header-action" type="button">
           <i class="fa-regular fa-bookmark"></i><span>收藏</span>
         </button>
-        <button id="js-theme" type="button" class="icon-btn ghost w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base" aria-label="切換深色／淺色主題" title="切換深色／淺色主題"><i class="ico ico-moon" aria-hidden="true"></i></button>
+        <button id="js-theme" type="button" class="icon-btn ghost w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base" aria-label="切換深色／淺色主題" title="切換深色／淺色主題"><svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6a8.6 8.6 0 1 0 11 11z" fill="currentColor"/></svg></button>
       </div>
     </div>
     <div id="desktop-settings-popover" class="desktop-settings-popover hidden" role="dialog" aria-label="桌面顯示設定">
@@ -579,178 +579,174 @@
   </aside>
 </section>
 
-<section id="pg-list" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
-  <div class="max-w-xl mx-auto space-y-4">
-    <div class="list-filter-shell glass rounded-[28px] p-3 sticky top-0 z-10">
-      <div class="flex items-center justify-between px-1 pb-2">
+<section id="pg-list" class="pg overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
+  <div class="page-wrap list-page">
+    <div class="list-filter-shell sticky top-0 z-10">
+      <div class="list-filter-head">
         <div>
-          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-400/80 font-black">Traffic Browser</div>
-          <div class="text-sm font-black text-slate-100">路況列表分類</div>
+          <div class="page-kicker">Traffic Browser</div>
+          <h2 class="page-title">路況列表分類</h2>
         </div>
-        <div class="text-[10px] text-slate-500">依地區、縣市、關鍵詞快速篩選</div>
+        <div class="list-filter-hint">依地區、縣市、關鍵詞快速篩選</div>
       </div>
-      <div id="js-tabs" class="list-tabs-grid gap-1.5 p-1.5 rounded-2xl">
-        <button data-r="all"     class="rtab active py-2.5 text-xs font-bold rounded-xl transition-all">全部</button>
-        <button data-r="north"   class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">北部</button>
-        <button data-r="central" class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">中部</button>
-        <button data-r="south"   class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">南部</button>
-        <button data-r="east"    class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">東部</button>
-        <button data-r="island"  class="rtab py-2.5 text-xs font-bold rounded-xl hover:bg-white/5 transition-all">離島</button>
+      <div id="js-tabs" class="list-tabs-grid" role="group" aria-label="地區">
+        <button data-r="all"     class="rtab active">全部</button>
+        <button data-r="north"   class="rtab">北部</button>
+        <button data-r="central" class="rtab">中部</button>
+        <button data-r="south"   class="rtab">南部</button>
+        <button data-r="east"    class="rtab">東部</button>
+        <button data-r="island"  class="rtab">離島</button>
       </div>
       <div id="js-region-county-tabs" class="hidden flex flex-wrap gap-2 px-1 pt-3"></div>
-      <div class="relative mt-3">
-        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-orange-300/70"></i>
+      <div class="list-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
         <input type="text" id="js-search" autocomplete="off"
-          placeholder="搜尋攝影機、地名、縣市..."
-          class="list-search-input w-full py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          placeholder="搜尋攝影機、地名、縣市..." aria-label="搜尋攝影機、地名、縣市"
+          class="list-search-input w-full text-sm focus:outline-none" />
       </div>
-      <div class="list-chip-head px-1 pt-3">
-        <span>熱門跑法</span>
-        <span class="text-slate-500">點一下直接搜路線</span>
+      <!-- 熱門跑法 + 提示：同一條可橫向捲動的列 -->
+      <div class="list-chip-row">
+        <div class="list-chip-head">
+          <span>熱門跑法</span>
+          <span class="list-chip-head-note">點一下直接搜路線</span>
+        </div>
+        <div id="js-ride-route-chips" class="list-chip-group"></div>
+        <div id="js-search-hints" class="list-chip-group"></div>
       </div>
-      <div id="js-ride-route-chips" class="flex flex-wrap gap-2 px-1 pt-2"></div>
-      <div id="js-search-hints" class="flex flex-wrap gap-2 px-1 pt-3"></div>
     </div>
-    <div class="relative -mt-1">
-      <div class="list-suggest-label text-[10px] text-slate-500 px-1 pb-1">搜尋建議</div>
-      <div id="suggest-list" class="suggest-box bg-slate-900 border border-white/10 rounded-2xl overflow-hidden"></div>
+    <div class="list-suggest-wrap">
+      <div class="list-suggest-label">搜尋建議</div>
+      <div id="suggest-list" class="suggest-box"></div>
     </div>
-    <div id="js-list-route-info" class="hidden text-xs font-bold text-orange-400 px-1 flex items-center gap-2">
-      <span class="relative flex h-2 w-2">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-      </span>
+    <div id="js-list-route-info" class="list-route-info hidden">
+      <span class="list-route-dot" aria-hidden="true"></span>
       <span id="js-list-route-count"></span>
     </div>
     <div id="js-list-state" class="list-state-banner hidden"></div>
-    <div id="js-list-inner" class="space-y-3"></div>
+    <div id="js-list-inner" class="list-grid"></div>
   </div>
 </section>
 
-<section id="pg-tools" class="pg bg-slate-900 overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
-  <div class="max-w-xl mx-auto space-y-6">
-    <div class="tools-hero-shell glass p-5 rounded-[30px] space-y-4">
-      <div class="flex items-center justify-between gap-4">
+<section id="pg-tools" class="pg overflow-y-auto" style="position:absolute;inset:0;padding-top:3.5rem;padding-bottom:5rem;padding-left:1rem;padding-right:1rem;-webkit-overflow-scrolling:touch;">
+  <div class="page-wrap tools-page">
+    <section class="tool-card tools-hero-shell">
+      <div class="tool-card-head">
         <div>
-          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-300/80 font-black">Rider Console</div>
-          <h2 class="font-black text-lg">出發前先看這三件事</h2>
+          <div class="page-kicker">Rider Console</div>
+          <h2 class="page-title">出發前檢查</h2>
         </div>
-        <div class="w-12 h-12 rounded-2xl tools-hero-icon flex items-center justify-center">
-          <i class="fa-solid fa-compass text-orange-300"></i>
-        </div>
+        <div class="tool-icon tools-hero-icon"><i class="fa-solid fa-compass" aria-hidden="true"></i></div>
       </div>
-      <div id="ride-checklist" class="space-y-2">
+      <div id="ride-checklist" class="tool-stack">
         <div class="tool-empty">尚未建立檢查清單。</div>
       </div>
-    </div>
+    </section>
 
-    <div class="tools-weather-shell glass p-5 rounded-[30px] space-y-4">
-      <div class="flex items-center justify-between mb-1">
-        <div class="flex items-center gap-3">
-          <div class="tools-weather-icon w-11 h-11 rounded-2xl flex items-center justify-center">
-            <i class="fa-solid fa-cloud-sun text-sky-400"></i>
-          </div>
+    <section class="tool-card tools-weather-shell">
+      <div class="tool-card-head">
+        <div class="tool-card-title-group">
+          <div class="tool-icon tools-weather-icon"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i></div>
           <div>
-            <div class="text-[10px] uppercase tracking-[0.22em] text-sky-300/80 font-black">Weather Deck</div>
-            <h2 class="font-black text-base">全台天氣總覽</h2>
+            <div class="page-kicker">Weather Deck</div>
+            <h2 class="tool-title">全台天氣總覽</h2>
           </div>
         </div>
-        <button id="wx-refresh" class="tools-refresh-btn text-xs text-slate-300 transition-colors flex items-center gap-1">
-          <i class="fa-solid fa-rotate-right"></i> 更新
+        <button id="wx-refresh" type="button" class="tools-refresh-btn">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> 更新
         </button>
       </div>
-      <div class="text-[11px] text-slate-400 leading-relaxed">快速查看各縣市目前天氣，點一下卡片可直接跳到對應地區地圖。</div>
-      <div id="wx-grid" class="grid grid-cols-2 gap-2.5">
-        <div class="col-span-2 text-center text-slate-500 text-xs py-4">載入中...</div>
+      <p class="tool-note">快速查看各縣市目前天氣，點一下卡片可直接跳到對應地區地圖。</p>
+      <div id="wx-grid" class="wx-grid">
+        <div class="wx-grid-note">載入中...</div>
       </div>
-      <div id="wx-updated" class="text-[10px] text-slate-500 text-right"></div>
-    </div>
+      <div id="wx-updated" class="tool-meta"></div>
+    </section>
 
-    <div class="glass p-6 rounded-3xl space-y-4">
-      <div class="flex items-center gap-3 mb-1">
-        <div class="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
-          <i class="fa-solid fa-triangle-exclamation text-orange-400"></i>
-        </div>
-        <div>
-          <div class="text-[10px] uppercase tracking-[0.22em] text-orange-300/80 font-black">Risk Brief</div>
-          <h2 class="font-black text-base">路線風險摘要</h2>
+    <section class="tool-card">
+      <div class="tool-card-head">
+        <div class="tool-card-title-group">
+          <div class="tool-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
+          <div>
+            <div class="page-kicker">Risk Brief</div>
+            <h2 class="tool-title">路線風險摘要</h2>
+          </div>
         </div>
       </div>
       <div id="route-risk-summary" class="tool-empty">建立路線後，這裡會彙整天氣、攝影機覆蓋與道路型態提醒。</div>
-      <div id="route-risk-tags" class="flex flex-wrap gap-2"></div>
-    </div>
+      <div id="route-risk-tags" class="tool-chips"></div>
+    </section>
 
-    <div class="glass p-6 rounded-3xl space-y-4">
-      <div class="flex items-center gap-3 mb-1">
-        <div class="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
-          <i class="fa-solid fa-bookmark text-cyan-300"></i>
-        </div>
-        <div>
-          <div class="text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Stops</div>
-          <h2 class="font-black text-base">我的停靠點 / 收藏</h2>
+    <section class="tool-card">
+      <div class="tool-card-head">
+        <div class="tool-card-title-group">
+          <div class="tool-icon"><i class="fa-solid fa-bookmark" aria-hidden="true"></i></div>
+          <div>
+            <div class="page-kicker">Stops</div>
+            <h2 class="tool-title">我的停靠點 / 收藏</h2>
+          </div>
         </div>
       </div>
-      <div id="favorites-tools-list" class="space-y-2">
+      <div id="favorites-tools-list" class="tool-stack">
         <div class="tool-empty">目前還沒有收藏任何停靠點。</div>
       </div>
-    </div>
+    </section>
 
-    <div class="glass p-6 rounded-3xl space-y-3">
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-3 min-w-0">
+    <section class="tool-card">
+      <div class="tool-card-head">
+        <div class="tool-card-title-group">
           <img src="assets/icons/icon-192.png" width="40" height="40" class="pwa-tools-icon" alt="" />
           <div class="min-w-0">
-            <h2 class="font-black text-sm">安裝主畫面 Web App</h2>
-            <p id="pwa-install-state" class="text-[11px] text-slate-400 mt-0.5">從 Safari 加入主畫面，像 App 一樣獨立開啟。</p>
+            <h2 class="tool-title">安裝主畫面 Web App</h2>
+            <p id="pwa-install-state" class="tool-meta">從 Safari 加入主畫面，像 App 一樣獨立開啟。</p>
           </div>
         </div>
         <button id="pwa-install-open" type="button" class="pwa-tools-action">查看</button>
       </div>
-    </div>
+    </section>
 
-    <div class="glass p-6 rounded-3xl space-y-3">
-      <div class="flex items-center gap-3 mb-1">
-        <div class="w-10 h-10 bg-slate-500/20 rounded-xl flex items-center justify-center">
-          <i class="fa-solid fa-sliders text-slate-300"></i>
-        </div>
-        <div>
-          <div class="text-[10px] uppercase tracking-[0.22em] text-slate-400 font-black">Display</div>
-          <h2 class="font-black text-base">畫面顯示</h2>
+    <section class="tool-card">
+      <div class="tool-card-head">
+        <div class="tool-card-title-group">
+          <div class="tool-icon"><i class="fa-solid fa-sliders" aria-hidden="true"></i></div>
+          <div>
+            <div class="page-kicker">Display</div>
+            <h2 class="tool-title">畫面顯示</h2>
+          </div>
         </div>
       </div>
       <button id="js-clock-setting" type="button" class="ui-setting-row" aria-pressed="false">
-        <span><i class="fa-regular fa-clock mr-2 text-slate-400"></i>頂端時間</span>
+        <span><i class="fa-regular fa-clock" aria-hidden="true"></i>頂端時間</span>
         <span id="js-clock-setting-state" class="ui-setting-state">顯示中</span>
       </button>
       <button id="js-route-banner-setting" type="button" class="ui-setting-row" aria-pressed="false">
-        <span><i class="fa-solid fa-circle-info mr-2 text-slate-400"></i>路線完成提示</span>
+        <span><i class="fa-solid fa-circle-info" aria-hidden="true"></i>路線完成提示</span>
         <span id="js-route-banner-setting-state" class="ui-setting-state">顯示中</span>
       </button>
-      <p class="text-[11px] text-slate-500 leading-relaxed">可在這裡重新開啟已關閉的頂端資訊；路線與快照路況不受影響。</p>
-    </div>
+      <p class="tool-meta">可在這裡重新開啟已關閉的頂端資訊；路線與快照路況不受影響。</p>
+    </section>
 
-    <div class="glass p-6 rounded-3xl space-y-3">
-      <div class="flex items-center gap-3 mb-2">
-        <div class="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-          <i class="fa-solid fa-circle-info text-blue-400"></i>
+    <section class="tool-card">
+      <div class="tool-card-head">
+        <div class="tool-card-title-group">
+          <div class="tool-icon"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></div>
+          <h2 class="tool-title">關於本系統</h2>
         </div>
-        <h2 class="font-black text-base">關於本系統</h2>
       </div>
-      <p class="text-xs text-slate-400 leading-relaxed">
+      <p class="tool-note">
         整合官方路況、氣象與 CCTV 現場畫面，提供出發前及途中停靠判斷。灰色路段代表資料不足；攝影機不做 AI 自動判讀，仍請依現場標誌與實際狀況騎乘。
       </p>
       <a class="ride-verdict-feedback ride-verdict-feedback-block" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener">💬 回報問題 / 許願新功能</a>
-      <div class="grid grid-cols-2 gap-3 mt-2">
-        <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
-          <div class="text-orange-500 font-black text-2xl" id="js-stat-cams">0</div>
-          <div class="text-[10px] text-slate-400 mt-1">攝影機數量</div>
+      <div class="tool-stats">
+        <div class="tool-stat">
+          <div class="tool-stat-value" id="js-stat-cams">0</div>
+          <div class="tool-stat-label">攝影機數量</div>
         </div>
-        <div class="bg-slate-800/60 rounded-2xl p-3 text-center">
-          <div class="text-blue-400 font-black text-2xl">22</div>
-          <div class="text-[10px] text-slate-400 mt-1">涵蓋縣市</div>
+        <div class="tool-stat">
+          <div class="tool-stat-value">22</div>
+          <div class="tool-stat-label">涵蓋縣市</div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </section>
 
@@ -841,8 +837,8 @@
 
 </div>
 
-<script src="js/dist/app.js?v=a9ea706"></script>
-<script src="js/dist/app2.js?v=a9ea706"></script>
+<script src="js/dist/app.js?v=d97c46b"></script>
+<script src="js/dist/app2.js?v=d97c46b"></script>
 
 </body>
 </html>

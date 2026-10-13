@@ -19,9 +19,9 @@
   function defaultLayout() {
     var narrow = window.innerWidth < 1400;
     return {
-      left: narrow ? 240 : 296,
-      right: narrow ? 195 : 240,
-      bottom: window.innerHeight <= 820 ? 272 : 312
+      left: narrow ? 256 : 320,
+      right: narrow ? 200 : 256,
+      bottom: window.innerHeight <= 820 ? 304 : 336
     };
   }
 

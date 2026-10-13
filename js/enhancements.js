@@ -20,6 +20,13 @@
     '\u5609\u7fa9\u5e02','\u5609\u7fa9\u7e23','\u53f0\u5357\u5e02','\u9ad8\u96c4\u5e02','\u5c4f\u6771\u7e23',
     '\u5b9c\u862d\u7e23','\u82b1\u84ee\u7e23','\u53f0\u6771\u7e23','\u6f8e\u6e56\u7e23','\u91d1\u9580\u7e23','\u9023\u6c5f\u7e23'
   ];
+  // Short card labels: drop the trailing city/county suffix, but keep it where two
+  // counties share a stem (\u65b0\u7af9\u5e02/\u65b0\u7af9\u7e23, \u5609\u7fa9\u5e02/\u5609\u7fa9\u7e23) so the two never read as one.
+  function wxShortName(county) {
+    var stem = county.replace(/[\u5e02\u7e23]$/, '');
+    var shared = COUNTIES.filter(function(name) { return name.replace(/[\u5e02\u7e23]$/, '') === stem; }).length > 1;
+    return shared ? county : stem;
+  }
   function renderWeather() {
     var grid = Dom.byId('wx-grid');
     if (!grid) return;
@@ -27,7 +34,7 @@
     var state = Data.weatherState || 'idle';
     var hasData = Object.keys(wx).length > 0;
     if (state === 'loading' || (!hasData && state === 'idle')) {
-      grid.innerHTML = '<div class="col-span-2 text-center text-slate-500 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...</div>';
+      grid.innerHTML = '<div class="wx-grid-note">\u5929\u6c23\u8cc7\u6599\u8f09\u5165\u4e2d...</div>';
       return;
     }
     if (state === 'error') {
@@ -35,12 +42,12 @@
       var wxNotice = (typeof window !== 'undefined' && window.SnapshotHonesty)
         ? window.SnapshotHonesty.noticeHtml('weather-error')
         : '';
-      grid.innerHTML = '<div class="col-span-2">' + (wxNotice
-        || '<div class="text-center text-amber-400 text-xs py-4">\u5929\u6c23\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>') + '</div>';
+      grid.innerHTML = '<div class="wx-grid-note is-wide">' + (wxNotice
+        || '<div class="wx-grid-note is-warn">\u5929\u6c23\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>') + '</div>';
       return;
     }
     if (!hasData) {
-      grid.innerHTML = '<div class="col-span-2 text-center text-slate-500 text-xs py-4">\u66ab\u7121\u5929\u6c23\u8cc7\u6599</div>';
+      grid.innerHTML = '<div class="wx-grid-note">\u66ab\u7121\u5929\u6c23\u8cc7\u6599</div>';
       return;
     }
     var html = '';
@@ -49,17 +56,15 @@
       var temp    = w ? w.temp    : '--';
       var weather = w ? w.weather : '--';
       var icon    = getWxIcon(weather);
-      var shortName = county.replace('\u53f0','').replace('\u5e02','').replace('\u7e23','');
-      html += '<div class="bg-slate-800/50 rounded-2xl p-3 flex items-center gap-2 hover:bg-slate-700/50 transition-colors cursor-pointer wx-county-card" data-county="' + county + '">' +
-        '<span class="text-xl">' + icon + '</span>' +
-        '<div class="flex-1 min-w-0">' +
-          '<div class="text-xs font-bold truncate">' + escapeHtml(shortName) + '</div>' +
-          '<div class="text-[10px] text-slate-400 truncate">' + escapeHtml(weather || '--') + '</div>' +
+      var shortName = wxShortName(county);
+      html += '<button type="button" class="wx-county-card" data-county="' + county + '">' +
+        '<span class="wx-icon">' + icon + '</span>' +
+        '<div class="wx-body">' +
+          '<div class="wx-name">' + escapeHtml(shortName) + '</div>' +
+          '<div class="wx-desc">' + escapeHtml(weather || '--') + '</div>' +
         '</div>' +
-        '<div class="text-right shrink-0">' +
-          '<div class="text-sm font-black text-orange-400">' + escapeHtml(temp !== '--' ? temp + '\u00B0' : '--') + '</div>' +
-        '</div>' +
-      '</div>';
+        '<div class="wx-temp">' + escapeHtml(temp !== '--' ? temp + '\u00B0' : '--') + '</div>' +
+      '</button>';
     });
     grid.innerHTML = html;
     Dom.queryAll('.wx-county-card', grid).forEach(function(card) {
