@@ -27,6 +27,32 @@
     if (element) element.textContent = value;
   }
 
+  // Peek bar (mobile bottom sheet): validation + duration/distance, and a
+  // segment-colour ribbon.  Presentation only; every value is already in `currentRoute`/`sections`.
+  function renderPeek(validationText) {
+    if (validationText) setText('condition-peek-validation', validationText);
+    if (!currentRoute) return;
+    var minutes = Math.round(Number(currentRoute.durationMinutes || 0));
+    var km = Number(currentRoute.distanceKm || 0);
+    var parts = [];
+    if (minutes > 0) parts.push('\u7d04 ' + minutes + ' \u5206');
+    if (km > 0) parts.push(km.toFixed(km >= 100 ? 0 : 1) + ' km');
+    setText('condition-peek-meta', parts.length ? '\u00b7 ' + parts.join(' \u00b7 ') : '');
+  }
+
+  function renderRibbon(sections) {
+    var ribbon = Dom.byId('condition-ribbon');
+    if (!ribbon) return;
+    ribbon.textContent = '';
+    (sections || []).forEach(function(section) {
+      var length = Number(section.toKm) - Number(section.fromKm);
+      var segment = document.createElement('i');
+      segment.dataset.level = (section.traffic && section.traffic.level) || 'unknown';
+      segment.style.flexGrow = String(length > 0 ? length : 1);
+      ribbon.appendChild(segment);
+    });
+  }
+
   function setCollapsed(collapsed) {
     var panel = Dom.byId('route-conditions-panel');
     if (!panel) return;
@@ -444,6 +470,10 @@
       ? '\u5df2\u907f\u958b\u7981\u884c\u8def\u6bb5\u4e26\u91cd\u65b0\u9a57\u8b49'
       : '\u5b89\u5168\u8def\u7dda \u00b7 ' + ((currentRoute.validation && currentRoute.validation.rulesVersion) || '--');
     setText('condition-validation', validationText);
+    renderPeek(currentRoute.validation && currentRoute.validation.rerouted
+      ? '\u5df2\u907f\u958b\u7981\u884c\u8def\u6bb5'
+      : '\u5b89\u5168\u8def\u7dda');
+    renderRibbon(sections);
     var collapsedSummary = Dom.byId('condition-collapsed-summary');
     if (collapsedSummary) {
       collapsedSummary.textContent = eventSummary.activeFullClosureCount
@@ -520,6 +550,8 @@
     startAutoTimer();
     if (currentRoute.routeId !== previousRouteId) {
       userAdjustedCollapse = false;
+      renderPeek('\u5b89\u5168\u8def\u7dda');
+      renderRibbon([]);
       if (shouldUseMobileReadyLayout()) {
         setText('condition-collapsed-summary', '\u6574\u7406\u6cbf\u9014\u8def\u6cc1\u2026');
         setCollapsed(true);
@@ -649,6 +681,8 @@
     Dom.onId('condition-refresh', 'click', refresh);
     Dom.onId('condition-retry', 'click', refresh);
     Dom.onId('condition-toggle', 'click', toggleCollapsed);
+    Dom.onId('condition-grabber', 'click', toggleCollapsed);
+    Dom.on(Dom.query('.condition-peek'), 'click', toggleCollapsed);
     Dom.onId('nav-google', 'click', guardNavigationLink);
     Dom.onId('nav-apple', 'click', openAppleMaps);
     Bus.on('condition:select', focusSection);

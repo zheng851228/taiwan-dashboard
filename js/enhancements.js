@@ -459,17 +459,19 @@ var HistoryMod = {
     var panel = Dom.byId('history-panel');
     if (!panel) return;
     var list = HistoryMod.load();
-    if (!list.length) { panel.innerHTML = '<div class="text-center text-slate-500 text-xs py-3">\u5c1a\u7121\u8a18\u9304</div>'; return; }
+    if (!list.length) { panel.innerHTML = '<div class="hist-empty text-center text-slate-500 text-xs py-3">\u5c1a\u7121\u8a18\u9304</div>'; return; }
     var html = '';
     list.forEach(function(item, idx) {
       var d = new Date(item.time);
       var ds = (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-      var mIco = item.mode === 'motorcycle' ? '\ud83c\udfcd\ufe0f' : '\ud83d\ude97';
+      var mIco = item.mode === 'motorcycle'
+        ? '<i class="fa-solid fa-motorcycle" aria-hidden="true"></i>'
+        : '<i class="ico ico-car" aria-hidden="true"></i>';
       var wpTxt = item.waypoints && item.waypoints.length ? ' \u00b7 '+item.waypoints.length+'\u505c\u9760' : '';
       html += '<div class="hist-item flex items-center gap-2 px-3 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0" data-idx="'+idx+'">'
-        + '<div class="flex-1 min-w-0"><div class="text-xs font-bold truncate">'+escapeHtml(item.start.slice(0,10))+' \u2192 '+escapeHtml(item.end.slice(0,10))+'</div>'
-        + '<div class="text-[10px] text-slate-500 mt-0.5">'+mIco+' '+(item.distance||'?')+'km'+wpTxt+' \u00b7 '+ds+'</div></div>'
-        + '<button class="hist-del text-slate-600 hover:text-red-400 text-sm px-1 shrink-0" data-idx="'+idx+'">\u00d7</button></div>';
+        + '<div class="hist-item-main flex-1 min-w-0"><div class="hist-item-route text-xs font-bold truncate">'+escapeHtml(item.start.slice(0,10))+' \u2192 '+escapeHtml(item.end.slice(0,10))+'</div>'
+        + '<div class="hist-item-meta text-[10px] text-slate-500 mt-0.5">'+mIco+' '+(item.distance||'?')+'km'+wpTxt+' \u00b7 '+ds+'</div></div>'
+        + '<button type="button" class="hist-del text-slate-600 hover:text-red-400 text-sm px-1 shrink-0" data-idx="'+idx+'" aria-label="\u522a\u9664\u9019\u7b46\u8def\u7dda">\u00d7</button></div>';
     });
     panel.innerHTML = html;
     Dom.queryAll('.hist-item', panel).forEach(function(el) {
@@ -526,14 +528,14 @@ var WaypointsMod = {
       var color = WaypointsMod.COLORS[idx % WaypointsMod.COLORS.length];
       var label = idx + 1;
       var div = document.createElement('div');
-      div.className = 'flex gap-2 items-center';
+      div.className = 'route-point-row flex gap-2 items-center';
       div.innerHTML =
-        '<div class="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style="background:' + color + '">' +
+        '<div class="route-point-badge rounded-full flex items-center justify-center shrink-0" style="background:' + color + '">' +
           '<span class="text-white text-[9px] font-black">' + label + '</span>' +
         '</div>' +
-        '<div class="flex-1 relative">' +
-          '<input type="text" class="wp-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + escapeHtml(wp || '') + '" placeholder="停靠點 ' + label + '" />' +
-          '<button class="wp-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 text-xs leading-none" data-idx="' + idx + '">&#10005;</button>' +
+        '<div class="route-field flex-1 relative">' +
+          '<input type="text" class="wp-input route-text-input w-full bg-slate-800/50 border border-white/10 rounded-xl px-3 py-1.5 pr-7 text-xs focus:outline-none" data-idx="' + idx + '" value="' + escapeHtml(wp || '') + '" placeholder="\u505c\u9760\u9ede ' + label + '" aria-label="\u505c\u9760\u9ede ' + label + '" />' +
+          '<button type="button" class="wp-clear route-field-clear" data-idx="' + idx + '" aria-label="\u6e05\u9664\u505c\u9760\u9ede ' + label + '"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>' +
         '</div>';
       container.appendChild(div);
       Dom.on(Dom.query('.wp-clear', div), 'click', function() {

@@ -31,28 +31,33 @@
 <div id="app-style-recovery" class="app-style-sentinel" role="alert" style="position:fixed;inset:0;z-index:2147483647;padding:24px;background:#07111b;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;"></div>
 <div id="app" class="relative h-[100dvh] flex flex-col overflow-hidden">
 
-  <div id="pwa-network-banner" class="pwa-network-banner hidden" role="status" aria-live="polite">
-    <i class="fa-solid fa-cloud-arrow-down"></i>
-    <span id="pwa-network-message">目前離線，只顯示已保存內容；快照路況、天氣與影像暫停更新。</span>
-  </div>
+  <!-- Notice region: one stack under the header for offline / update / install banners and the toast -->
+  <div id="notice-region" class="notice-region">
+    <div id="pwa-network-banner" class="pwa-network-banner hidden" role="status" aria-live="polite">
+      <i class="fa-solid fa-cloud-arrow-down"></i>
+      <span id="pwa-network-message">目前離線，只顯示已保存內容；快照路況、天氣與影像暫停更新。</span>
+    </div>
 
-  <div id="pwa-update-banner" class="pwa-action-banner hidden" role="status" aria-live="polite">
-    <div>
-      <strong>已有新版</strong>
-      <span>更新後可使用最新功能與離線資源。</span>
+    <div id="pwa-update-banner" class="pwa-action-banner hidden" role="status" aria-live="polite">
+      <div>
+        <strong>已有新版</strong>
+        <span>更新後可使用最新功能與離線資源。</span>
+      </div>
+      <button id="pwa-update-action" type="button">立即更新</button>
     </div>
-    <button id="pwa-update-action" type="button">立即更新</button>
-  </div>
 
-  <div id="pwa-install-nudge" class="pwa-install-nudge hidden" role="status" aria-live="polite">
-    <div class="pwa-install-nudge-copy">
-      <strong>路線已準備好</strong>
-      <span>加入主畫面，下次開啟更快</span>
+    <div id="pwa-install-nudge" class="pwa-install-nudge hidden" role="status" aria-live="polite">
+      <div class="pwa-install-nudge-copy">
+        <strong>路線已準備好</strong>
+        <span>加入主畫面，下次開啟更快</span>
+      </div>
+      <div class="pwa-install-nudge-actions">
+        <button id="pwa-install-nudge-open" type="button">加入主畫面</button>
+        <button id="pwa-install-nudge-close" type="button" aria-label="稍後再說">稍後</button>
+      </div>
     </div>
-    <div class="pwa-install-nudge-actions">
-      <button id="pwa-install-nudge-open" type="button">加入主畫面</button>
-      <button id="pwa-install-nudge-close" type="button" aria-label="稍後再說">稍後</button>
-    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
   </div>
 
   <section id="pwa-install-sheet" class="pwa-install-sheet hidden" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
@@ -86,11 +91,11 @@
     <div id="diag-log"></div>
   </div>
 
-  <header class="fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.25rem)] pb-2 glass shadow-2xl">
-    <div class="flex justify-between items-center max-w-5xl mx-auto">
+  <header class="app-header fixed top-0 left-0 right-0 z-[1000] px-4 pt-[calc(var(--safe-top)+0.25rem)] pb-2 glass shadow-2xl">
+    <div class="app-header-inner flex justify-between items-center max-w-5xl mx-auto">
       <button id="brand-home" type="button" class="brand-home flex items-center gap-2" aria-label="返回規劃主畫面" title="返回規劃主畫面">
         <span class="brand-mark w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center shadow-lg shadow-orange-500/30">
-          <i class="fa-solid fa-motorcycle text-white text-xs"></i>
+          <i class="fa-solid fa-motorcycle text-white text-xs" aria-hidden="true"></i>
         </span>
         <span class="brand-copy">
           <h1 class="text-sm font-black tracking-tighter leading-none">環島路況指揮中心</h1>
@@ -109,7 +114,7 @@
           <button type="button" class="desktop-vehicle-tab" data-desktop-mode="car">汽車</button>
         </div>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="header-tools flex items-center gap-2">
         <div id="js-clock-wrap" class="ui-clock-wrap">
           <button id="js-clock-hide" type="button" class="ui-dismiss-btn" aria-label="隱藏頂端時間" title="隱藏頂端時間">
             <span id="js-clk" class="text-xs font-mono font-bold text-slate-300">--:--:--</span>
@@ -122,7 +127,7 @@
         <button id="desktop-favorites-toggle" class="desktop-header-action" type="button">
           <i class="fa-regular fa-bookmark"></i><span>收藏</span>
         </button>
-        <button id="js-theme" class="w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base">&#127769;</button>
+        <button id="js-theme" type="button" class="icon-btn ghost w-7 h-7 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center text-base" aria-label="切換深色／淺色主題" title="切換深色／淺色主題"><i class="ico ico-moon" aria-hidden="true"></i></button>
       </div>
     </div>
     <div id="desktop-settings-popover" class="desktop-settings-popover hidden" role="dialog" aria-label="桌面顯示設定">
@@ -166,56 +171,59 @@
         <div id="ride-verdict-headline" class="ride-verdict-headline">還沒規劃路線</div>
         <div id="ride-verdict-sub" class="ride-verdict-sub">規劃路線後，這裡 30 秒告訴你今天能不能騎</div>
       </div>
-      <a id="ride-verdict-feedback" class="ride-verdict-feedback" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener" title="回報問題或許願新功能">💬 回報</a>
+      <a id="ride-verdict-feedback" class="ride-verdict-feedback" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener" title="回報問題或許願新功能"><i class="ico ico-comment" aria-hidden="true"></i> 回報</a>
     </section>
     <div id="route-collapsed" class="route-shell route-shell-collapsed glass px-3 py-2.5 rounded-[24px] shadow-xl flex items-center gap-3">
       <div class="route-shell-icon">
-        <i class="fa-solid fa-route text-orange-400 text-sm shrink-0"></i>
+        <i class="fa-solid fa-route text-orange-400 text-sm shrink-0" aria-hidden="true"></i>
       </div>
       <div class="flex-1 min-w-0">
         <input id="route-paste-input" type="text"
           class="w-full bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
-          placeholder="貼上 Google Maps／Apple Maps 路線" />
-        <div id="route-summary" class="hidden text-[10px] text-orange-300/90 font-bold mt-0.5 truncate"></div>
+          placeholder="貼上地圖路線連結" aria-label="貼上 Google Maps 或 Apple Maps 路線連結" />
+        <div id="route-summary" class="route-summary hidden text-[10px] text-orange-300/90 font-bold mt-0.5 truncate"></div>
       </div>
       <button id="route-toggle" class="route-mini-btn text-orange-300 text-xs shrink-0 hover:text-orange-200">輸入起終點</button>
-      <button id="js-route-clear-small" class="text-[10px] text-slate-500 hover:text-orange-400 hidden">&#10005;</button>
+      <button id="js-route-clear-small" type="button" class="icon-btn ghost route-clear-small text-[10px] text-slate-500 hover:text-orange-400 hidden" aria-label="清除路線" title="清除路線"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
     </div>
     <div id="route-expanded" class="route-shell route-shell-expanded hidden glass p-3 rounded-[28px] shadow-xl space-y-3 mt-2">
       <!-- 歷史路線 -->
       <div class="route-expanded-head flex items-center justify-between px-1">
-        <div>
+        <div class="route-title-group">
           <div class="route-title-kicker text-[10px] uppercase tracking-[0.22em] text-orange-400/80 font-black">Route Planner</div>
           <div class="route-title-text text-sm font-black text-slate-100">規劃機車安全路線</div>
         </div>
         <div class="route-head-actions flex items-center gap-2">
-          <button id="history-btn" class="route-mini-btn text-[10px] text-slate-300 hover:text-orange-300 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]"></i> 最近路線</button>
+          <button id="history-btn" type="button" class="route-mini-btn text-[10px] text-slate-300 hover:text-orange-300 flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left text-[9px]" aria-hidden="true"></i> 最近路線</button>
           <span id="history-count" class="text-[10px] text-slate-600"></span>
-          <button id="route-toggle-close" class="route-collapse-btn" aria-label="收合路線輸入">&#8593; 收合</button>
+          <button id="route-toggle-close" type="button" class="route-collapse-btn" aria-label="收合路線輸入"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i> 收合</button>
         </div>
       </div>
       <div id="history-dropdown" class="hidden bg-slate-900/90 rounded-xl border border-white/10 max-h-36 overflow-y-auto">
         <div id="history-panel"></div>
       </div>
       <!-- Google / Apple Maps 貼入 -->
-      <div class="route-input-card px-3 py-2.5 flex items-center gap-2">
-        <i class="fa-solid fa-map-location-dot text-sky-300 text-xs shrink-0"></i>
-        <input type="text" id="js-gmaps-url"
-          class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
-          placeholder="貼上 Google Maps 或 Apple Maps 路線網址..." />
-        <button id="js-gmaps-parse" class="route-mini-btn text-[10px] text-orange-300 font-black shrink-0 hover:text-orange-200">解析路線</button>
-      </div>
-      <div id="js-gmaps-status" class="text-[10px] text-blue-400 px-1 hidden"></div>
+      <details class="route-import" open>
+        <summary><i class="ico ico-link" aria-hidden="true"></i> 從 Google／Apple Maps 連結匯入 <i class="fa-solid fa-chevron-down route-import-chevron" aria-hidden="true"></i></summary>
+        <div class="route-input-card px-3 py-2.5 flex items-center gap-2">
+          <i class="fa-solid fa-map-location-dot text-sky-300 text-xs shrink-0" aria-hidden="true"></i>
+          <input type="text" id="js-gmaps-url"
+            class="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
+            placeholder="貼上連結" aria-label="貼上 Google Maps 或 Apple Maps 路線連結" />
+          <button id="js-gmaps-parse" type="button" class="route-mini-btn text-[10px] text-orange-300 font-black shrink-0 hover:text-orange-200">解析路線</button>
+        </div>
+        <div id="js-gmaps-status" class="route-import-status text-[10px] text-blue-400 px-1 hidden"></div>
+      </details>
       <!-- 起點 -->
       <div class="route-point-row flex gap-2.5 items-center">
         <div class="route-point-badge route-point-start">
           <span class="text-white text-[9px] font-black">起</span>
         </div>
-        <div class="flex-1 relative">
+        <div class="route-field flex-1 relative">
           <input type="text" id="js-route-start" autocomplete="off"
             class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
-            placeholder="起點地名..." />
-          <button id="clear-start" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
+            placeholder="起點" aria-label="起點" />
+          <button id="clear-start" type="button" class="route-field-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none" aria-label="清除起點"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
           <div id="suggest-start" class="suggest-box route-suggest-box bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
         </div>
       </div>
@@ -226,11 +234,11 @@
         <div id="end-label" class="route-point-badge route-point-end">
           <span class="text-white text-[9px] font-black">終</span>
         </div>
-        <div class="flex-1 relative">
+        <div class="route-field flex-1 relative">
           <input type="text" id="js-route-end" autocomplete="off"
             class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
-            placeholder="終點地名..." />
-          <button id="clear-end" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none">&#10005;</button>
+            placeholder="終點" aria-label="終點" />
+          <button id="clear-end" type="button" class="route-field-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none" aria-label="清除終點"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
           <div id="suggest-end" class="suggest-box route-suggest-box bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
         </div>
       </div>
@@ -240,19 +248,17 @@
           <span>機車牌照</span>
           <span>預設白牌，依牌照驗證可通行道路</span>
         </div>
-        <div class="route-mode-row route-plate-grid">
+        <div class="route-mode-row route-plate-grid" role="group" aria-label="車種牌照">
           <button data-mode="motorcycle" data-plate="white" class="route-mode-btn active">白牌</button>
           <button data-mode="motorcycle" data-plate="yellow" class="route-mode-btn">黃牌</button>
           <button data-mode="motorcycle" data-plate="red" class="route-mode-btn">紅牌</button>
+          <button data-mode="car" class="route-mode-btn route-car-btn" aria-label="汽車路線">汽車</button>
         </div>
-        <details class="route-advanced">
-          <summary>進階車種</summary>
-          <button data-mode="car" class="route-mode-btn route-car-btn">&#128663; 汽車路線</button>
-        </details>
+
       </div>
-      <button id="js-route-btn"
+      <button id="js-route-btn" type="button"
         class="route-action-btn w-full py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
-        <i class="fa-solid fa-shield-halved text-sm"></i> 建立安全路線
+        <i class="fa-solid fa-shield-halved text-sm" aria-hidden="true"></i> 建立安全路線
       </button>
     </div>
     <div id="js-route-status" class="mt-1 text-[11px] px-1 font-bold text-orange-300 drop-shadow-md" role="status" aria-live="polite"></div>
@@ -329,12 +335,12 @@
 
   <section id="route-conditions-panel" class="route-conditions-panel glass hidden">
     <div class="condition-panel-head">
-      <div>
+      <div id="condition-grabber" class="condition-grabber" aria-hidden="true"></div>
+      <div class="condition-head-main">
         <div class="condition-kicker">Route Intelligence</div>
         <div class="condition-title-row">
           <h2>沿途狀況時間軸</h2>
           <span id="condition-source-badge" class="condition-source-badge">等待資料</span>
-          <span id="condition-collapsed-summary" class="condition-collapsed-summary">事件來源未回報</span>
         </div>
       </div>
       <div class="condition-head-actions">
@@ -350,6 +356,17 @@
         <button id="condition-toggle" class="condition-icon-btn" aria-label="收合沿途狀況" aria-expanded="true">
           <i class="fa-solid fa-chevron-down"></i>
         </button>
+      </div>
+      <div class="condition-peek">
+        <div class="condition-peek-line">
+          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+          <span id="condition-peek-validation">安全路線</span>
+          <span id="condition-peek-meta" class="condition-peek-meta"></span>
+        </div>
+        <div class="condition-peek-issue">
+          <span id="condition-ribbon" class="condition-ribbon" aria-hidden="true"></span>
+          <span id="condition-collapsed-summary" class="condition-collapsed-summary">事件來源未回報</span>
+        </div>
       </div>
     </div>
       <div id="condition-event-status" class="condition-sr-status" role="status" aria-live="polite"></div>
@@ -472,29 +489,29 @@
 
 
   <div class="map-control-stack absolute bottom-[8rem] left-4 z-[500] flex flex-col gap-3">
-    <button id="js-fullscreen"
-      class="w-11 h-11 glass rounded-full shadow-2xl flex items-center justify-center text-slate-400 hover:text-orange-500 active:scale-90 transition-all">
-      <i class="fa-solid fa-expand text-lg"></i>
+    <button id="js-fullscreen" type="button" aria-label="全螢幕地圖" title="全螢幕地圖"
+      class="map-btn w-11 h-11 glass rounded-full shadow-2xl flex items-center justify-center text-slate-400 hover:text-orange-500 active:scale-90 transition-all">
+      <i class="fa-solid fa-expand text-lg" aria-hidden="true"></i>
     </button>
-    <button id="js-loc"
-      class="w-11 h-11 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 active:scale-90 transition-all">
-      <i class="fa-solid fa-location-crosshairs text-lg"></i>
+    <button id="js-loc" type="button" aria-label="定位到我的位置" title="定位到我的位置"
+      class="map-btn w-11 h-11 glass rounded-full shadow-2xl flex items-center justify-center text-orange-500 active:scale-90 transition-all">
+      <i class="fa-solid fa-location-crosshairs text-lg" aria-hidden="true"></i>
     </button>
   </div>
 
-  <div id="nearby-panel" class="hidden absolute bottom-[8.5rem] left-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
-    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-      <div class="flex items-center gap-2">
-        <span class="text-orange-500 text-sm">&#128205;</span>
+  <div id="nearby-panel" class="dock-panel hidden absolute bottom-[8.5rem] left-4 z-[500] w-72 glass rounded-3xl shadow-2xl overflow-hidden">
+    <div class="dock-panel-head flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div class="dock-panel-title flex items-center gap-2">
+        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
         <span class="font-black text-sm">附近攝影機</span>
         <span id="nearby-count" class="text-[10px] text-slate-400"></span>
       </div>
-      <button id="nearby-close" class="w-6 h-6 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
-        <i class="fa-solid fa-xmark text-xs"></i>
+      <button id="nearby-close" type="button" class="icon-btn ghost w-6 h-6 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20" aria-label="關閉附近攝影機">
+        <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
       </button>
     </div>
     <div id="nearby-list" class="overflow-y-auto max-h-64 divide-y divide-white/5"></div>
-    <div class="px-4 py-2 text-[10px] text-slate-500 border-t border-white/10" id="nearby-radius-row">
+    <div class="dock-panel-foot px-4 py-2 text-[10px] text-slate-500 border-t border-white/10" id="nearby-radius-row">
       <span>顯示半徑：</span>
       <button class="nearby-r-btn font-bold text-orange-400" data-r="5">5km</button>
       <span class="mx-1 text-slate-600">|</span>
@@ -545,18 +562,18 @@
     </div>
   </aside>
 
-  <aside id="favorites-panel" class="hidden absolute right-4 top-[calc(var(--safe-top)+12.5rem)] z-[520] w-[min(22rem,calc(100vw-2rem))] glass rounded-[28px] overflow-hidden">
-    <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-      <div>
-        <div class="text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Favorites</div>
+  <aside id="favorites-panel" class="dock-panel hidden absolute right-4 top-[calc(var(--safe-top)+12.5rem)] z-[520] w-[min(22rem,calc(100vw-2rem))] glass rounded-[28px] overflow-hidden">
+    <div class="dock-panel-head flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div class="dock-panel-title-block">
+        <div class="dock-panel-kicker text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Favorites</div>
         <div class="font-black text-sm text-slate-100">我的停靠點 / 收藏</div>
       </div>
-      <button id="favorites-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
-        <i class="fa-solid fa-xmark text-xs"></i>
+      <button id="favorites-close" type="button" class="icon-btn ghost w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20" aria-label="關閉收藏">
+        <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
       </button>
     </div>
     <div id="favorites-list" class="max-h-72 overflow-y-auto divide-y divide-white/5"></div>
-    <div class="px-4 py-3 text-[11px] text-slate-400 border-t border-white/10">
+    <div class="dock-panel-foot px-4 py-3 text-[11px] text-slate-400 border-t border-white/10">
       可從資訊卡與列表卡片加入收藏，作為下次環島停靠點。
     </div>
   </aside>
@@ -744,25 +761,19 @@
     <span>本系統整合多方公開資料，僅供參考，非導航用途。路況會隨時間變化，請依現場標誌與實際路況行駛；資料未知區域不視為路況順暢。</span>
   </footer>
 
-  <nav class="bottom-navigation fixed bottom-0 left-0 right-0 z-[1000] px-6 pb-[calc(var(--safe-bottom)+0.5rem)] pt-3 glass rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-    <div class="flex justify-around items-center max-w-lg mx-auto">
-      <button id="nav-map" class="nav-it active flex flex-col items-center gap-1">
-        <div class="w-12 h-8 flex items-center justify-center">
-          <i class="fa-solid fa-map-location-dot text-xl"></i>
-        </div>
-        <span class="text-[10px] font-black uppercase tracking-widest">規劃</span>
+  <nav class="bottom-navigation fixed bottom-0 left-0 right-0 z-[1000] px-6 pb-[calc(var(--safe-bottom)+0.5rem)] pt-3 glass rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]" aria-label="主要導覽">
+    <div class="bottom-navigation-inner flex justify-around items-center max-w-lg mx-auto">
+      <button id="nav-map" type="button" class="nav-it active" aria-label="規劃">
+        <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
+        <span>規劃</span>
       </button>
-      <button id="nav-list" class="nav-it flex flex-col items-center gap-1 text-slate-500">
-        <div class="w-12 h-8 flex items-center justify-center">
-          <i class="fa-solid fa-list-check text-xl"></i>
-        </div>
-        <span class="text-[10px] font-black uppercase tracking-widest">路況</span>
+      <button id="nav-list" type="button" class="nav-it" aria-label="路況">
+        <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+        <span>路況</span>
       </button>
-      <button id="nav-tools" class="nav-it flex flex-col items-center gap-1 text-slate-500">
-        <div class="w-12 h-8 flex items-center justify-center">
-          <i class="fa-solid fa-toolbox text-xl"></i>
-        </div>
-        <span class="text-[10px] font-black uppercase tracking-widest">工具</span>
+      <button id="nav-tools" type="button" class="nav-it" aria-label="工具">
+        <i class="fa-solid fa-toolbox" aria-hidden="true"></i>
+        <span>工具</span>
       </button>
     </div>
   </nav>
@@ -770,14 +781,14 @@
   <!-- 沿途影像輪播 -->
 
   <div id="route-camera-strip">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <i class="fa-solid fa-camera" style="color:#f97316;font-size:14px;"></i>
-        <span style="font-size:12px;font-weight:900;">沿途影像</span>
-        <span id="strip-count" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
+    <div class="strip-head">
+      <div class="strip-title">
+        <i class="fa-solid fa-camera" aria-hidden="true"></i>
+        <span>沿途影像</span>
+        <span id="strip-count"></span>
       </div>
-      <button id="route-strip-close" type="button" style="width:22px;height:22px;background:rgba(255,255,255,0.1);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;">
-        <i class="fa-solid fa-xmark" style="font-size:10px;"></i>
+      <button id="route-strip-close" type="button" class="icon-btn ghost" aria-label="關閉沿途影像">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
       </button>
     </div>
     <div id="route-camera-strip-scroll"></div>
@@ -791,7 +802,7 @@
           <h3 id="m-ttl" class="font-black text-lg text-orange-500">影像載入中...</h3>
           <p id="m-org" class="text-xs text-slate-400"></p>
         </div>
-        <button id="modal-close-btn" class="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors">
+        <button id="modal-close-btn" type="button" class="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors" aria-label="關閉影像">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -812,11 +823,11 @@
         <div id="info-weather" class="text-xs text-blue-400 mt-1"></div>
       </div>
       <div class="flex items-center gap-2 shrink-0 ml-3">
-        <button id="info-favorite" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
-          <i class="fa-regular fa-bookmark text-sm"></i>
+        <button id="info-favorite" type="button" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20" aria-label="加入收藏">
+          <i class="fa-regular fa-bookmark text-sm" aria-hidden="true"></i>
         </button>
-        <button id="info-close" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20">
-          <i class="fa-solid fa-xmark text-sm"></i>
+        <button id="info-close" type="button" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20" aria-label="關閉資訊">
+          <i class="fa-solid fa-xmark text-sm" aria-hidden="true"></i>
         </button>
       </div>
     </div>
@@ -828,14 +839,10 @@
     </button>
   </div>
 
-  <div id="toast"
-    class="fixed bottom-32 left-1/2 -translate-x-1/2 z-[3000] glass px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-2xl opacity-0 pointer-events-none transition-all duration-300 whitespace-nowrap">
-  </div>
-
 </div>
 
-<script src="js/dist/app.js?v=2f50e9b"></script>
-<script src="js/dist/app2.js?v=2f50e9b"></script>
+<script src="js/dist/app.js?v=a9ea706"></script>
+<script src="js/dist/app2.js?v=a9ea706"></script>
 
 </body>
 </html>

@@ -4,7 +4,10 @@
   'use strict';
 
   var THEME_KEY = 'tw_theme';
-  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u5efa\u7acb\u5b89\u5168\u8def\u7dda';
+  var ROUTE_BTN_IDLE_HTML = '<i class="fa-solid fa-shield-halved" aria-hidden="true"></i> \u5efa\u7acb\u5b89\u5168\u8def\u7dda';
+  var ROUTE_BTN_BUSY_HTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> \u5206\u6790\u4e2d\u2026';
+  var THEME_ICON_DARK = '<i class="ico ico-moon" aria-hidden="true"></i>';
+  var THEME_ICON_LIGHT = '<i class="fa-solid fa-sun" aria-hidden="true"></i>';
   var REGION_LABELS = {
     north: '\u5317\u90e8',
     central: '\u4e2d\u90e8',
@@ -98,12 +101,12 @@
       var btn = Dom.byId('js-theme');
       if (ThemeMod.dark) {
         document.body.classList.remove('light');
-        if (btn) btn.textContent = '\u{1F319}';
+        if (btn) btn.innerHTML = THEME_ICON_DARK;
         MapMod.setTile(Config.TILE_DARK);
         Storage.set(THEME_KEY, 'dark');
       } else {
         document.body.classList.add('light');
-        if (btn) btn.textContent = '\u2600\uFE0F';
+        if (btn) btn.innerHTML = THEME_ICON_LIGHT;
         MapMod.setTile(Config.TILE_LIGHT);
         Storage.set(THEME_KEY, 'light');
       }
@@ -923,7 +926,8 @@
       if (!btn) return;
       btn.disabled = !!isBusy;
       btn.classList.toggle('loading', !!isBusy);
-      btn.textContent = isBusy ? '\u5206\u6790\u4e2d\u2026' : ROUTE_BTN_IDLE_TEXT;
+      btn.innerHTML = isBusy ? ROUTE_BTN_BUSY_HTML : ROUTE_BTN_IDLE_HTML;
+      btn.setAttribute('aria-busy', isBusy ? 'true' : 'false');
     },
     setVehicle: function(mode, plate) {
       RouteMod.mode = mode === 'car' ? 'car' : 'motorcycle';
@@ -1643,7 +1647,7 @@
     MapMod.init();
     if (Storage.get(THEME_KEY, 'dark') === 'light') {
       document.body.classList.add('light');
-      var _tb = Dom.byId('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
+      var _tb = Dom.byId('js-theme'); if(_tb) _tb.innerHTML = THEME_ICON_LIGHT;
       MapMod.setTile(Config.TILE_LIGHT);
     }
     ThemeMod.init();
