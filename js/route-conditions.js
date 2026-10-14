@@ -27,6 +27,37 @@
     if (element) element.textContent = value;
   }
 
+  // Peek bar (mobile bottom sheet): validation + duration/distance, and a
+  // segment-colour ribbon.  Presentation only; every value is already in `currentRoute`/`sections`.
+  function renderPeek(validationText) {
+    if (validationText) setText('condition-peek-validation', validationText);
+    if (!currentRoute) return;
+    var minutes = Math.round(Number(currentRoute.durationMinutes || 0));
+    var km = Number(currentRoute.distanceKm || 0);
+    var parts = [];
+    if (minutes > 0) parts.push('\u7d04 ' + minutes + ' \u5206\u9418');
+    if (km > 0) parts.push(km.toFixed(km >= 100 ? 0 : 1) + ' \u516c\u91cc');
+    setText('condition-peek-meta', parts.join('\uff0c'));
+  }
+
+  function renderRibbon(sections) {
+    var ribbon = Dom.byId('condition-ribbon');
+    if (!ribbon) return;
+    ribbon.textContent = '';
+    (sections || []).forEach(function(section) {
+      var length = Number(section.toKm) - Number(section.fromKm);
+      var segment = document.createElement('i');
+      segment.dataset.level = (section.traffic && section.traffic.level) || 'unknown';
+      segment.style.flexGrow = String(length > 0 ? length : 1);
+      ribbon.appendChild(segment);
+    });
+    // The unknown-data legend lives with the ribbon, not as a floating map chip.
+    var hasUnknown = (sections || []).some(function(section) {
+      return !(section.traffic && section.traffic.level) || section.traffic.level === 'unknown';
+    });
+    setText('condition-ribbon-note', hasUnknown ? '\u659c\u7dda\u8def\u6bb5\u8cc7\u6599\u4e0d\u8db3\uff0c\u4e0d\u4ee3\u8868\u9806\u66a2' : '');
+  }
+
   function setCollapsed(collapsed) {
     var panel = Dom.byId('route-conditions-panel');
     if (!panel) return;
@@ -45,7 +76,7 @@
   }
 
   function shouldUseMobileReadyLayout() {
-    return Boolean(window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+    return Boolean(window.matchMedia && window.matchMedia('(max-width: 640px), (max-width: 1199px) and (max-height: 500px)').matches);
   }
 
   function sourceTime(source, observedAt, lastKnown) {
@@ -194,7 +225,7 @@
       var icon = document.createElement('i');
       icon.className = 'fa-solid ' + alert.icon;
       var label = document.createElement('span');
-      label.textContent = alert.label;
+      label.textContent = plainLabel(alert.label);
       button.appendChild(icon);
       button.appendChild(label);
       button.addEventListener('click', function() {
@@ -208,7 +239,12 @@
     });
   }
 
-  function createChip(iconName, text, isUnknown) {
+  // Event/alert labels come from the view model joined with middle dots; show them as plain phrases.
+  function plainLabel(text) {
+    return String(text || '').replace(/\s\u00b7\s/g, '\uff0c').replace(/\u00b7/g, ' ');
+  }
+
+  function createChip(iconName, text, isUnknown, detail) {
     var chip = document.createElement('span');
     chip.className = 'condition-data-chip' + (isUnknown ? ' unknown' : '');
     var icon = document.createElement('i');
@@ -217,6 +253,12 @@
     label.textContent = text;
     chip.appendChild(icon);
     chip.appendChild(label);
+    if (detail) {
+      var source = document.createElement('span');
+      source.className = 'condition-data-src';
+      source.textContent = detail;
+      chip.appendChild(source);
+    }
     return chip;
   }
 
@@ -275,8 +317,9 @@
       if (Number.isFinite(Number(traffic.speedKph))) trafficText += ' ' + Math.round(Number(traffic.speedKph)) + ' km/h';
       meta.appendChild(createChip(
         'fa-gauge-high',
-        trafficText + ' \u00b7 ' + sourceTime(traffic.source, traffic.observedAt, traffic.lastKnown),
-        traffic.level === 'unknown'
+        trafficText,
+        traffic.level === 'unknown',
+        sourceTime(traffic.source, traffic.observedAt, traffic.lastKnown)
       ));
 
       var weatherText = weather.condition || '\u672a\u77e5';
@@ -284,8 +327,9 @@
       if (Number.isFinite(Number(weather.rainChance))) weatherText += ' \u964d\u96e8' + Math.round(Number(weather.rainChance)) + '%';
       meta.appendChild(createChip(
         (weather.condition || '').indexOf('\u96e8') !== -1 ? 'fa-cloud-rain' : 'fa-cloud-sun',
-        weatherText + ' \u00b7 ' + sourceTime(weather.source, weather.observedAt, weather.lastKnown),
-        weather.condition === '\u672a\u77e5'
+        weatherText,
+        weather.condition === '\u672a\u77e5',
+        sourceTime(weather.source, weather.observedAt, weather.lastKnown)
       ));
 
       body.appendChild(title);
@@ -313,7 +357,7 @@
           var eventBody = document.createElement('span');
           eventBody.className = 'condition-road-event-body';
           var eventTitle = document.createElement('strong');
-          eventTitle.textContent = presentation.label;
+          eventTitle.textContent = plainLabel(presentation.label);
           var eventDescription = document.createElement('span');
           eventDescription.className = 'condition-road-event-description';
           eventDescription.textContent = incident.description || incident.title || '\u8acb\u6ce8\u610f\u73fe\u5834\u8def\u6cc1';
@@ -323,8 +367,8 @@
             ? '\u9810\u5b9a ' + eventDateTime(incident.effectiveAt)
             : (presentation.status === 'active' ? '\u9032\u884c\u4e2d' : '\u6642\u9593\u672a\u660e');
           if (presentation.status === 'last_known') timing = '\u6700\u5f8c\u6210\u529f\u8cc7\u6599';
-          eventMeta.textContent = (roadEventLocationIsApproximate(incident) ? '\u4f4d\u7f6e\u672a\u63d0\u4f9b \u00b7 ' : '')
-            + timing + ' \u00b7 '
+          eventMeta.textContent = (roadEventLocationIsApproximate(incident) ? '\u4f4d\u7f6e\u672a\u63d0\u4f9b\uff0c' : '')
+            + timing + '\uff0c'
             + sourceTime(incident.source, incident.updatedAt, incident.lastKnown);
 
           eventBody.appendChild(eventTitle);
@@ -350,7 +394,7 @@
           var cameraButton = document.createElement('button');
           cameraButton.type = 'button';
           cameraButton.className = 'condition-camera-button';
-          cameraButton.textContent = '\u73fe\u5834\u756b\u9762 \u00b7 ' + camera.name + (camera.status === 'offline' ? ' (\u7121\u6cd5\u78ba\u8a8d)' : '');
+          cameraButton.textContent = '\u73fe\u5834\u756b\u9762 ' + camera.name + (camera.status === 'offline' ? ' (\u7121\u6cd5\u78ba\u8a8d)' : '');
           cameraButton.addEventListener('click', function(event) {
             event.stopPropagation();
             openCamera(camera);
@@ -442,8 +486,15 @@
 
     var validationText = currentRoute.validation && currentRoute.validation.rerouted
       ? '\u5df2\u907f\u958b\u7981\u884c\u8def\u6bb5\u4e26\u91cd\u65b0\u9a57\u8b49'
-      : '\u5b89\u5168\u8def\u7dda \u00b7 ' + ((currentRoute.validation && currentRoute.validation.rulesVersion) || '--');
+      : '\u5b89\u5168\u8def\u7dda';
     setText('condition-validation', validationText);
+    var rulesVersion = currentRoute.validation && currentRoute.validation.rulesVersion;
+    var validationEl = Dom.byId('condition-validation');
+    if (validationEl && rulesVersion) validationEl.setAttribute('title', '\u9a57\u8b49\u898f\u5247 ' + rulesVersion);
+    renderPeek(currentRoute.validation && currentRoute.validation.rerouted
+      ? '\u5df2\u907f\u958b\u7981\u884c\u8def\u6bb5'
+      : '\u5b89\u5168\u8def\u7dda');
+    renderRibbon(sections);
     var collapsedSummary = Dom.byId('condition-collapsed-summary');
     if (collapsedSummary) {
       collapsedSummary.textContent = eventSummary.activeFullClosureCount
@@ -520,6 +571,8 @@
     startAutoTimer();
     if (currentRoute.routeId !== previousRouteId) {
       userAdjustedCollapse = false;
+      renderPeek('\u5b89\u5168\u8def\u7dda');
+      renderRibbon([]);
       if (shouldUseMobileReadyLayout()) {
         setText('condition-collapsed-summary', '\u6574\u7406\u6cbf\u9014\u8def\u6cc1\u2026');
         setCollapsed(true);
@@ -649,6 +702,8 @@
     Dom.onId('condition-refresh', 'click', refresh);
     Dom.onId('condition-retry', 'click', refresh);
     Dom.onId('condition-toggle', 'click', toggleCollapsed);
+    Dom.onId('condition-grabber', 'click', toggleCollapsed);
+    Dom.on(Dom.query('.condition-peek'), 'click', toggleCollapsed);
     Dom.onId('nav-google', 'click', guardNavigationLink);
     Dom.onId('nav-apple', 'click', openAppleMaps);
     Bus.on('condition:select', focusSection);

@@ -66,13 +66,13 @@
         return;
       }
       el.innerHTML = list.map(function(item) {
-        return '<div class="favorite-item flex items-start gap-3">'
-          + '<div class="flex-1 min-w-0">'
-          + '<div class="favorite-title truncate">' + escapeHtml(item.name) + '</div>'
-          + '<div class="favorite-sub">' + escapeHtml(item.county) + ' · ' + formatUpdatedAt(item.savedAt) + ' 收藏</div>'
+        return '<div class="favorite-item">'
+          + '<div class="favorite-main">'
+          + '<div class="favorite-title">' + escapeHtml(item.name) + '</div>'
+          + '<div class="favorite-sub">' + escapeHtml(item.county) + '，' + formatUpdatedAt(item.savedAt) + ' 收藏</div>'
           + '</div>'
-          + '<button class="favorite-action active" data-open-favorite="' + escapeHtml(item.id) + '"><i class="fa-solid fa-location-arrow text-xs"></i></button>'
-          + '<button class="favorite-action" data-remove-favorite="' + escapeHtml(item.id) + '"><i class="fa-solid fa-trash-can text-xs"></i></button>'
+          + '<button class="favorite-action active" data-open-favorite="' + escapeHtml(item.id) + '" aria-label="\u5728\u5730\u5716\u67e5\u770b ' + escapeHtml(item.name) + '"><i class="fa-solid fa-location-arrow" aria-hidden="true"></i></button>'
+          + '<button class="favorite-action" data-remove-favorite="' + escapeHtml(item.id) + '" aria-label="\u79fb\u9664\u6536\u85cf ' + escapeHtml(item.name) + '"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>'
           + '</div>';
       }).join('');
       Dom.queryAll('[data-open-favorite]', el).forEach(function(btn) {
@@ -166,8 +166,8 @@
         return;
       }
       summaryEl.className = 'favorite-item';
-      summaryEl.innerHTML = '<div class="favorite-title">' + escapeHtml(report.routeLabel || '沿途狀況') + '</div>'
-        + '<div class="favorite-sub">' + escapeHtml(report.weatherSummary + '。' + report.riskNotes.join(' ')) + '</div>';
+      summaryEl.innerHTML = '<div class="favorite-main"><div class="favorite-title">' + escapeHtml(report.routeLabel || '沿途狀況') + '</div>'
+        + '<div class="favorite-sub">' + escapeHtml(report.weatherSummary + '。' + report.riskNotes.join(' ')) + '</div></div>';
       tagsEl.innerHTML = report.riskNotes.map(function(note) {
         return '<span class="risk-chip warn"><i class="fa-solid fa-bolt"></i>' + escapeHtml(note) + '</span>';
       }).join('') + '<span class="risk-chip good"><i class="fa-solid fa-camera"></i>' + report.cameraCount + ' 支沿途影像</span>';
@@ -248,7 +248,7 @@
       AppState.routeReport = {
         cameraCount: Object.keys(cameraIds).length,
         counties: [],
-        routeLabel: '安全路線 · ' + sections.length + ' 段',
+        routeLabel: '安全路線，' + sections.length + ' 段',
         sectionCount: sections.length,
         rainSections: overall.rainSections || 0,
         weatherSummary: weatherSummary,

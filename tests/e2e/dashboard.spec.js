@@ -355,7 +355,16 @@ test('keeps traffic unknown semantics and safety guidance visible', async ({ pag
   if (await page.locator('#desktop-map').isVisible()) {
     await expect(page.locator('#desktop-source-note')).toContainText('資料不足');
   } else {
-    await expect(page.getByText('資料不足', { exact: true })).toBeVisible();
+    // Phones: an empty map has nothing grey to explain; the 資料不足 guidance appears in the
+    // route sheet, next to the ribbon, once a route exists.
+    await openRoutePlanner(page);
+    await page.locator('#js-route-start').fill('25.0478,121.5170');
+    await page.locator('#js-route-end').fill('24.7570,121.7530');
+    await page.locator('#js-route-btn').click();
+    await expect(page.locator('#route-conditions-panel')).toBeVisible();
+    await page.locator('#condition-toggle').click();
+    await expect(page.locator('#condition-ribbon-note')).toBeVisible();
+    await expect(page.locator('#condition-ribbon-note')).toContainText('資料不足');
   }
   if (await page.locator('#desktop-map').isVisible()) {
     await page.locator('#desktop-settings-toggle').click();
@@ -542,7 +551,8 @@ test('keeps the mobile route planner focused on the active task', async ({ page 
 
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#ride-status-card')).toBeHidden();
-  await expect(page.locator('.map-legend-item').filter({ hasText: '資料不足' })).toBeVisible();
+  // No route yet, so nothing grey to explain: the 資料不足 key stays hidden while planning.
+  await expect(page.locator('.map-legend-item').filter({ hasText: '資料不足' })).toBeHidden();
   await expect(page.locator('.route-title-kicker')).toBeHidden();
 
   const plannerBox = await page.locator('#route-expanded').boundingBox();

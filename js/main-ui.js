@@ -4,7 +4,10 @@
   'use strict';
 
   var THEME_KEY = 'tw_theme';
-  var ROUTE_BTN_IDLE_TEXT = '\u{1F50D} \u5efa\u7acb\u5b89\u5168\u8def\u7dda';
+  var ROUTE_BTN_IDLE_HTML = '<i class="fa-solid fa-shield-halved" aria-hidden="true"></i> \u5efa\u7acb\u5b89\u5168\u8def\u7dda';
+  var ROUTE_BTN_BUSY_HTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> \u5206\u6790\u4e2d\u2026';
+  var THEME_ICON_DARK = '<svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6a8.6 8.6 0 1 0 11 11z" fill="currentColor"/></svg>';
+  var THEME_ICON_LIGHT = '<svg class="theme-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.4" fill="currentColor"/><path d="M12 2.6v2.7M12 18.7v2.7M2.6 12h2.7M18.7 12h2.7M5.35 5.35l1.9 1.9M16.75 16.75l1.9 1.9M5.35 18.65l1.9-1.9M16.75 7.25l1.9-1.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   var REGION_LABELS = {
     north: '\u5317\u90e8',
     central: '\u4e2d\u90e8',
@@ -92,18 +95,35 @@
     dark: Storage.get(THEME_KEY, 'dark') !== 'light',
     init: function() {
       Dom.onId('js-theme', 'click', function() { ThemeMod.toggle(); });
+      ThemeMod.placeButton();
+    },
+    // Phones have no header bar on the map: the theme toggle becomes the last button of the map
+    // control group.  Desktop keeps it in the header.  One element, moved, so ids stay unique.
+    placeButton: function() {
+      var btn = Dom.byId('js-theme');
+      var stack = document.querySelector('.map-control-stack');
+      var tools = document.querySelector('.header-tools');
+      if (!btn || !stack || !tools || !window.matchMedia) return;
+      var query = window.matchMedia('(max-width: 1199px)');
+      function place() {
+        if (query.matches) { if (btn.parentNode !== stack) stack.appendChild(btn); }
+        else if (btn.parentNode !== tools) tools.appendChild(btn);
+      }
+      place();
+      if (query.addEventListener) query.addEventListener('change', place);
+      else if (query.addListener) query.addListener(place);
     },
     toggle: function() {
       ThemeMod.dark = !ThemeMod.dark;
       var btn = Dom.byId('js-theme');
       if (ThemeMod.dark) {
         document.body.classList.remove('light');
-        if (btn) btn.textContent = '\u{1F319}';
+        if (btn) btn.innerHTML = THEME_ICON_DARK;
         MapMod.setTile(Config.TILE_DARK);
         Storage.set(THEME_KEY, 'dark');
       } else {
         document.body.classList.add('light');
-        if (btn) btn.textContent = '\u2600\uFE0F';
+        if (btn) btn.innerHTML = THEME_ICON_LIGHT;
         MapMod.setTile(Config.TILE_LIGHT);
         Storage.set(THEME_KEY, 'light');
       }
@@ -140,6 +160,10 @@
       ['map','list','tools'].forEach(function(k) {
         Dom.onId('nav-' + k, 'click', function() { NavMod.go(k); });
       });
+      if (window.matchMedia) {
+        var brandQuery = window.matchMedia('(max-width: 1199px)');
+        if (brandQuery.addEventListener) brandQuery.addEventListener('change', NavMod.placeBrand);
+      }
     },
     go: function(key) {
       ['map','list','tools'].forEach(function(k) {
@@ -151,7 +175,28 @@
           btn.classList.toggle('text-slate-500', k !== key);
         }
       });
+      NavMod.placeBrand();
       if (key === 'map') setTimeout(function() { MapMod.invalidateSize(); }, 50);
+    },
+    // Phones: the logo (#brand-home, still the "back to the planner" button) lives in the title row
+    // of the page being shown (路況 / 工具); on the map and on desktop it stays in the header.
+    placeBrand: function() {
+      var brand = Dom.byId('brand-home');
+      var inner = document.querySelector('.app-header-inner');
+      if (!brand || !inner) return;
+      var phone = window.matchMedia && window.matchMedia('(max-width: 1199px)').matches;
+      var row = null;
+      if (phone) {
+        if (document.getElementById('pg-list').classList.contains('active')) row = document.querySelector('#pg-list .list-filter-head');
+        else if (document.getElementById('pg-tools').classList.contains('active')) row = document.querySelector('#pg-tools .tool-card-head');
+      }
+      if (row) {
+        if (brand.parentNode !== row) row.insertBefore(brand, row.firstChild);
+        brand.classList.add('in-title-row');
+      } else {
+        brand.classList.remove('in-title-row');
+        if (brand.parentNode !== inner) inner.insertBefore(brand, inner.firstChild);
+      }
     }
   };
 
@@ -375,6 +420,8 @@
       else if (action === 'nearby-overlay-upsert') MapMod._nearbyUpsert(request.center, request.radiusMeters);
       else if (action === 'nearby-overlay-radius') MapMod._nearbySetRadius(request.radiusMeters);
       else if (action === 'nearby-overlay-clear') MapMod._nearbyClear();
+      else if (action === 'user-location-upsert') MapMod._userUpsert(request.center, request.accuracyMeters, request.recenter !== false);
+      else if (action === 'user-location-clear') MapMod._userClear();
       else if (action === 'clear-waypoint-overlays') {
         // MapLibre draws no waypoint overlays; keep the shared state contract.
         if (window.AppState) AppState.waypointMapMarkers = [];
@@ -803,20 +850,18 @@
         map.addLayer({
           id: 'mobile-nearby-fill', type: 'fill', source: 'mobile-nearby',
           filter: ['==', ['get', 'kind'], 'radius'],
-          paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.12 }
+          paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.04 }
         });
         map.addLayer({
           id: 'mobile-nearby-line', type: 'line', source: 'mobile-nearby',
           filter: ['==', ['get', 'kind'], 'radius'],
-          paint: { 'line-color': '#38bdf8', 'line-width': 2, 'line-opacity': 0.7 }
+          paint: { 'line-color': '#38bdf8', 'line-width': 1.5, 'line-opacity': 0.55, 'line-dasharray': [3, 3] }
         });
         map.addLayer({
           id: 'mobile-nearby-dot', type: 'circle', source: 'mobile-nearby',
           filter: ['==', ['get', 'kind'], 'center'],
-          paint: {
-            'circle-radius': 6, 'circle-color': '#38bdf8',
-            'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2
-          }
+          // Contract layer only: the search radius is NOT the user's position (see mobile-user-*).
+          paint: { 'circle-radius': 2, 'circle-opacity': 0, 'circle-stroke-opacity': 0 }
         });
       } catch (error) {}
       MapMod._nearbyMarker = true;
@@ -824,6 +869,71 @@
       try {
         map.flyTo({ center: [lng, lat], zoom: 14, duration: 600 });
       } catch (error) {}
+    },
+
+    // "You are here": accuracy circle + a 16px blue dot with a white ring.  Separate from the
+    // nearby search-radius overlay.  recenter=true makes exactly ONE camera move.
+    _userUpsert: function(center, accuracyMeters, recenter) {
+      var map = MapMod.map;
+      if (!map || !center) return;
+      var lat = Number(center[0]);
+      var lng = Number(center[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      var acc = Math.max(5, Number(accuracyMeters) || 0);
+      var features = [{ type: 'Feature', properties: { kind: 'center' }, geometry: { type: 'Point', coordinates: [lng, lat] } }];
+      if (window.MapGeoUtils) {
+        features.push({ type: 'Feature', properties: { kind: 'accuracy' },
+          geometry: { type: 'Polygon', coordinates: [window.MapGeoUtils.circlePolygon(lng, lat, acc)] } });
+      }
+      var data = { type: 'FeatureCollection', features: features };
+      try {
+        var src = map.getSource('mobile-user');
+        if (src && src.setData) src.setData(data);
+        else {
+          map.addSource('mobile-user', { type: 'geojson', data: data });
+          map.addLayer({ id: 'mobile-user-accuracy', type: 'fill', source: 'mobile-user',
+            filter: ['==', ['get', 'kind'], 'accuracy'],
+            paint: { 'fill-color': '#2f80ed', 'fill-opacity': 0.14 } });
+          map.addLayer({ id: 'mobile-user-accuracy-line', type: 'line', source: 'mobile-user',
+            filter: ['==', ['get', 'kind'], 'accuracy'],
+            paint: { 'line-color': '#2f80ed', 'line-width': 1, 'line-opacity': 0.45 } });
+          map.addLayer({ id: 'mobile-user-dot', type: 'circle', source: 'mobile-user',
+            filter: ['==', ['get', 'kind'], 'center'],
+            paint: { 'circle-radius': 8, 'circle-color': '#2f80ed',
+              'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
+        }
+      } catch (error) {}
+      MapMod._userCenter = [lat, lng];
+      if (!recenter) {
+        // Live update: only pan when the dot is about to leave the open part of the map
+        // (under the top card / behind the controls / sheet); zoom is left alone.
+        try {
+          var canvas = map.getCanvas();
+          var pt = map.project([lng, lat]);
+          var w = canvas.clientWidth; var h = canvas.clientHeight;
+          if (pt.x < 48 || pt.x > w - 72 || pt.y < 150 || pt.y > h - 230) map.easeTo({ center: [lng, lat], duration: 600 });
+        } catch (error) {}
+        return;
+      }
+      // One move: zoom 16, or whatever fits the accuracy circle if that is larger (never below ~12).
+      var zoom = 16;
+      try {
+        var dLat = acc / 111320;
+        var dLng = acc / (111320 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
+        var cam = map.cameraForBounds([[lng - dLng, lat - dLat], [lng + dLng, lat + dLat]], { padding: 70, maxZoom: 16 });
+        if (cam && Number.isFinite(cam.zoom)) zoom = Math.max(12, Math.min(16, cam.zoom));
+      } catch (error) {}
+      map.easeTo({ center: [lng, lat], zoom: zoom, duration: 700 });
+    },
+
+    _userClear: function() {
+      var map = MapMod.map;
+      MapMod._userCenter = null;
+      if (!map) return;
+      ['mobile-user-dot', 'mobile-user-accuracy-line', 'mobile-user-accuracy'].forEach(function(id) {
+        try { if (map.getLayer(id)) map.removeLayer(id); } catch (error) {}
+      });
+      try { if (map.getSource('mobile-user')) map.removeSource('mobile-user'); } catch (error) {}
     },
 
     _nearbySetRadius: function(radiusMeters) {
@@ -943,7 +1053,8 @@
       if (!btn) return;
       btn.disabled = !!isBusy;
       btn.classList.toggle('loading', !!isBusy);
-      btn.textContent = isBusy ? '\u5206\u6790\u4e2d\u2026' : ROUTE_BTN_IDLE_TEXT;
+      btn.innerHTML = isBusy ? ROUTE_BTN_BUSY_HTML : ROUTE_BTN_IDLE_HTML;
+      btn.setAttribute('aria-busy', isBusy ? 'true' : 'false');
     },
     setVehicle: function(mode, plate) {
       RouteMod.mode = mode === 'car' ? 'car' : 'motorcycle';
@@ -1248,8 +1359,8 @@
       var hints = (SEARCH_HINTS[ListMod.region] || SEARCH_HINTS.all).slice();
       if (ListMod.regionCounty !== 'all') hints.unshift(ListMod.regionCounty);
       hints = hints.filter(function(value, index, arr) { return arr.indexOf(value) === index; }).slice(0, 6);
-      wrap.innerHTML = '<span class="text-[10px] text-slate-500 py-1">\u63d0\u793a\uff1a</span>' + hints.map(function(hint) {
-        return '<button class="hint-chip px-2.5 py-1 text-[11px] font-bold rounded-full transition-all" data-hint="' + hint + '">' + hint + '</button>';
+      wrap.innerHTML = '<span class="list-chip-label">\u63d0\u793a\uff1a</span>' + hints.map(function(hint) {
+        return '<button class="hint-chip" data-hint="' + hint + '">' + hint + '</button>';
       }).join('');
       Dom.onAll('.hint-chip', 'click', function(btn) {
         ListMod.applySearch(btn.dataset.hint || '');
@@ -1279,7 +1390,7 @@
         if (score < 0) return;
         scored.push({
           name: cam.name,
-          sub: [cam.county, getRoadCategoryLabel(cam.cat)].filter(Boolean).join(' · '),
+          sub: [cam.county, getRoadCategoryLabel(cam.cat)].filter(Boolean).join('\u3000'),
           lat: cam.lat,
           lng: cam.lng,
           camId: cam.id,
@@ -1363,10 +1474,10 @@
         return;
       }
       var regionLabel = REGION_LABELS[ListMod.region] || '\u5340\u57df';
-      var html = '<button data-county="all" class="county-rtab px-3 py-1.5 text-[11px] font-bold rounded-full transition-all">'
+      var html = '<button data-county="all" class="county-rtab">'
         + regionLabel + '\u5168\u90e8</button>';
       counties.forEach(function(county) {
-        html += '<button data-county="' + county + '" class="county-rtab px-3 py-1.5 text-[11px] font-bold rounded-full transition-all">'
+        html += '<button data-county="' + county + '" class="county-rtab">'
           + county + '</button>';
       });
       wrap.innerHTML = html;
@@ -1388,10 +1499,7 @@
       Dom.queryAll('.county-rtab', wrap).forEach(function(btn) {
         var isActive = btn.dataset.county === ListMod.regionCounty;
         btn.classList.toggle('active', isActive);
-        btn.classList.toggle('bg-orange-500', isActive);
-        btn.classList.toggle('text-white', isActive);
-        btn.classList.toggle('bg-white/5', !isActive);
-        btn.classList.toggle('text-slate-300', !isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
       });
     },
     init: function() {
@@ -1515,14 +1623,14 @@
             : '可切換區域、縣市或搜尋關鍵字來縮小範圍。';
         }
         if (Data.camsState === 'loading' || Data.camsState === 'idle') {
-          el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
+          el.innerHTML = '<div class="list-empty">\u8f09\u5165\u4e2d\uff0c\u8acb\u7a0d\u5019...</div>';
         } else if (Data.camsState === 'error') {
           // 降級 UX（行動 7）：誠實的缺席——說清楚發生什麼事、該怎麼辦（含重試）
           el.innerHTML = (typeof window !== 'undefined' && window.SnapshotHonesty)
             ? window.SnapshotHonesty.noticeHtml('cams-error')
-            : '<div class="text-center text-amber-400 py-12 text-sm">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
+            : '<div class="list-empty is-warn">\u651d\u5f71\u6a5f\u8cc7\u6599\u66ab\u6642\u7121\u6cd5\u8f09\u5165</div>';
         } else {
-          el.innerHTML = '<div class="text-center text-slate-500 py-12 text-sm">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
+          el.innerHTML = '<div class="list-empty">\u76ee\u524d\u689d\u4ef6\u4e0b\u6c92\u6709\u7b26\u5408\u7684\u651d\u5f71\u6a5f</div>';
         }
         return;
       }
@@ -1553,27 +1661,27 @@
         if (NearbyMod.userLat !== null && NearbyMod.userLng !== null) {
           distLabel = haversineKm(NearbyMod.userLat, NearbyMod.userLng, cam.lat, cam.lng).toFixed(1) + 'km';
         }
-        html += '<div class="cam-card rounded-2xl p-3 flex items-center gap-3 cursor-pointer border border-white/5" data-id="'+escapeHtml(cam.id)+'">'
-          + '<div class="cam-card-top w-full">'
-          + '<div class="cam-tw relative w-16 h-12 rounded-xl overflow-hidden shrink-0 bg-slate-800">'
-          + '<i class="fa-solid fa-camera absolute inset-0 m-auto text-slate-600 text-sm" style="top:50%;left:50%;transform:translate(-50%,-50%);position:absolute"></i>'
-          + '<img class="cam-th absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300" data-src="'+escapeHtml(_ts)+'" />'
+        html += '<div class="cam-card" data-id="'+escapeHtml(cam.id)+'">'
+          + '<div class="cam-card-top">'
+          + '<div class="cam-tw">'
+          + '<i class="fa-solid fa-camera cam-tw-ph" aria-hidden="true"></i>'
+          + '<img class="cam-th" alt="" data-src="'+escapeHtml(_ts)+'" />'
           + '</div>'
-          + '<div class="flex-1 min-w-0">'
-          + '<div class="font-bold text-xs truncate flex items-center gap-1.5">'+escapeHtml(cam.name)+'</div>'
-          + '<div class="text-[10px] text-slate-400 mt-0.5">'+escapeHtml(cam.county)+(wt?' \u00B7 '+escapeHtml(wt):'')+'</div>'
+          + '<div class="cam-card-body">'
+          + '<div class="cam-card-name">'+escapeHtml(cam.name)+'</div>'
+          + '<div class="cam-card-sub">'+escapeHtml(cam.county)+(wt?'\u3000'+escapeHtml(wt):'')+'</div>'
           + '<div class="cam-card-meta">'
           + '<span class="meta-chip">'+escapeHtml(catLabel)+'</span>'
           + (isRouteCam ? '<span class="meta-chip">\u6cbf\u9014</span>' : '')
           + (distLabel ? '<span class="meta-chip">\u8ddd\u96e2 ' + distLabel + '</span>' : '')
           + '</div>'
           + '</div>'
-          + '<button class="card-favorite-btn" data-favorite-id="' + escapeHtml(cam.id) + '"><i class="fa-regular fa-bookmark text-xs"></i></button>'
-          + '<i class="fa-solid fa-chevron-right text-slate-600 text-xs shrink-0"></i></div></div>';
+          + '<button class="card-favorite-btn" data-favorite-id="' + escapeHtml(cam.id) + '" aria-label="\u6536\u85cf ' + escapeHtml(cam.name) + '"><i class="fa-regular fa-bookmark" aria-hidden="true"></i></button>'
+          + '</div></div>';
       });
       if (hasMore) {
-        html += '<button type="button" class="list-load-more w-full text-center text-xs py-4">'
-          + '目前顯示 ' + listCams.length + ' / ' + cams.length + ' 支 · 載入更多'
+        html += '<button type="button" class="list-load-more">'
+          + '載入更多（已顯示 ' + listCams.length + ' / ' + cams.length + ' 支）'
           + '</button>';
       }
       el.innerHTML = html;
@@ -1663,7 +1771,7 @@
     MapMod.init();
     if (Storage.get(THEME_KEY, 'dark') === 'light') {
       document.body.classList.add('light');
-      var _tb = Dom.byId('js-theme'); if(_tb) _tb.textContent='\u2600\uFE0F';
+      var _tb = Dom.byId('js-theme'); if(_tb) _tb.innerHTML = THEME_ICON_LIGHT;
       MapMod.setTile(Config.TILE_LIGHT);
     }
     ThemeMod.init();
@@ -1714,5 +1822,71 @@
     // 沿途影像按鈕
     Dom.onId('js-strip-btn', 'click', function() { RouteStripMod.toggle(); });
     Dom.onId('route-strip-close', 'click', function() { RouteStripMod.hide(); });
+
+    // Mobile: the toast is a slim strip hanging off the bottom edge of the merged top card
+    // (same left edge and width), never over it and never a floating pill in the map.
+    var topCard = document.querySelector('.map-top-panel');
+    var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 1199px)') : null;
+    window.Toast.anchor = function() {
+      var root = document.documentElement;
+      if (!topCard || !mobileQuery || !mobileQuery.matches || !topCard.offsetParent) {
+        root.style.removeProperty('--toast-top');
+        root.style.removeProperty('--toast-left');
+        root.style.removeProperty('--toast-w');
+        return;
+      }
+      var box = topCard.getBoundingClientRect();
+      root.style.setProperty('--toast-top', Math.round(box.bottom - 1) + 'px');
+      root.style.setProperty('--toast-left', Math.round(box.left) + 'px');
+      root.style.setProperty('--toast-w', Math.round(box.width) + 'px');
+    };
+    if (topCard && window.ResizeObserver) new ResizeObserver(function() { window.Toast.anchor(); }).observe(topCard);
+    window.addEventListener('resize', function() { window.Toast.anchor(); });
+
+    // Mobile top card: mirror #route-summary as a typographic line (big figures, small units).
+    // The summary text itself is the summary model's contract and is left untouched.
+    var routeSummary = Dom.byId('route-summary');
+    var routeSummaryLine = Dom.byId('route-summary-line');
+    function renderRouteSummaryLine() {
+      if (!routeSummaryLine) return;
+      routeSummaryLine.textContent = '';
+      var text = routeSummary ? routeSummary.textContent : '';
+      var match = /(\d+(?:\.\d+)?)\s*km\s*\/\s*(\d+)\s*\u5206/.exec(text);
+      if (!match) return;
+      [[match[1], '\u516c\u91cc'], [match[2], '\u5206\u9418']].forEach(function(pair) {
+        var figure = document.createElement('span');
+        figure.className = 'route-line-fig';
+        var value = document.createElement('b');
+        value.textContent = pair[0];
+        figure.appendChild(value);
+        figure.appendChild(document.createTextNode(' ' + pair[1]));
+        routeSummaryLine.appendChild(figure);
+      });
+      var tagText = /\u96e2\u7dda\u5feb\u7167/.test(text) ? '\u96e2\u7dda\u5feb\u7167' : (/\u5df2\u9a57\u8b49/.test(text) ? '\u5df2\u9a57\u8b49' : '');
+      if (tagText) {
+        var tag = document.createElement('span');
+        tag.className = 'route-line-tag';
+        tag.textContent = tagText;
+        routeSummaryLine.appendChild(tag);
+      }
+    }
+    if (routeSummary && window.MutationObserver) {
+      new MutationObserver(renderRouteSummaryLine).observe(routeSummary, { childList: true, characterData: true, subtree: true });
+    }
+    renderRouteSummaryLine();
+
+    // Mobile map: MapLibre opens its attribution on first paint. Keep the
+    // compact "i" button collapsed until the rider taps it (presentation only).
+    var mobileMap = document.getElementById('map');
+    if (mobileMap && window.MutationObserver) {
+      var attributionWatch = new MutationObserver(function() {
+        var attribution = mobileMap.querySelector('.maplibregl-ctrl-attrib');
+        if (!attribution) return;
+        attribution.removeAttribute('open');
+        attribution.classList.remove('maplibregl-compact-show');
+        attributionWatch.disconnect();
+      });
+      attributionWatch.observe(mobileMap, { childList: true, subtree: true });
+    }
   });
 })();

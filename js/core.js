@@ -166,16 +166,20 @@
     emit: function(evt, data) { (_listeners[evt] || []).forEach(function(fn) { fn(data); }); }
   };
 
+  // Toast lives in #notice-region (top, under the header) so it can never cover
+  // the route CTA, navigation buttons or the bottom nav.  One timer per toast:
+  // a newer message always gets its full duration.
   window.Toast = {
+    _timer: null,
     show: function(msg, ms) {
       var el = document.getElementById('toast');
       if (!el) return;
       el.textContent = msg;
-      el.style.opacity = '1';
-      el.style.transform = 'translateX(-50%) translateY(0)';
-      setTimeout(function() {
-        el.style.opacity = '0';
-        el.style.transform = 'translateX(-50%) translateY(8px)';
+      if (typeof window.Toast.anchor === 'function') window.Toast.anchor();
+      el.classList.add('is-visible');
+      clearTimeout(window.Toast._timer);
+      window.Toast._timer = setTimeout(function() {
+        el.classList.remove('is-visible');
       }, ms || 2500);
     }
   };

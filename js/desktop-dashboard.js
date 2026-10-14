@@ -85,9 +85,12 @@
     var overall = data && data.overall || {};
     var report = AppState.routeReport;
     var route = AppState.activeRoute;
-    text('desktop-validation-summary', route && route.validation && route.validation.status === 'safe'
+    var validated = !!(route && route.validation && route.validation.status === 'safe');
+    text('desktop-validation-summary', validated
       ? ('安全路線已驗證 · ' + (route.dataMode === 'fixture' ? '示範資料' : '官方快照'))
       : '尚未完成安全驗證');
+    var validationBox = Dom.byId('desktop-validation-summary');
+    if (validationBox) validationBox.classList.toggle('is-validated', validated);
     var attention = Dom.byId('desktop-attention-list');
     if (attention) {
       var notes = report && report.riskNotes ? report.riskNotes.slice(0, 4) : [];
@@ -508,7 +511,7 @@
           state.terrainMode = '2d';
           Storage.set(TERRAIN_PREF_KEY, '2d');
           var note = Dom.byId('desktop-source-note');
-          if (note) note.textContent = '3D 地形暫時無法載入，已切換 2D；路況資料仍可使用。';
+          if (note) note.textContent = '3D 地形暫時無法載入，已切換 2D；路況資料仍可使用。灰色資料不足，不代表順暢。';
           syncTerrainControls();
           syncCameraControls();
         }
@@ -868,8 +871,17 @@
     var summary = Dom.byId('desktop-elevation-summary');
     if (!chart || !summary) return;
     var valid = samples.filter(function(sample) { return Number.isFinite(sample.elevation); });
+    // 1 viewBox unit = 1 CSS px, so chart labels keep their real 12px size.
+    // The size comes from the ResizeObserver below, never from a layout read
+    // here: getBoundingClientRect() forced a full synchronous reflow of the
+    // command center on every route render.
+    var chartW = elevationSize.w >= 200 ? elevationSize.w : 800;
+    var chartH = elevationSize.h >= 40 ? elevationSize.h : 150;
+    elevationDrawn.w = chartW;
+    elevationDrawn.h = chartH;
+    chart.setAttribute('viewBox', '0 0 ' + chartW + ' ' + chartH);
     if (valid.length < 2) {
-      chart.innerHTML = '<text x="400" y="82" text-anchor="middle" class="desktop-chart-empty">3D 地形資料不足，暫無海拔曲線</text>';
+      chart.innerHTML = '<text x="' + Math.round(chartW / 2) + '" y="' + Math.round(chartH / 2 + 4) + '" text-anchor="middle" class="desktop-chart-empty">3D 地形資料不足，暫無海拔曲線</text>';
       summary.textContent = '地形資料不足；不將未知高度補成 0。';
       setVisible('desktop-elevation-panel', true);
       return;
@@ -879,10 +891,10 @@
     var max = Math.max.apply(null, valid.map(function(sample) { return sample.elevation; }));
     var range = Math.max(1, max - min);
     var total = samples[samples.length - 1].distance || 1;
-    var chartLeft = 60;
-    var chartRight = 790;
+    var chartLeft = 52;
+    var chartRight = chartW - 10;
     var chartTop = 18;
-    var chartBottom = 136;
+    var chartBottom = chartH - 8;
     var chartWidth = chartRight - chartLeft;
     var chartHeight = chartBottom - chartTop;
     var polylines = [];
@@ -899,9 +911,7 @@
     if (current.length > 1) polylines.push(current);
     var markup = '<defs>'
       + '<linearGradient id="desktop-elevation-stroke" x1="0" x2="1" y1="0" y2="0">'
-      + '<stop offset="0" stop-color="#52b788"/><stop offset=".34" stop-color="#facc15"/>'
-      + '<stop offset=".58" stop-color="#ef5350"/><stop offset=".78" stop-color="#f59e0b"/>'
-      + '<stop offset="1" stop-color="#52b788"/></linearGradient>'
+      + '<stop offset="0" stop-color="currentColor"/><stop offset="1" stop-color="currentColor"/></linearGradient>'
       + '<linearGradient id="desktop-elevation-fill" x1="0" x2="0" y1="0" y2="1">'
       + '<stop offset="0" stop-color="#f97316" stop-opacity=".28"/><stop offset="1" stop-color="#f97316" stop-opacity="0"/>'
       + '</linearGradient></defs>';
@@ -909,7 +919,7 @@
       var y = chartTop + chartHeight * position;
       var value = max - range * position;
       markup += '<line x1="' + chartLeft + '" y1="' + y.toFixed(1) + '" x2="' + chartRight + '" y2="' + y.toFixed(1) + '" class="desktop-chart-axis" />'
-        + '<text x="52" y="' + (y + 3).toFixed(1) + '" text-anchor="end" class="desktop-chart-label">' + Math.round(value).toLocaleString() + '</text>';
+        + '<text x="' + (chartLeft - 6) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" class="desktop-chart-label">' + Math.round(value).toLocaleString() + '</text>';
     });
     polylines.forEach(function(line, index) {
       var firstX = line[0].split(',')[0];
@@ -936,12 +946,37 @@
     summary.textContent = '最低 ' + Math.round(min) + ' m · 最高 ' + Math.round(max) + ' m · 最大估算坡度 ' + maxSlope.toFixed(1) + '%';
   }
 
+  // Re-draw at the new pixel size when a rail is dragged or the window resizes.
+  // The observer always records the latest size (contentRect is computed after
+  // layout, so reading it costs nothing); it only re-draws when the size the
+  // chart was last drawn at is off by 4px or more.
+  var elevationResizeTimer = null;
+  var elevationSize = { w: 0, h: 0 };
+  var elevationDrawn = { w: 0, h: 0 };
+  function watchElevationSize() {
+    var chart = Dom.byId('desktop-elevation-chart');
+    if (!chart || !window.ResizeObserver || chart.dataset.sizeWatch) return;
+    chart.dataset.sizeWatch = '1';
+    new ResizeObserver(function(entries) {
+      var rect = entries[0].contentRect;
+      elevationSize.w = Math.round(rect.width);
+      elevationSize.h = Math.round(rect.height);
+      if (!state.elevation) return;
+      var w = elevationSize.w >= 200 ? elevationSize.w : 800;
+      var h = elevationSize.h >= 40 ? elevationSize.h : 150;
+      if (Math.abs(w - elevationDrawn.w) < 4 && Math.abs(h - elevationDrawn.h) < 4) return;
+      clearTimeout(elevationResizeTimer);
+      elevationResizeTimer = setTimeout(function() { if (state.elevation) renderElevation(state.elevation); }, 120);
+    }).observe(chart);
+  }
+
   var DesktopElevationMod = {
     refresh: function() {
       var routeId = AppState.activeRoute && AppState.activeRoute.routeId;
       var points = routeCoordinates();
       if (!routeId || points.length < 2 || !state.desktop) { this.clear(); return; }
       var key = routeId + ':' + ELEVATION_SOURCE_VERSION;
+      watchElevationSize();
       var cached = elevationCacheRead(key);
       if (cached) {
         state.elevation = cached;
