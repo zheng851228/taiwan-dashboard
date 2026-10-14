@@ -309,26 +309,34 @@ test('v40 lower intelligence rail interactions remain error-free', async ({ page
   expect(pageErrors).toEqual([]);
 });
 
-test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
+test('recreating the desktop map keeps the 2D and 3D controls working', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop map renderer verification only.');
-  await page.setViewportSize({ width: 1536, height: 1024 });
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
   await page.addInitScript(() => localStorage.removeItem('tw_desktop_map_renderer_v1'));
   await page.goto(WORKER);
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
+  await page.evaluate(() => { window.__firstDesktopMap = window.DesktopDashboardMod.getRenderer().map; });
 
+  // The settings row rebuilds the map. There is no second ("traditional") map stack to fall
+  // back to since #76, so the page must stay on MapLibre and come back with a fresh map.
   await page.locator('#desktop-settings-toggle').click();
   await page.locator('#desktop-map-mode-setting').click();
-  await expect(page.locator('body')).toHaveClass(/desktop-legacy-map/);
-  await expect(page.locator('#map')).toBeVisible();
-
-  await page.locator('#desktop-map-2d').click();
-  await expect(page.locator('body')).not.toHaveClass(/desktop-legacy-map/, { timeout: 12000 });
-  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+  await expect(page.locator('body')).not.toHaveClass(/desktop-legacy-map/);
+  await expect.poll(() => page.evaluate(() => {
+    const renderer = window.DesktopDashboardMod.getRenderer();
+    return Boolean(renderer && renderer.map && renderer.map !== window.__firstDesktopMap);
+  }), { timeout: CAMERA_SETTLE_MS }).toBe(true);
+  await expect(page.locator('#desktop-map')).toBeVisible();
+  await expect(page.locator('#map')).toBeHidden();
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
 
+  await page.locator('#desktop-map-2d').click();
+  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
   await page.locator('#desktop-map-3d').click();
   await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
   await expect(page.locator('#desktop-map-2d')).not.toHaveClass(/active/);
+  await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem('tw_desktop_terrain_mode_v1'))).toBe('3d');
 
   await page.evaluate(() => localStorage.removeItem('tw_desktop_terrain_mode_v1'));
@@ -524,15 +532,19 @@ test('light command-center surfaces keep a readable ink hierarchy', async ({ pag
   expect(colors.disclaimer).toBe('rgb(71, 85, 105)');
 });
 
-test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo) => {
+test('mobile keeps the desktop bundle and terrain assets unloaded', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'desktop-chromium', 'Mobile and tablet request verification only.');
-  const mapLibreRequests = [];
-  page.on('request', (request) => {
-    if (request.url().match(/maplibre|desktop-dashboard/)) mapLibreRequests.push(request.url());
-  });
+  // Since #76 the phone map is MapLibre too, so the shared MapLibre vendor chunk is expected.
+  // What phones must not pay for is the desktop-only code and the terrain / hillshade data.
+  const requested = [];
+  page.on('request', (request) => requested.push(request.url()));
   await page.goto(WORKER);
-  await page.waitForTimeout(700);
-  expect(mapLibreRequests).toEqual([]);
+  await expect.poll(() => page.evaluate(() => Boolean(window.MapMod && window.MapMod._ready)), { timeout: 15000 }).toBe(true);
+
+  expect(requested.filter((url) => /maplibre-gl\.mjs/.test(url))).not.toHaveLength(0);
+  expect(requested.filter((url) => /desktop(?:-dashboard|-layout)?\.js|js\/dist\/desktop/.test(url))).toEqual([]);
+  expect(requested.filter((url) => /mapterhorn/.test(url))).toEqual([]);
+  expect(await page.evaluate(() => typeof window.DesktopDashboardMod)).toBe('undefined');
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible();
   await expect(page.locator('#desktop-map')).toBeHidden();
@@ -543,7 +555,8 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
 test('missing Tailwind shell styles show a recovery screen instead of overlapping panels', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop shell recovery verification only.');
   await page.setViewportSize({ width: 1536, height: 1024 });
-  await page.route('**/css/tailwind.generated.css?v=44', route => route.abort());
+  // Version-agnostic: the stylesheet's ?v= stamp changes with every release.
+  await page.route('**/css/tailwind.generated.css*', route => route.abort());
   await page.goto(WORKER);
 
   const recovery = page.locator('#tailwind-style-recovery');

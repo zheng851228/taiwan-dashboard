@@ -196,35 +196,22 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expectEventMarker(page, 'construction');
   await expect(page.locator('#condition-incidents')).toContainText('1處·1件');
   if (await page.locator('#desktop-map').isVisible()) {
-    await expect(page.locator('.desktop-event-construction')).toBeVisible();
+    await expect(mapRoot(page).locator('.desktop-event-construction')).toBeVisible();
   } else {
     await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
   }
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
-  expect(await page.evaluate(() => (
-    MapMod.routeSectionLayers.length === AppState.routeConditions.sections.length * 2
-  ))).toBe(true);
-  expect(await page.evaluate(() => {
-    const cue = MapMod.routeIncidentLayers.find((layer) => layer._roadEventLocationCue);
-    return {
-      layers: MapMod.routeIncidentLayers.length,
-      kind: cue?._roadEventKind,
-      impact: cue?._roadEventImpact,
-      color: cue?.options?.color,
-      dashArray: cue?.options?.dashArray || null,
-      points: cue?.getLatLngs?.().length || 0
-    };
-  })).toEqual({
-    layers: 2,
-    kind: 'construction',
-    impact: 'controlled',
-    color: '#8b5cf6',
-    dashArray: null,
-    points: expect.any(Number)
-  });
-  expect(await page.evaluate(() => (
-    MapMod.routeIncidentLayers.find((layer) => layer._roadEventLocationCue).getLatLngs().length
-  ))).toBeGreaterThanOrEqual(2);
+  // What MapLibre was told to draw: one traffic feature per route section, and a single
+  // location cue (>= 2 points, colored by event kind) for the single official event.
+  const sectionOrders = await page.evaluate(() => AppState.routeConditions.sections.map((section) => section.order));
+  const sectionFeatures = await readMapFeatures(page, 'desktop-sections');
+  expect(sectionFeatures.map((feature) => feature.properties.order)).toEqual(sectionOrders);
+  expect(sectionFeatures.every((feature) => feature.geometry.coordinates.length >= 2)).toBe(true);
+  const cues = await readMapFeatures(page, 'desktop-events');
+  expect(cues).toHaveLength(1);
+  expect(cues[0].properties).toMatchObject({ kind: 'construction', color: '#f59e0b' });
+  expect(cues[0].geometry.coordinates.length).toBeGreaterThanOrEqual(2);
+  expect(await readMapFeatures(page, 'desktop-route')).toHaveLength(1);
   expect(await page.evaluate(() => ({
     partial: window.getRoadEventPresentation({
       kind: 'accident',
@@ -241,10 +228,11 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await page.locator('#condition-clear').click();
   await expect(page.locator('#map-legend-event-item')).not.toHaveClass(/has-events/);
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
-  expect(await page.evaluate(() => ({
-    eventLayers: MapMod.routeIncidentLayers.length,
-    eventMarkers: MapMod.routeIncidentMarkers.length
-  }))).toEqual({ eventLayers: 0, eventMarkers: 0 });
+  // Clearing the route removes every overlay from the map, not just the panel.
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-events')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-sections')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-route')).toEqual([]);
   let remainingMapFailures = mapProviderFailures.length;
   const unexpectedErrors = browserErrors.filter((message) => {
     if (/Failed to load resource.*404/.test(message)) return false;
@@ -286,8 +274,10 @@ test('keeps coordinate-free road events visible without inventing a precise map 
   await expect(page.locator('#desktop-context-alerts')).toContainText('位置未提供');
   await expect(page.locator('#condition-incidents')).toContainText('未定位·1件');
   await expect(page.locator('.condition-section.has-road-event')).toHaveCount(0);
-  await expect(page.locator('.route-incident-pin')).toHaveCount(0);
-  expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBe(0);
+  // No coordinates means nothing is drawn on the map: no marker and no location cue.
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-events')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-sections')).not.toHaveLength(0);
 });
 
 test('keeps separate official event locations as separate map markers', async ({ page }, testInfo) => {
@@ -317,53 +307,60 @@ test('keeps separate official event locations as separate map markers', async ({
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
 
-  await expect(page.locator('.route-incident-pin')).toHaveCount(2);
+  const markers = mapRoot(page).locator('.desktop-event-marker');
+  await expect(markers).toHaveCount(2);
+  await expect(mapRoot(page).locator('.desktop-event-construction')).toHaveCount(1);
+  await expect(mapRoot(page).locator('.desktop-event-accident')).toHaveCount(1);
+  await expect(mapRoot(page).locator('.desktop-event-accident')).toHaveAttribute('aria-label', /另一處事故/);
   await expect(page.locator('#condition-incidents')).toContainText('1處·2件');
   await expect(page.locator('.condition-road-event')).toHaveCount(2);
-  expect(await page.evaluate(() => (
-    MapMod.routeIncidentLayers.filter((layer) => layer._roadEventLocationCue).length
-  ))).toBe(2);
-  expect(await page.evaluate(() => (
-    MapMod.routeIncidentLayers
-      .filter((layer) => layer._roadEventLocationCue)
-      .map((layer) => ({
-        kind: layer._roadEventKind,
-        status: layer._roadEventStatus,
-        dashArray: layer.options.dashArray || null
-      }))
-  ))).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: 'construction', dashArray: null }),
-    expect.objectContaining({ kind: 'accident', status: 'scheduled', dashArray: '10 8' })
-  ]));
+  const cues = await readMapFeatures(page, 'desktop-events');
+  expect(cues.map((cue) => cue.properties.kind).sort()).toEqual(['accident', 'construction']);
+  expect(cues.map((cue) => [cue.properties.kind, cue.properties.color]).sort()).toEqual([
+    ['accident', '#f43f5e'],
+    ['construction', '#f59e0b']
+  ]);
+  // Two official locations stay two map positions (the markers are not merged into one).
+  const positions = await readEventMarkerPositions(page);
+  expect(positions).toHaveLength(2);
+  expect(new Set(positions.map((position) => position.join(','))).size).toBe(2);
 });
 
 test('removes old event colors before drawing a replacement route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Map layer lifecycle verification runs once.');
+  let routeRequests = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
+  });
   await page.goto(WORKER);
+  await waitForMapReady(page);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expectEventMarker(page, 'construction');
+  expect(await readMapFeatures(page, 'desktop-events')).toHaveLength(1);
+  expect(await readMapFeatures(page, 'desktop-route')).toHaveLength(1);
 
-  expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBeGreaterThan(0);
-  expect(await page.evaluate(() => {
-    MapMod.drawRoute([
-      [25.0478, 121.5170],
-      [25.0350, 121.5400]
-    ], 'motorcycle');
-    return {
-      routeLayers: Array.isArray(MapMod.routeLayer) ? MapMod.routeLayer.length : 0,
-      eventLayers: MapMod.routeIncidentLayers.length,
-      eventMarkers: MapMod.routeIncidentMarkers.length,
-      weatherMarkers: MapMod.routeWeatherMarkers.length
+  // Replace the route with one whose official conditions report no events at all.
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      payload.data.sections.forEach((section) => { section.incidents = []; });
+      payload.data.overall.incidentSections = 0;
+      return payload;
     };
-  })).toEqual({
-    routeLayers: 3,
-    eventLayers: 0,
-    eventMarkers: 0,
-    weatherMarkers: 0
   });
+  // The ready-state desktop layout hides the planner form, so re-run the same request
+  // through the route command seam that the form button also ends up calling.
+  await page.evaluate(() => Bus.emit('route:request', { action: 'analyze' }));
+  await expect.poll(() => routeRequests).toBe(2);
+  await expect.poll(() => page.evaluate(() => RouteMod.analyzing)).toBe(false);
+  await expect(page.locator('#condition-incidents')).not.toContainText('1處·1件');
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-events')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-sections')).not.toHaveLength(0);
 });
 
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
@@ -793,17 +790,30 @@ test('turns a hanging conditions request into an actionable timeout', async ({ p
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
   test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
+  // Phone map: a dark basemap layer ('base') and a light one ('mobile-base-light', MapTiler
+  // dataviz-light); the theme decides which of the two is shown.
+  const basemap = () => page.evaluate(() => {
+    const map = window.MapMod && window.MapMod.map;
+    if (!map || !map.getLayer('mobile-base-light')) return null;
+    const tiles = map.getStyle().sources['mobile-base-light'].tiles || [];
+    return {
+      dark: map.getLayoutProperty('base', 'visibility'),
+      light: map.getLayoutProperty('mobile-base-light', 'visibility'),
+      lightTiles: tiles[0] && decodeURIComponent(new URL(tiles[0]).pathname)
+    };
+  });
   await page.goto(WORKER);
+  await expect.poll(basemap).toMatchObject({ dark: 'visible', light: 'none' });
   await page.locator('#js-theme').click();
   await expect(page.locator('body')).toHaveClass(/light/);
-  await expect.poll(() => page.evaluate(() => MapMod.tileLayer && MapMod.tileLayer._url)).toBe(
-    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
-  );
+  await expect.poll(basemap).toEqual({
+    dark: 'none',
+    light: 'visible',
+    lightTiles: '/maps/dataviz-light/{z}/{x}/{y}.png'
+  });
   await page.reload();
   await expect(page.locator('body')).toHaveClass(/light/);
-  await expect.poll(() => page.evaluate(() => MapMod.tileLayer && MapMod.tileLayer._url)).toBe(
-    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
-  );
+  await expect.poll(basemap).toMatchObject({ dark: 'none', light: 'visible' });
 });
 
 test('shows useful route suggestions from the first character without remote autocomplete', async ({ page }) => {
@@ -958,6 +968,7 @@ test('replaces a repeated route network failure with a Chinese recovery message'
 
 test('keeps a cleared route empty when an older conditions request finishes', async ({ page }) => {
   await page.goto(WORKER);
+  await waitForMapReady(page);
   await page.evaluate(() => {
     window.__releaseConditions = null;
     AppServices.loadRouteConditions = function() {
@@ -979,30 +990,40 @@ test('keeps a cleared route empty when an older conditions request finishes', as
   await expect.poll(() => page.evaluate(() => typeof window.__releaseConditions)).toBe('function');
 
   await page.evaluate(() => RouteMod.clear());
-  await page.evaluate(() => window.__releaseConditions());
-  await page.waitForTimeout(100);
+  // Resolve the late answer, then let every handler it triggers run before looking.
+  await page.evaluate(async () => {
+    window.__releaseConditions();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
   const clearedState = await page.evaluate(() => ({
     routeAllPoints: AppState.routeAllPoints,
-    routeConditions: AppState.routeConditions,
-    startEndMarkers: MapMod.startEndMarkers.length
+    routeConditions: AppState.routeConditions
   }));
   expect(clearedState).toEqual({
     routeAllPoints: [],
-    routeConditions: null,
-    startEndMarkers: 0
+    routeConditions: null
   });
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
+  // The late conditions must not repaint anything on the map either.
+  await expect(mapRoot(page).locator('.desktop-start-marker, .desktop-end-marker')).toHaveCount(0);
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-sections')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-route')).toEqual([]);
 });
 
 test('does not restore a route whose analysis finishes after it was cleared', async ({ page }) => {
   await page.goto(WORKER);
+  await waitForMapReady(page);
   await page.evaluate(() => {
     window.__releaseRouteAnalysis = null;
-    AppServices.createRoute = function() {
-      return new Promise((resolve) => {
+    const createRoute = AppServices.createRoute;
+    // Hold the analysis back, then let the Worker's real (valid, safe) answer through late:
+    // an invalid payload would be rejected on its own and prove nothing about staleness.
+    AppServices.createRoute = function(...args) {
+      return new Promise((resolve, reject) => {
         window.__releaseRouteAnalysis = function() {
-          resolve({ status: 'ok', data: {} });
+          return createRoute.apply(AppServices, args).then(resolve, reject);
         };
       });
     };
@@ -1014,23 +1035,27 @@ test('does not restore a route whose analysis finishes after it was cleared', as
   await expect.poll(() => page.evaluate(() => typeof window.__releaseRouteAnalysis)).toBe('function');
 
   await page.evaluate(() => RouteMod.clear());
-  await page.evaluate(() => window.__releaseRouteAnalysis());
-  await page.waitForTimeout(100);
+  // Resolve the late answer, then let every handler it triggers run before looking.
+  await page.evaluate(async () => {
+    await window.__releaseRouteAnalysis();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
   const clearedState = await page.evaluate(() => ({
     activeRoute: AppState.activeRoute,
     routeAllPoints: AppState.routeAllPoints,
     routeActive: RouteMod.active,
-    analyzing: RouteMod.analyzing,
-    routeLayer: Boolean(MapMod.routeLayer)
+    analyzing: RouteMod.analyzing
   }));
   expect(clearedState).toEqual({
     activeRoute: null,
     routeAllPoints: [],
     routeActive: false,
-    analyzing: false,
-    routeLayer: false
+    analyzing: false
   });
+  // ...and no route line or start/end marker was drawn for the discarded analysis.
+  expect((await readMapFeatures(page, 'desktop-route')) || []).toEqual([]);
+  await expect(mapRoot(page).locator('.desktop-start-marker, .desktop-end-marker')).toHaveCount(0);
 });
 
 test('preserves ordered Google Maps waypoints when importing a route', async ({ page }) => {
@@ -1121,8 +1146,9 @@ test('keeps all large camera result sets reachable through progressive loading',
       searchText: `測試攝影機 ${index}`
     }));
     Data.allCams = () => cameras;
-    ListMod.visibleLimit = ListMod.PAGE_SIZE;
-    ListMod.render();
+    // ListMod is private to the bundle (#61); a camera-data update is the public way to
+    // make the list re-render from Data.allCams().
+    Bus.emit('cams:updated');
   });
   await openList(page);
 
