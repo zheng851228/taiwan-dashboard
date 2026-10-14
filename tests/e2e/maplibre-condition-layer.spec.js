@@ -239,4 +239,57 @@ test.describe('MapLibre condition layer seam', () => {
     expect(result.markerCount).toBe(6);
     expect(result.eventFeatureCount).toBe(8);
   });
+
+  test('condition sections are cut from the drawn route line, so the road renders as one line', async ({ page }) => {
+    await openReadyDesktop(page);
+
+    const result = await page.evaluate(() => {
+      // A winding road: 400 vertices.  The drawn route keeps every 2nd one (client simplification),
+      // each section arrives with its own, different decimation (worker: evenly sampled vertices that
+      // are NOT route vertices, plus a lateral offset of a few hundred metres on the curves).
+      const full = Array.from({ length: 400 }, (_, i) => [
+        24.0 + i * 0.0006 + 0.004 * Math.sin(i / 7),
+        121.0 + i * 0.0004 + 0.006 * Math.cos(i / 5)
+      ]);
+      const drawn = full.filter((_, i) => i % 2 === 0);
+      const wobble = (p, k) => [p[0] + 0.0012 * Math.sin(k), p[1] - 0.0012 * Math.cos(k)];
+      const cut = (from, to) => full.slice(from, to + 1).filter((_, i) => i % 9 === 0).map(wobble);
+      const sourceUpdates = {};
+      const renderer = {
+        markers: [], module: null, map: null, routeCoords: drawn.slice(), routeFitApplied: true, eventMarkerCount: 0,
+        _routePadding() { return 70; },
+        _setSourceData(id, data) { sourceUpdates[id] = data; }
+      };
+      window.MapConditionLayer.install(renderer);
+      const sections = [
+        { order: 1, geometry: cut(0, 130), traffic: { level: 'clear' }, incidents: [] },
+        { order: 2, geometry: cut(130, 270), traffic: { level: 'unknown' }, incidents: [] },
+        { order: 3, geometry: cut(270, 399), traffic: { level: 'congested' }, incidents: [] },
+        { order: 4, geometry: [[30, 130], [30.1, 130.1]], traffic: { level: 'slow' }, incidents: [] }
+      ];
+      renderer.drawConditionSections(sections);
+      const features = sourceUpdates['desktop-sections'].features;
+      const routeKeys = new Set(drawn.map(p => `${p[1]},${p[0]}`));
+      const keyOf = c => `${c[0]},${c[1]}`;
+      const snapped = features.slice(0, 3);
+      return {
+        count: features.length,
+        everyVertexOnRoute: snapped.every(f => f.geometry.coordinates.every(c => routeKeys.has(keyOf(c)))),
+        joined: [0, 1].every(i => keyOf(snapped[i].geometry.coordinates.at(-1)) === keyOf(snapped[i + 1].geometry.coordinates[0])),
+        coversRoute: drawn.findIndex(p => `${p[1]},${p[0]}` === keyOf(snapped[0].geometry.coordinates[0])) <= 2 &&
+          drawn.length - 1 - drawn.findIndex(p => `${p[1]},${p[0]}` === keyOf(snapped[2].geometry.coordinates.at(-1))) <= 6,
+        farSectionKeepsOwnGeometry: features[3].geometry.coordinates[0].join(',') === '130,30',
+        levels: snapped.map(f => f.properties.level),
+        redrawKeepsInput: renderer.conditionSectionsInput.length
+      };
+    });
+
+    expect(result.count).toBe(4);
+    expect(result.everyVertexOnRoute).toBe(true);
+    expect(result.joined).toBe(true);
+    expect(result.coversRoute).toBe(true);
+    expect(result.farSectionKeepsOwnGeometry).toBe(true);
+    expect(result.levels).toEqual(['clear', 'unknown', 'congested']);
+    expect(result.redrawKeepsInput).toBe(4);
+  });
 });

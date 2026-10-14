@@ -328,6 +328,7 @@
         if (this.cursorMarker) { this.cursorMarker.remove(); this.cursorMarker = null; }
         this.cameraById = {};
         this.routeCoords = [];
+        this.conditionSectionsInput = [];
         this.routeFitApplied = false;
         this.selectedOrder = null;
         this.currentPreset = 'solid';

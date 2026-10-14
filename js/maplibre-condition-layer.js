@@ -55,6 +55,57 @@
     };
   }
 
+  // The route line (client: every k-th vertex, <= ~600 points) and each section's own geometry
+  // (worker: 96 evenly sampled vertices) are two different decimations of the same road.  Drawn
+  // side by side on a curvy mountain road they separate into two visibly offset lines.  So the
+  // sections are re-cut from the drawn route: each section's first / last point is snapped to the
+  // nearest vertex of the drawn line (searching forward only) and the line between them is used.
+  // Sections that cannot be snapped (no drawn route, endpoint > SNAP_MAX_METERS away, out of order)
+  // keep their own geometry.
+  var SNAP_MAX_METERS = 2500;
+
+  function metersBetween(a, b) {
+    var dLat = (a[0] - b[0]) * 111320;
+    var dLng = (a[1] - b[1]) * 111320 * Math.cos(((a[0] + b[0]) / 2) * Math.PI / 180);
+    return Math.sqrt(dLat * dLat + dLng * dLng);
+  }
+
+  function nearestVertex(route, point, from) {
+    var best = -1;
+    var bestDistance = Infinity;
+    for (var i = from; i < route.length; i += 1) {
+      var d = metersBetween(route[i], point);
+      if (d < bestDistance) { bestDistance = d; best = i; }
+    }
+    return { index: best, distance: bestDistance };
+  }
+
+  function snapSectionsToRoute(sections, routeCoords) {
+    var route = (routeCoords || []).filter(function(point) {
+      return point && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]));
+    }).map(function(point) { return [Number(point[0]), Number(point[1])]; });
+    if (route.length < 2) return sections;
+    var cursor = 0;
+    return (sections || []).map(function(section) {
+      var geometry = section && section.geometry;
+      if (!Array.isArray(geometry) || geometry.length < 2) return section;
+      var first = [Number(geometry[0][0]), Number(geometry[0][1])];
+      var last = [Number(geometry[geometry.length - 1][0]), Number(geometry[geometry.length - 1][1])];
+      var start = nearestVertex(route, first, cursor);
+      if (start.index < 0 || start.distance > SNAP_MAX_METERS) return section;
+      // Adjacent sections meet at (almost) the same point: join them exactly instead of leaving
+      // a one- or two-vertex gap or overlap when each end snaps to a neighbouring vertex.
+      if (start.index - cursor <= 2) start.index = cursor;
+      var end = nearestVertex(route, last, start.index);
+      if (end.index <= start.index || end.distance > SNAP_MAX_METERS) return section;
+      cursor = end.index;
+      var snapped = {};
+      Object.keys(section).forEach(function(key) { snapped[key] = section[key]; });
+      snapped.geometry = route.slice(start.index, end.index + 1);
+      return snapped;
+    });
+  }
+
   function inferEventKind(incident) {
     if (window.MapGeoUtils) return window.MapGeoUtils.inferRoadEventKind(incident);
     if (incident && EVENT_COLORS[incident.kind]) return incident.kind;
@@ -157,9 +208,12 @@
     return marker;
   }
 
+  window.MapConditionSnap = { snapSectionsToRoute: snapSectionsToRoute };
+
   function install(renderer) {
     if (!renderer || renderer.conditionLayerInstalled) return renderer;
     renderer.conditionLayerInstalled = true;
+    renderer.conditionSectionsInput = [];
 
     renderer.drawConditionSections = function(sections) {
       var self = this;
@@ -167,6 +221,8 @@
       var eventFeatures = [];
       var weatherFeatures = [];
       this.eventMarkerCount = 0;
+      this.conditionSectionsInput = sections || [];
+      sections = snapSectionsToRoute(sections, this.routeCoords);
 
       this.markers.forEach(function(marker) {
         var element = marker.getElement && marker.getElement();
