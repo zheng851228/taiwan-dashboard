@@ -385,9 +385,15 @@
     setVisible('desktop-map', !legacy && state.desktop);
     var legacyMap = Dom.byId('map');
     if (legacyMap) legacyMap.style.display = legacy || !state.desktop ? 'block' : 'none';
-    if (legacy) window.setTimeout(function() { Bus.emit('map:request', { action: 'invalidate-size' }); }, 80);
+    if (legacy) {
+      // The desktop renderer is unavailable, so #map (MapMod) is the visible
+      // map. MapMod skips building its renderer while the viewport is >=1200px;
+      // build it now (idempotent) so this fallback surface is not empty.
+      if (window.MapMod && typeof MapMod.ensureRenderer === 'function') MapMod.ensureRenderer();
+      window.setTimeout(function() { Bus.emit('map:request', { action: 'invalidate-size' }); }, 80);
+    }
     var setting = Dom.byId('desktop-map-mode-state');
-    if (setting) setting.textContent = legacy ? '2D 地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖');
+    if (setting) setting.textContent = state.terrainMode === '3d' && !legacy ? '3D 地形' : '2D 地圖';
     syncCameraControls();
   }
 
@@ -403,7 +409,7 @@
       threeD.classList.toggle('active', mode === '3d');
       threeD.setAttribute('aria-pressed', String(mode === '3d'));
     }
-    if (Storage.get(MAP_PREF_KEY, 'auto') !== 'legacy') text('desktop-map-mode-state', mode === '3d' ? '3D 地形' : '2D 地圖');
+    text('desktop-map-mode-state', mode === '3d' ? '3D 地形' : '2D 地圖');
   }
 
   function cameraLabel(preset) {
@@ -575,7 +581,7 @@
     var bannerButton = Dom.byId('desktop-banner-setting');
     if (clockButton) clockButton.setAttribute('aria-pressed', String(Boolean(clockHidden)));
     if (bannerButton) bannerButton.setAttribute('aria-pressed', String(Boolean(bannerHidden)));
-    text('desktop-map-mode-state', Storage.get(MAP_PREF_KEY, 'auto') === 'legacy' ? '傳統地圖' : (state.terrainMode === '3d' ? '3D 地形' : '2D 地圖'));
+    text('desktop-map-mode-state', state.terrainMode === '3d' ? '3D 地形' : '2D 地圖');
     text('desktop-basemap-setting-state', state.basemap === 'satellite' ? '衛星底圖' : '深色地圖');
     text('desktop-layout-setting-state', Storage.getJson(LAYOUT_PREF_KEY, null) ? '已自訂' : '可拖曳調整');
   }
@@ -649,9 +655,10 @@
       UiPrefsMod.setHidden('routeBannerHidden', !UiPrefsMod.isHidden('routeBannerHidden'));
       syncSettings();
     });
+    // "Reload map": tears down and rebuilds the MapLibre desktop map (there is
+    // no alternative map to switch to). The state column shows the current
+    // 2D / 3D terrain mode.
     Dom.onId('desktop-map-mode-setting', 'click', function() {
-      var legacy = Storage.get(MAP_PREF_KEY, 'auto') === 'legacy';
-      Storage.set(MAP_PREF_KEY, legacy ? 'auto' : 'legacy');
       syncSettings();
       if (state.desktop) {
         destroyRenderer();
