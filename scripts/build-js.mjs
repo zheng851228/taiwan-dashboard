@@ -6,7 +6,8 @@
  *  1. 把 index.html <script> 標籤載入順序的 13 個 js 檔，照原順序串接後用
  *     esbuild minify，輸出 js/dist/app.js + js/dist/app2.js（兩個 chunk，
  *     因為單檔會超過 GitHub API 推送的單參數上限）。
- *  2. 把 desktop-bootstrap.js 動態載入的 7 個桌機 js 檔，照原順序串接後用
+ *  2. 把 desktop-bootstrap.js 動態載入的桌機專屬 js 檔（desktop-dashboard / desktop-layout；
+ *     共用的 MapLibre renderer 已在 app2.js），照原順序串接後用
  *     esbuild minify，輸出 js/dist/desktop.js（維持 ≥1200px 才動態載入）。
  *  3. 版號單一來源：`git rev-parse --short HEAD`，寫入 index.html 的
  *     `js/dist/app.js?v=` 與 sw.js 的 CACHE_VERSION / SHELL_URLS。
@@ -66,12 +67,12 @@ const APP_FILES_B = [
 ];
 
 // desktop-bootstrap.js 動態載入的順序（桌機包）。
+// map-provider-config / maplibre-renderer / 三個 maplibre-*-layer 已經在
+// app2.js（APP_FILES_B）裡執行過；desktop.js 只會在 app2.js 之後由
+// desktop-bootstrap.js 載入，因此不再重複打包（原本重複約 ~25KB min）。
+// desktop-bootstrap.js 原始碼中的 7 檔載入鏈維持不動（pwa.test.js 檢查字串），
+// 只有 build 時被改寫成單一 desktop.js。
 const DESKTOP_FILES = [
-  'js/map-provider-config.js',
-  'js/maplibre-renderer.js',
-  'js/maplibre-camera-layer.js',
-  'js/maplibre-route-layer.js',
-  'js/maplibre-condition-layer.js',
   'js/desktop-dashboard.js',
   'js/desktop-layout.js',
 ];

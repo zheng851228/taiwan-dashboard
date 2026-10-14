@@ -4,7 +4,7 @@
 // `DesktopDashboardMod` (#desktop-map) is the >=1200px map; both are the same
 // MapRenderer drawing into the same GeoJSON sources ('desktop-route',
 // 'desktop-sections', 'desktop-events', 'desktop-cameras', 'desktop-weather')
-// plus DOM markers. On desktop the phone map still exists but is display:none,
+// plus DOM markers. On desktop MapMod builds no renderer (#map is display:none),
 // so assertions must be scoped to the map the user can actually see.
 
 export function isDesktopViewport(page) {

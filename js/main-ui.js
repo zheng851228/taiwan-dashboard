@@ -283,11 +283,21 @@
   // Owns the #map surface through the shared MapRenderer in simple mode
   // (no terrain/hillshade/satellite sources). Requests arriving before the
   // map's `load` event are queued and replayed in order.
+  //
+  // #map is display:none (0x0) at >=1200px, where DesktopDashboardMod owns the
+  // map on #desktop-map. MapMod therefore only builds its MapLibre renderer
+  // (a second WebGL context + canvas) when #map is actually in use: at init on
+  // phone/tablet widths, or lazily once the viewport later drops below 1200px
+  // (or a caller asks via MapMod.ensureRenderer()). The 'map:request' listener
+  // is registered either way, so desktop emitters keep working unchanged.
   var MapMod = {
     map: null,
     renderer: null,
     _ready: false,
     _pending: [],
+    _rendererStarted: false,
+    _desktopQuery: null,
+    _desktopQueryHandler: null,
     _degraded: false,
     _eventsBound: false,
     _camData: [],
@@ -306,6 +316,8 @@
     routeSectionLayers: [], routeWeatherMarkers: [], routeIncidentMarkers: [], routeIncidentLayers: [],
     startEndMarkers: [], waypointMapMarkers: [],
     _nearbyMarker: null, _nearbyCircle: null,
+
+    DESKTOP_QUERY: '(min-width: 1200px)',
 
     _webgl2Available: function() {
       try {
@@ -331,15 +343,41 @@
       container.appendChild(notice);
     },
 
-    init: function() {
-      if (MapMod._degraded) return;
+    // True when #map is the visible map surface (everything below 1200px).
+    _surfaceInUse: function() {
+      if (!window.matchMedia) return true;
+      return !window.matchMedia(MapMod.DESKTOP_QUERY).matches;
+    },
+
+    // Build the MapLibre renderer once. Idempotent; safe to call from any
+    // caller that is about to show #map (e.g. the desktop fallback path).
+    ensureRenderer: function() {
+      if (MapMod._rendererStarted || MapMod._degraded) return;
+      MapMod._rendererStarted = true;
       if (!MapMod._webgl2Available() || !window.MapRenderer) {
         MapMod._showDegradedNotice();
         return;
       }
-      Bus.on('map:request', function(request) { MapMod._handleMapRequest(request); });
       MapMod._initRenderer();
       MapMod.addPlaceLabels();
+    },
+
+    init: function() {
+      if (MapMod._degraded) return;
+      Bus.on('map:request', function(request) { MapMod._handleMapRequest(request); });
+      if (MapMod._surfaceInUse()) {
+        MapMod.ensureRenderer();
+      } else if (window.matchMedia) {
+        // Desktop: stay renderer-less, but build it if the viewport shrinks
+        // to a width where #map becomes the visible map. Staying built after
+        // growing back above 1200px is fine (it is simply hidden again).
+        MapMod._desktopQuery = window.matchMedia(MapMod.DESKTOP_QUERY);
+        MapMod._desktopQueryHandler = function() {
+          if (MapMod._surfaceInUse()) MapMod.ensureRenderer();
+        };
+        if (MapMod._desktopQuery.addEventListener) MapMod._desktopQuery.addEventListener('change', MapMod._desktopQueryHandler);
+        else if (MapMod._desktopQuery.addListener) MapMod._desktopQuery.addListener(MapMod._desktopQueryHandler);
+      }
       MapMod._resizeHandler = function() { MapMod.invalidateSize(); };
       window.addEventListener('resize', MapMod._resizeHandler);
       window.addEventListener('orientationchange', MapMod._resizeHandler);
@@ -352,6 +390,12 @@
         MapMod._resizeHandler = null;
       }
       MapMod._pending = [];
+      if (MapMod._desktopQuery && MapMod._desktopQueryHandler) {
+        if (MapMod._desktopQuery.removeEventListener) MapMod._desktopQuery.removeEventListener('change', MapMod._desktopQueryHandler);
+        else if (MapMod._desktopQuery.removeListener) MapMod._desktopQuery.removeListener(MapMod._desktopQueryHandler);
+      }
+      MapMod._desktopQuery = null;
+      MapMod._desktopQueryHandler = null;
       if (MapMod._camDrawTimer) {
         window.clearTimeout(MapMod._camDrawTimer);
         MapMod._camDrawTimer = null;
@@ -364,6 +408,7 @@
       MapMod.map = null;
       MapMod.renderer = null;
       MapMod._ready = false;
+      MapMod._rendererStarted = false;
       MapMod._eventsBound = false;
     },
 
@@ -401,12 +446,28 @@
       MapMod._scheduleViewportCams();
     },
 
+    // While no renderer has been built (desktop, #map unused) the queue must
+    // not grow for the whole session: every request is a "latest wins" command
+    // (draw-*, focus-*, set-view, overlay upsert/clear, invalidate-size), so a
+    // newer request of the same action supersedes older ones. The queue is then
+    // bounded by the number of distinct actions, and replaying it after a lazy
+    // start still reproduces the latest drawn state. Once a renderer exists the
+    // queue is kept verbatim (original phone behaviour).
+    _enqueue: function(request) {
+      if (!MapMod._rendererStarted && typeof request.action === 'string') {
+        MapMod._pending = MapMod._pending.filter(function(queued) {
+          return queued.action !== request.action;
+        });
+      }
+      MapMod._pending.push(request);
+    },
+
     // Queue-until-ready: bus requests and direct method calls funnel through
     // here so nothing is lost while the MapLibre vendor chunk loads.
     _handleMapRequest: function(request) {
-      if (!request) return;
+      if (!request || MapMod._degraded) return;
       if (!MapMod._ready || !MapMod.map) {
-        MapMod._pending.push(request);
+        MapMod._enqueue(request);
         return;
       }
       var action = request.action;
