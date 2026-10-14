@@ -872,9 +872,13 @@
     if (!chart || !summary) return;
     var valid = samples.filter(function(sample) { return Number.isFinite(sample.elevation); });
     // 1 viewBox unit = 1 CSS px, so chart labels keep their real 12px size.
-    var box = chart.getBoundingClientRect();
-    var chartW = box.width >= 200 ? Math.round(box.width) : 800;
-    var chartH = box.height >= 40 ? Math.round(box.height) : 150;
+    // The size comes from the ResizeObserver below, never from a layout read
+    // here: getBoundingClientRect() forced a full synchronous reflow of the
+    // command center on every route render.
+    var chartW = elevationSize.w >= 200 ? elevationSize.w : 800;
+    var chartH = elevationSize.h >= 40 ? elevationSize.h : 150;
+    elevationDrawn.w = chartW;
+    elevationDrawn.h = chartH;
     chart.setAttribute('viewBox', '0 0 ' + chartW + ' ' + chartH);
     if (valid.length < 2) {
       chart.innerHTML = '<text x="' + Math.round(chartW / 2) + '" y="' + Math.round(chartH / 2 + 4) + '" text-anchor="middle" class="desktop-chart-empty">3D 地形資料不足，暫無海拔曲線</text>';
@@ -943,16 +947,24 @@
   }
 
   // Re-draw at the new pixel size when a rail is dragged or the window resizes.
+  // The observer always records the latest size (contentRect is computed after
+  // layout, so reading it costs nothing); it only re-draws when the size the
+  // chart was last drawn at is off by 4px or more.
   var elevationResizeTimer = null;
+  var elevationSize = { w: 0, h: 0 };
+  var elevationDrawn = { w: 0, h: 0 };
   function watchElevationSize() {
     var chart = Dom.byId('desktop-elevation-chart');
     if (!chart || !window.ResizeObserver || chart.dataset.sizeWatch) return;
     chart.dataset.sizeWatch = '1';
-    var lastW = 0;
     new ResizeObserver(function(entries) {
-      var width = Math.round(entries[0].contentRect.width);
-      if (!state.elevation || Math.abs(width - lastW) < 4) return;
-      lastW = width;
+      var rect = entries[0].contentRect;
+      elevationSize.w = Math.round(rect.width);
+      elevationSize.h = Math.round(rect.height);
+      if (!state.elevation) return;
+      var w = elevationSize.w >= 200 ? elevationSize.w : 800;
+      var h = elevationSize.h >= 40 ? elevationSize.h : 150;
+      if (Math.abs(w - elevationDrawn.w) < 4 && Math.abs(h - elevationDrawn.h) < 4) return;
       clearTimeout(elevationResizeTimer);
       elevationResizeTimer = setTimeout(function() { if (state.elevation) renderElevation(state.elevation); }, 120);
     }).observe(chart);
