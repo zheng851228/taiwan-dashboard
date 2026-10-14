@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, rendererBudgets, stubTerrain, test } from './helpers/hermetic-map.js';
 
 const workerPort = process.env.E2E_WORKER_PORT || '8787';
 const WORKER = `/?worker=http://127.0.0.1:${workerPort}`;
@@ -15,10 +15,24 @@ async function buildFixtureRoute(page) {
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  // The panel opens as soon as the route is planned; the conditions follow from a second request.
+  await expect.poll(() => page.evaluate(() => Boolean(AppState.routeConditions))).toBe(true);
 }
+
+// A terrain + pitched camera repaint takes one to three seconds per frame in software WebGL
+// (measured with and without the DOM markers, so it is the terrain pass itself), and every
+// Playwright action waits on a couple of frames. Camera tests therefore wait for the real
+// camera state with a long patience budget instead of a short fixed one. The assertions
+// themselves are unchanged.
+// Terrain frames cost roughly in proportion to the canvas, so the pure camera / 3D tests run on the
+// smallest desktop layout (>= 1200px wide). Nothing they assert depends on the viewport size.
+const CAMERA_VIEWPORT = { width: 1280, height: 720 };
+const CAMERA_SETTLE_MS = 150000;
+const CAMERA_TEST_TIMEOUT_MS = 900000;
 
 test('desktop command center keeps the initial map focused and expands on a ready route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop command-center verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
   await page.setViewportSize({ width: 1536, height: 1024 });
   await page.goto(WORKER);
 
@@ -296,26 +310,34 @@ test('v40 lower intelligence rail interactions remain error-free', async ({ page
   expect(pageErrors).toEqual([]);
 });
 
-test('2D and 3D controls can recover from the traditional map fallback', async ({ page }, testInfo) => {
+test('recreating the desktop map keeps the 2D and 3D controls working', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop map renderer verification only.');
-  await page.setViewportSize({ width: 1536, height: 1024 });
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
   await page.addInitScript(() => localStorage.removeItem('tw_desktop_map_renderer_v1'));
   await page.goto(WORKER);
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
+  await page.evaluate(() => { window.__firstDesktopMap = window.DesktopDashboardMod.getRenderer().map; });
 
+  // The settings row rebuilds the map. There is no second ("traditional") map stack to fall
+  // back to since #76, so the page must stay on MapLibre and come back with a fresh map.
   await page.locator('#desktop-settings-toggle').click();
   await page.locator('#desktop-map-mode-setting').click();
-  await expect(page.locator('body')).toHaveClass(/desktop-legacy-map/);
-  await expect(page.locator('#map')).toBeVisible();
-
-  await page.locator('#desktop-map-2d').click();
-  await expect(page.locator('body')).not.toHaveClass(/desktop-legacy-map/, { timeout: 12000 });
-  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+  await expect(page.locator('body')).not.toHaveClass(/desktop-legacy-map/);
+  await expect.poll(() => page.evaluate(() => {
+    const renderer = window.DesktopDashboardMod.getRenderer();
+    return Boolean(renderer && renderer.map && renderer.map !== window.__firstDesktopMap);
+  }), { timeout: CAMERA_SETTLE_MS }).toBe(true);
+  await expect(page.locator('#desktop-map')).toBeVisible();
+  await expect(page.locator('#map')).toBeHidden();
   await expect(page.locator('#desktop-map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible({ timeout: 8000 });
 
+  await page.locator('#desktop-map-2d').click();
+  await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
   await page.locator('#desktop-map-3d').click();
   await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
   await expect(page.locator('#desktop-map-2d')).not.toHaveClass(/active/);
+  await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
   expect(await page.evaluate(() => localStorage.getItem('tw_desktop_terrain_mode_v1'))).toBe('3d');
 
   await page.evaluate(() => localStorage.removeItem('tw_desktop_terrain_mode_v1'));
@@ -326,7 +348,8 @@ test('2D and 3D controls can recover from the traditional map fallback', async (
 
 test('camera presets and brand home preserve the active route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop camera verification only.');
-  await page.setViewportSize({ width: 1536, height: 1024 });
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
   await page.addInitScript(() => localStorage.removeItem('tw_desktop_camera_preset_v1'));
   await page.goto(WORKER);
   await buildFixtureRoute(page);
@@ -339,21 +362,21 @@ test('camera presets and brand home preserve the active route', async ({ page },
   const pitch = () => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch());
   await page.locator('.desktop-camera-preset[data-camera-preset="birdseye"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('鳥瞰');
-  await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(32, 0);
+  await expect.poll(pitch, { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(32, 0);
 
   await page.locator('#desktop-camera-toggle').click();
   await page.locator('.desktop-camera-preset[data-camera-preset="along"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('沿路');
-  await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(72, 0);
+  await expect.poll(pitch, { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(72, 0);
 
   await page.locator('#desktop-camera-toggle').click();
   await page.locator('.desktop-camera-preset[data-camera-preset="solid"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('立體');
-  await expect.poll(pitch, { timeout: 3000 }).toBeCloseTo(58, 0);
+  await expect.poll(pitch, { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(58, 0);
   const routeBearing = await page.evaluate(() => window.DesktopDashboardMod.getRenderer()._routeBearing());
   await expect.poll(
     () => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getBearing()),
-    { timeout: 3000 }
+    { timeout: CAMERA_SETTLE_MS }
   ).toBeCloseTo(routeBearing, 0);
 
   const routeId = await page.evaluate(() => window.AppState.activeRoute.routeId);
@@ -374,7 +397,8 @@ test('camera presets and brand home preserve the active route', async ({ page },
 
 test('camera custom state is not persisted and reset returns to the full route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop camera persistence verification only.');
-  await page.setViewportSize({ width: 1440, height: 900 });
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
   await page.addInitScript(() => localStorage.removeItem('tw_desktop_camera_preset_v1'));
   await page.goto(WORKER);
   await buildFixtureRoute(page);
@@ -385,8 +409,8 @@ test('camera custom state is not persisted and reset returns to the full route',
   await camera.click();
   await page.locator('.desktop-camera-preset[data-camera-preset="birdseye"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('鳥瞰');
-  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: 3000 }).toBeCloseTo(32, 0);
-  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getBearing()), { timeout: 3000 }).toBeCloseTo(0, 0);
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(32, 0);
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getBearing()), { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(0, 0);
 
   await page.evaluate(() => {
     const renderer = window.DesktopDashboardMod.getRenderer();
@@ -398,21 +422,37 @@ test('camera custom state is not persisted and reset returns to the full route',
   await camera.click();
   await page.locator('.desktop-camera-preset[data-camera-preset="reset"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('重置');
-  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: 3000 }).toBeCloseTo(58, 0);
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(58, 0);
   expect(await page.evaluate(() => localStorage.getItem('tw_desktop_camera_preset_v1'))).toBe('reset');
 });
 
 test('reduced motion applies camera presets without animation', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Reduced-motion verification only.');
-  await page.setViewportSize({ width: 1440, height: 900 });
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(WORKER);
   await buildFixtureRoute(page);
   await page.locator('#desktop-map-3d').click();
+  await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
+  // Record how the map is moved: reduced motion must jump, never ease/fly.
+  await page.evaluate(() => {
+    const map = window.DesktopDashboardMod.getRenderer().map;
+    window.__cameraMoves = [];
+    ['jumpTo', 'easeTo', 'flyTo'].forEach((name) => {
+      const original = map[name].bind(map);
+      map[name] = (options, ...rest) => {
+        window.__cameraMoves.push({ name, pitch: options && options.pitch });
+        return original(options, ...rest);
+      };
+    });
+  });
   await page.locator('#desktop-camera-toggle').click();
   await page.locator('.desktop-camera-preset[data-camera-preset="along"]').click();
   await expect(page.locator('#desktop-camera-state')).toHaveText('沿路');
-  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: 1000 }).toBeCloseTo(72, 0);
+  expect((await page.evaluate(() => window.__cameraMoves)).filter((move) => move.pitch === 72))
+    .toEqual([{ name: 'jumpTo', pitch: 72 }]);
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(72, 0);
 });
 
 test('tall desktop ready layout starts the map directly below the header', async ({ page }, testInfo) => {
@@ -511,15 +551,19 @@ test('light command-center surfaces keep a readable ink hierarchy', async ({ pag
   expect(colors.disclaimer).toBe('rgb(71, 85, 105)');
 });
 
-test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo) => {
+test('mobile keeps the desktop bundle and terrain assets unloaded', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'desktop-chromium', 'Mobile and tablet request verification only.');
-  const mapLibreRequests = [];
-  page.on('request', (request) => {
-    if (request.url().match(/maplibre|desktop-dashboard/)) mapLibreRequests.push(request.url());
-  });
+  // Since #76 the phone map is MapLibre too, so the shared MapLibre vendor chunk is expected.
+  // What phones must not pay for is the desktop-only code and the terrain / hillshade data.
+  const requested = [];
+  page.on('request', (request) => requested.push(request.url()));
   await page.goto(WORKER);
-  await page.waitForTimeout(700);
-  expect(mapLibreRequests).toEqual([]);
+  await expect.poll(() => page.evaluate(() => Boolean(window.MapMod && window.MapMod._ready)), { timeout: 15000 }).toBe(true);
+
+  expect(requested.filter((url) => /maplibre-gl\.mjs/.test(url))).not.toHaveLength(0);
+  expect(requested.filter((url) => /desktop(?:-dashboard|-layout)?\.js|js\/dist\/desktop/.test(url))).toEqual([]);
+  expect(requested.filter((url) => /mapterhorn/.test(url))).toEqual([]);
+  expect(await page.evaluate(() => typeof window.DesktopDashboardMod)).toBe('undefined');
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#map .local-map-place-label').filter({ hasText: '台北' })).toBeVisible();
   await expect(page.locator('#desktop-map')).toBeHidden();
@@ -530,7 +574,8 @@ test('mobile keeps MapLibre desktop assets unloaded', async ({ page }, testInfo)
 test('missing Tailwind shell styles show a recovery screen instead of overlapping panels', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop shell recovery verification only.');
   await page.setViewportSize({ width: 1536, height: 1024 });
-  await page.route('**/css/tailwind.generated.css?v=44', route => route.abort());
+  // Version-agnostic: the stylesheet's ?v= stamp changes with every release.
+  await page.route('**/css/tailwind.generated.css*', route => route.abort());
   await page.goto(WORKER);
 
   const recovery = page.locator('#tailwind-style-recovery');
@@ -543,4 +588,125 @@ test('missing Tailwind shell styles show a recovery screen instead of overlappin
   expect(bounds.y).toBeLessThanOrEqual(1);
   expect(bounds.width).toBeGreaterThanOrEqual(1534);
   expect(bounds.height).toBeGreaterThanOrEqual(1022);
+});
+
+test('selecting a route stop zooms the desktop map to that section', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop section focus verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'ready');
+
+  const stops = page.locator('.desktop-route-stop');
+  expect(await stops.count()).toBeGreaterThan(1);
+  const order = Number(await stops.last().getAttribute('data-section-order'));
+
+  // The section's own geometry (GeoJSON [lng, lat]) against what the map is showing right now.
+  const readView = (sectionOrder) => page.evaluate((wanted) => {
+    const renderer = window.DesktopDashboardMod.getRenderer();
+    const map = renderer.map;
+    const sections = renderer.getSourceData('desktop-sections');
+    const feature = sections && sections.features.find((item) => Number(item.properties.order) === wanted);
+    const view = { zoom: map.getZoom(), moving: map.isMoving(), found: Boolean(feature), sectionInView: false, centerInSection: false };
+    if (feature) {
+      const lngs = feature.geometry.coordinates.map((point) => point[0]);
+      const lats = feature.geometry.coordinates.map((point) => point[1]);
+      const box = [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+      const bounds = map.getBounds();
+      view.sectionInView = bounds.contains([box[0], box[1]]) && bounds.contains([box[2], box[3]]);
+      const center = map.getCenter();
+      view.centerInSection = center.lng >= box[0] && center.lng <= box[2] && center.lat >= box[1] && center.lat <= box[3];
+    }
+    return view;
+  }, sectionOrder);
+
+  // Let the map finish fitting the whole route before taking the baseline.
+  await expect.poll(async () => (await readView(order)).moving, { timeout: CAMERA_SETTLE_MS }).toBe(false);
+  const before = await readView(order);
+  expect(before.found).toBe(true);
+
+  await stops.last().click();
+  await expect(stops.last()).toHaveClass(/active/);
+  await expect.poll(async () => {
+    const view = await readView(order);
+    return !view.moving && view.zoom > before.zoom + 0.5;
+  }, { timeout: CAMERA_SETTLE_MS }).toBe(true);
+  const after = await readView(order);
+  expect(after.sectionInView).toBe(true);
+  expect(after.centerInSection).toBe(true);
+});
+
+// The renderer's terrain fallback is a wall-clock budget; hermetic-map.js holds it so these two
+// tests (and every other 3D test) decide when it runs out instead of racing a slow software GPU.
+test('a 3D switch made after the map loaded is not abandoned when the load-time budget runs out', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop terrain verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
+  // A terrain provider the test controls: the TileJSON answers, the DEM tiles wait.
+  let deliverTiles;
+  const tilesDelivered = new Promise((resolve) => { deliverTiles = resolve; });
+  await stubTerrain(page, { tileGate: tilesDelivered });
+  const budgets = rendererBudgets(page);
+  try {
+    await page.goto(WORKER);
+    await expect.poll(() => page.evaluate(() => Boolean(window.DesktopDashboardMod.getRenderer()))).toBe(true);
+
+    // Everything the renderer armed up to now belongs to the map load, which started in 2D.
+    const loadMark = await budgets.mark();
+    await page.locator('#desktop-map-3d').click();
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('3d');
+
+    // The eight seconds counted from map load run out while the DEM tiles are still on their way.
+    // The switch only just happened, so it must not be written off for them.
+    await budgets.expire({ kind: 'terrain', through: loadMark });
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('3d');
+    await expect(page.locator('#desktop-source-note')).not.toContainText('3D 地形暫時無法載入');
+
+    // The terrain arrives, the switch's own budget runs out with it loaded, and 3D stays.
+    deliverTiles();
+    await expect.poll(
+      () => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.isSourceLoaded('terrainSource')),
+      { timeout: CAMERA_SETTLE_MS * 2 }
+    ).toBe(true);
+    await budgets.expire({ kind: 'terrain' });
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
+    await expect(page.locator('#desktop-source-note')).not.toContainText('3D 地形暫時無法載入');
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('3d');
+  } finally {
+    deliverTiles();
+  }
+});
+
+test('3D terrain that never arrives falls back to 2D and says so', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop terrain verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
+  let deliverTiles;
+  const tilesDelivered = new Promise((resolve) => { deliverTiles = resolve; });
+  await stubTerrain(page, { tileGate: tilesDelivered });
+  const budgets = rendererBudgets(page);
+  try {
+    await page.goto(WORKER);
+    await expect.poll(() => page.evaluate(() => Boolean(window.DesktopDashboardMod.getRenderer()))).toBe(true);
+
+    await page.locator('#desktop-map-3d').click();
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
+    // The switch armed its own budget, and the provider never answers within it.
+    expect(await budgets.pending()).toContain('terrain');
+    await budgets.expire({ kind: 'terrain' });
+
+    await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+    await expect(page.locator('#desktop-map-3d')).not.toHaveClass(/active/);
+    await expect(page.locator('#desktop-camera-toggle')).toBeDisabled();
+    await expect(page.locator('#desktop-source-note')).toContainText('3D 地形暫時無法載入');
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('2d');
+    expect(await page.evaluate(() => localStorage.getItem('tw_desktop_terrain_mode_v1'))).toBe('2d');
+  } finally {
+    deliverTiles();
+  }
 });

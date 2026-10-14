@@ -1,10 +1,16 @@
-import { expect, test } from '@playwright/test';
+import http from 'node:http';
+import { expect, test } from './helpers/hermetic-map.js';
+import { startStaticOrigin } from './helpers/static-origin.js';
+import { isDesktopViewport, mapRoot, readEventMarkerPositions, readMapFeatures, waitForMapReady } from './helpers/map-probe.js';
 
 const workerPort = process.env.E2E_WORKER_PORT || '8787';
 const workerOrigin = `http://127.0.0.1:${workerPort}`;
 const WORKER = `/?worker=${workerOrigin}`;
 
 async function expandConditionsIfCollapsed(page) {
+  // The panel only collapses (phones) once the conditions have rendered; expanding before
+  // that point is undone a moment later, so wait for real data first.
+  await expect(page.locator('#condition-coverage')).not.toHaveText('--');
   const toggle = page.locator('#condition-toggle');
   if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
 }
@@ -22,10 +28,20 @@ async function expectMapReady(page) {
 }
 
 async function expectEventMarker(page, kind) {
-  if ((page.viewportSize()?.width || 0) >= 1200) {
-    await expect(page.locator('.desktop-event-' + kind)).toBeVisible();
+  // The same MapRenderer draws event markers on phones (#map) and desktop (#desktop-map).
+  await expect(mapRoot(page).locator('.desktop-event-marker.desktop-event-' + kind)).toBeVisible();
+}
+
+// The app shell is served (here: from the service-worker cache while offline). The header, and
+// the title in it, only exists on phones' map page as a scrim since the redesign (#83), so a
+// phone proves the shell by its page title and bottom navigation instead of the header heading.
+async function expectAppShell(page) {
+  await expect(page).toHaveTitle('環島路況指揮中心');
+  if (isDesktopViewport(page)) {
+    await expect(page.getByRole('heading', { name: '環島路況指揮中心' })).toBeVisible();
   } else {
-    await expect(page.locator('.route-incident-pin.road-event-' + kind)).toBeVisible();
+    await expect(page.locator('.bottom-navigation')).toBeVisible();
+    await expect(page.locator('#route-collapsed, #route-expanded').first()).toBeVisible();
   }
 }
 
@@ -48,7 +64,7 @@ async function openList(page) {
 }
 
 async function openMap(page) {
-  await page.evaluate(() => NavMod.go('map'));
+  await page.locator('#nav-map').click();
 }
 
 test('ignores an arbitrary Worker override and keeps the production origin', async ({ page }) => {
@@ -86,43 +102,59 @@ test('loads the validated Pages camera snapshot without waiting for the producti
   expect(workerCameraRequests).toBe(0);
 });
 
-test('projects cameras that arrive after the route without rebuilding the route', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-chromium', 'Late camera projection behavior runs once.');
-  const pendingCameraRequests = [];
-  let camerasReleased = false;
-  const cameraResponse = () => ({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      status: 'ok',
-      updatedAt: new Date().toISOString(),
-      data: [{
-        id: 'late-route-cam',
-        name: '台北車站沿途測試攝影機',
-        lat: 25.0478,
-        lng: 121.517,
-        imageUrl: 'https://example.com/late-camera.jpg'
-      }]
-    })
-  });
-  await page.route('**/v2/cams', route => {
-    if (camerasReleased) return route.fulfill(cameraResponse());
-    pendingCameraRequests.push(route);
-  });
+// Playwright cannot see requests that the page's service worker forwards, and the app's
+// worker takes control a moment after first load; block it so the stubbed /v2/cams answer
+// is what the page gets no matter when the camera load starts.
+test.describe('late camera projection', () => {
+  test.use({ serviceWorkers: 'block' });
 
-  await page.goto(WORKER);
-  await openRoutePlanner(page);
-  await page.locator('#js-route-start').fill('25.0478,121.5170');
-  await page.locator('#js-route-end').fill('24.7570,121.7530');
-  await page.locator('#js-route-btn').click();
-  await expect.poll(() => page.evaluate(() => Boolean(AppState.activeRoute && RouteMod.active))).toBe(true);
-  await expect.poll(() => pendingCameraRequests.length).toBeGreaterThan(0);
-  expect(await page.evaluate(() => RouteMod.filteredCams.length)).toBe(0);
+  test('projects cameras that arrive after the route without rebuilding the route', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chromium', 'Late camera projection behavior runs once.');
+    let routeRequests = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
+    });
+    await page.route('**/v2/cams', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        updatedAt: new Date().toISOString(),
+        data: [{
+          id: 'late-route-cam',
+          name: '台北車站沿途測試攝影機',
+          lat: 25.0478,
+          lng: 121.517,
+          imageUrl: 'https://example.com/late-camera.jpg'
+        }]
+      })
+    }));
+    // The national camera list is normally fetched when the browser is idle. Hold that
+    // scheduled fetch back so the route is guaranteed to finish first, then start the load
+    // by hand: "cameras arrive after the route" without racing the request's own 6s timeout.
+    await page.addInitScript(() => { window.requestIdleCallback = () => 0; });
 
-  camerasReleased = true;
-  await Promise.all(pendingCameraRequests.splice(0).map(route => route.fulfill(cameraResponse())));
-  await expect.poll(() => page.evaluate(() => RouteMod.filteredCams.map(camera => camera.id))).toContain('late-route-cam');
-  await expect(page.locator('.desktop-cctv-marker[title="台北車站沿途測試攝影機"]')).toBeVisible();
+    await page.goto(WORKER);
+    await waitForMapReady(page);
+    await openRoutePlanner(page);
+    await page.locator('#js-route-start').fill('25.0478,121.5170');
+    await page.locator('#js-route-end').fill('24.7570,121.7530');
+    await page.locator('#js-route-btn').click();
+    await expect.poll(() => page.evaluate(() => Boolean(AppState.activeRoute && RouteMod.active))).toBe(true);
+    expect(await page.evaluate(() => ({ state: Data.camsState, projected: RouteMod.filteredCams.length })))
+      .toEqual({ state: 'idle', projected: 0 });
+    const routeId = await page.evaluate(() => AppState.activeRoute.routeId);
+    await expect.poll(async () => (await readMapFeatures(page, 'desktop-route'))?.length).toBe(1);
+    const routeFeatures = await readMapFeatures(page, 'desktop-route');
+
+    await page.evaluate(() => Data.loadDynamic());
+    await expect.poll(() => page.evaluate(() => RouteMod.filteredCams.map(camera => camera.id))).toContain('late-route-cam');
+    await expect(page.locator('.desktop-cctv-marker[title="台北車站沿途測試攝影機"]')).toBeVisible();
+    // Projection only: same route, no second route request, route geometry untouched.
+    expect(await page.evaluate(() => AppState.activeRoute.routeId)).toBe(routeId);
+    expect(routeRequests).toBe(1);
+    expect(await readMapFeatures(page, 'desktop-route')).toEqual(routeFeatures);
+  });
 });
 
 test('plans a validated motorcycle route and renders ordered conditions', async ({ page }) => {
@@ -180,35 +212,22 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await expectEventMarker(page, 'construction');
   await expect(page.locator('#condition-incidents')).toContainText('1處·1件');
   if (await page.locator('#desktop-map').isVisible()) {
-    await expect(page.locator('.desktop-event-construction')).toBeVisible();
+    await expect(mapRoot(page).locator('.desktop-event-construction')).toBeVisible();
   } else {
     await expect(page.locator('#map-legend-event-count')).toContainText('狀況 1');
   }
   await expect(page.locator('#condition-event-coverage')).toContainText('事件來源未回報涵蓋範圍');
-  expect(await page.evaluate(() => (
-    MapMod.routeSectionLayers.length === AppState.routeConditions.sections.length * 2
-  ))).toBe(true);
-  expect(await page.evaluate(() => {
-    const cue = MapMod.routeIncidentLayers.find((layer) => layer._roadEventLocationCue);
-    return {
-      layers: MapMod.routeIncidentLayers.length,
-      kind: cue?._roadEventKind,
-      impact: cue?._roadEventImpact,
-      color: cue?.options?.color,
-      dashArray: cue?.options?.dashArray || null,
-      points: cue?.getLatLngs?.().length || 0
-    };
-  })).toEqual({
-    layers: 2,
-    kind: 'construction',
-    impact: 'controlled',
-    color: '#8b5cf6',
-    dashArray: null,
-    points: expect.any(Number)
-  });
-  expect(await page.evaluate(() => (
-    MapMod.routeIncidentLayers.find((layer) => layer._roadEventLocationCue).getLatLngs().length
-  ))).toBeGreaterThanOrEqual(2);
+  // What MapLibre was told to draw: one traffic feature per route section, and a single
+  // location cue (>= 2 points, colored by event kind) for the single official event.
+  const sectionOrders = await page.evaluate(() => AppState.routeConditions.sections.map((section) => section.order));
+  const sectionFeatures = await readMapFeatures(page, 'desktop-sections');
+  expect(sectionFeatures.map((feature) => feature.properties.order)).toEqual(sectionOrders);
+  expect(sectionFeatures.every((feature) => feature.geometry.coordinates.length >= 2)).toBe(true);
+  const cues = await readMapFeatures(page, 'desktop-events');
+  expect(cues).toHaveLength(1);
+  expect(cues[0].properties).toMatchObject({ kind: 'construction', color: '#f59e0b' });
+  expect(cues[0].geometry.coordinates.length).toBeGreaterThanOrEqual(2);
+  expect(await readMapFeatures(page, 'desktop-route')).toHaveLength(1);
   expect(await page.evaluate(() => ({
     partial: window.getRoadEventPresentation({
       kind: 'accident',
@@ -225,10 +244,11 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await page.locator('#condition-clear').click();
   await expect(page.locator('#map-legend-event-item')).not.toHaveClass(/has-events/);
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
-  expect(await page.evaluate(() => ({
-    eventLayers: MapMod.routeIncidentLayers.length,
-    eventMarkers: MapMod.routeIncidentMarkers.length
-  }))).toEqual({ eventLayers: 0, eventMarkers: 0 });
+  // Clearing the route removes every overlay from the map, not just the panel.
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-events')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-sections')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-route')).toEqual([]);
   let remainingMapFailures = mapProviderFailures.length;
   const unexpectedErrors = browserErrors.filter((message) => {
     if (/Failed to load resource.*404/.test(message)) return false;
@@ -270,8 +290,10 @@ test('keeps coordinate-free road events visible without inventing a precise map 
   await expect(page.locator('#desktop-context-alerts')).toContainText('位置未提供');
   await expect(page.locator('#condition-incidents')).toContainText('未定位·1件');
   await expect(page.locator('.condition-section.has-road-event')).toHaveCount(0);
-  await expect(page.locator('.route-incident-pin')).toHaveCount(0);
-  expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBe(0);
+  // No coordinates means nothing is drawn on the map: no marker and no location cue.
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-events')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-sections')).not.toHaveLength(0);
 });
 
 test('keeps separate official event locations as separate map markers', async ({ page }, testInfo) => {
@@ -301,53 +323,60 @@ test('keeps separate official event locations as separate map markers', async ({
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
 
-  await expect(page.locator('.route-incident-pin')).toHaveCount(2);
+  const markers = mapRoot(page).locator('.desktop-event-marker');
+  await expect(markers).toHaveCount(2);
+  await expect(mapRoot(page).locator('.desktop-event-construction')).toHaveCount(1);
+  await expect(mapRoot(page).locator('.desktop-event-accident')).toHaveCount(1);
+  await expect(mapRoot(page).locator('.desktop-event-accident')).toHaveAttribute('aria-label', /另一處事故/);
   await expect(page.locator('#condition-incidents')).toContainText('1處·2件');
   await expect(page.locator('.condition-road-event')).toHaveCount(2);
-  expect(await page.evaluate(() => (
-    MapMod.routeIncidentLayers.filter((layer) => layer._roadEventLocationCue).length
-  ))).toBe(2);
-  expect(await page.evaluate(() => (
-    MapMod.routeIncidentLayers
-      .filter((layer) => layer._roadEventLocationCue)
-      .map((layer) => ({
-        kind: layer._roadEventKind,
-        status: layer._roadEventStatus,
-        dashArray: layer.options.dashArray || null
-      }))
-  ))).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: 'construction', dashArray: null }),
-    expect.objectContaining({ kind: 'accident', status: 'scheduled', dashArray: '10 8' })
-  ]));
+  const cues = await readMapFeatures(page, 'desktop-events');
+  expect(cues.map((cue) => cue.properties.kind).sort()).toEqual(['accident', 'construction']);
+  expect(cues.map((cue) => [cue.properties.kind, cue.properties.color]).sort()).toEqual([
+    ['accident', '#f43f5e'],
+    ['construction', '#f59e0b']
+  ]);
+  // Two official locations stay two map positions (the markers are not merged into one).
+  const positions = await readEventMarkerPositions(page);
+  expect(positions).toHaveLength(2);
+  expect(new Set(positions.map((position) => position.join(','))).size).toBe(2);
 });
 
 test('removes old event colors before drawing a replacement route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Map layer lifecycle verification runs once.');
+  let routeRequests = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
+  });
   await page.goto(WORKER);
+  await waitForMapReady(page);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expectEventMarker(page, 'construction');
+  expect(await readMapFeatures(page, 'desktop-events')).toHaveLength(1);
+  expect(await readMapFeatures(page, 'desktop-route')).toHaveLength(1);
 
-  expect(await page.evaluate(() => MapMod.routeIncidentLayers.length)).toBeGreaterThan(0);
-  expect(await page.evaluate(() => {
-    MapMod.drawRoute([
-      [25.0478, 121.5170],
-      [25.0350, 121.5400]
-    ], 'motorcycle');
-    return {
-      routeLayers: Array.isArray(MapMod.routeLayer) ? MapMod.routeLayer.length : 0,
-      eventLayers: MapMod.routeIncidentLayers.length,
-      eventMarkers: MapMod.routeIncidentMarkers.length,
-      weatherMarkers: MapMod.routeWeatherMarkers.length
+  // Replace the route with one whose official conditions report no events at all.
+  await page.evaluate(() => {
+    const originalLoad = AppServices.loadRouteConditions;
+    AppServices.loadRouteConditions = async (...args) => {
+      const payload = await originalLoad(...args);
+      payload.data.sections.forEach((section) => { section.incidents = []; });
+      payload.data.overall.incidentSections = 0;
+      return payload;
     };
-  })).toEqual({
-    routeLayers: 3,
-    eventLayers: 0,
-    eventMarkers: 0,
-    weatherMarkers: 0
   });
+  // The ready-state desktop layout hides the planner form, so re-run the same request
+  // through the route command seam that the form button also ends up calling.
+  await page.evaluate(() => Bus.emit('route:request', { action: 'analyze' }));
+  await expect.poll(() => routeRequests).toBe(2);
+  await expect.poll(() => page.evaluate(() => RouteMod.analyzing)).toBe(false);
+  await expect(page.locator('#condition-incidents')).not.toContainText('1處·1件');
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-events')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-sections')).not.toHaveLength(0);
 });
 
 test('keeps traffic unknown semantics and safety guidance visible', async ({ page }) => {
@@ -587,15 +616,23 @@ test('lets users optionally hide and restore the top clock and route banner', as
   });
   await page.goto(WORKER);
 
-  await expect(page.locator('#js-clock-wrap')).toBeVisible();
-  await page.locator('#js-clock-hide').click();
-  await expect(page.locator('#js-clock-wrap')).toBeHidden();
+  if ((page.viewportSize()?.width || 0) <= 640) {
+    // Phone redesign (#83): the map page has no header bar, so there is no clock to hide or
+    // restore and the Tools page does not offer a switch for it.
+    await expect(page.locator('#js-clock-wrap')).toBeHidden();
+    await openTools(page);
+    await expect(page.locator('#js-clock-setting')).toBeHidden();
+  } else {
+    await expect(page.locator('#js-clock-wrap')).toBeVisible();
+    await page.locator('#js-clock-hide').click();
+    await expect(page.locator('#js-clock-wrap')).toBeHidden();
 
-  await openTools(page);
-  await expect(page.locator('#js-clock-setting')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#js-clock-setting-state')).toHaveText('已隱藏');
-  await page.locator('#js-clock-setting').click();
-  await expect(page.locator('#js-clock-wrap')).toBeVisible();
+    await openTools(page);
+    await expect(page.locator('#js-clock-setting')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#js-clock-setting-state')).toHaveText('已隱藏');
+    await page.locator('#js-clock-setting').click();
+    await expect(page.locator('#js-clock-wrap')).toBeVisible();
+  }
 
   if ((page.viewportSize()?.width || 0) >= 1200) {
     await page.locator('#desktop-settings-toggle').click();
@@ -689,8 +726,9 @@ test('keeps the completed mobile route map-first with compact controls', async (
     page.locator('#route-conditions-panel').boundingBox(),
     page.locator('.bottom-navigation').boundingBox()
   ]);
-  expect(routeBox?.height).toBeLessThanOrEqual(48);
-  expect(conditionsBox?.height).toBeLessThanOrEqual(52);
+  // Redesign (#83) budget at 390x664: top card 60px, collapsed conditions peek sheet 112px.
+  expect(routeBox?.height).toBeLessThanOrEqual(64);
+  expect(conditionsBox?.height).toBeLessThanOrEqual(116);
   expect(
     routeBox && conditionsBox && conditionsBox.y - (routeBox.y + routeBox.height)
   ).toBeGreaterThanOrEqual(350);
@@ -746,7 +784,11 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
 
   await expect(page.locator('#route-conditions-panel')).not.toHaveClass(/is-collapsed/);
   await expect(page.locator('#condition-error')).toBeVisible();
-  await expect(page.locator('#condition-error')).toContainText('測試更新失敗');
+  // Snapshot-honesty copy (#78): what happened and what to do, never the raw engineering error.
+  await expect(page.locator('#condition-error')).toContainText('沿途路況快照暫時無法取得');
+  await expect(page.locator('#condition-error')).toContainText('稍後再試');
+  await expect(page.locator('#condition-error')).not.toContainText('測試更新失敗');
+  await expect(page.locator('#condition-retry')).toBeVisible();
   await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
 });
@@ -761,33 +803,59 @@ test('turns a hanging conditions request into an actionable timeout', async ({ p
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
   await page.evaluate(() => {
-    Config.CONDITIONS_TIMEOUT_MS = 40;
-    const originalFetch = window.fetch;
+    // 1000 ms is the shortest timeout the request layer honours (services.js clamps anything lower).
+    Config.CONDITIONS_TIMEOUT_MS = 1000;
+    window.__realFetch = window.fetch;
     window.fetch = (input, options) => String(input).includes('/conditions')
       ? new Promise(() => {})
-      : originalFetch(input, options);
+      : window.__realFetch(input, options);
     RouteConditionsMod.refresh();
   });
 
-  await expect(page.locator('#condition-error')).toBeVisible({ timeout: 3000 });
-  await expect(page.locator('#condition-error')).toContainText('逾時');
+  // A request that never answers must still end in a visible, actionable failure. The app gives
+  // up after the timeout above; the wait here is only patience for a busy CPU, not a speed claim.
+  await expect(page.locator('#condition-error')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#condition-error')).toContainText('沿途路況快照暫時無法取得');
+  await expect(page.locator('#condition-error')).toContainText('稍後再試');
   await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
   await expect(page.locator('#condition-event-status')).toContainText('目前沒有可用的快照資料');
+
+  // ...and the retry it offers works once the network answers again.
+  await page.evaluate(() => {
+    Config.CONDITIONS_TIMEOUT_MS = 8000;
+    window.fetch = window.__realFetch;
+  });
+  await page.locator('#condition-retry').click();
+  await expect(page.locator('#condition-error')).toBeHidden();
+  await expect(page.locator('#condition-source-badge')).not.toHaveText('更新失敗');
 });
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
   test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
+  // Phone map: a dark basemap layer ('base') and a light one ('mobile-base-light', MapTiler
+  // dataviz-light); the theme decides which of the two is shown.
+  const basemap = () => page.evaluate(() => {
+    const map = window.MapMod && window.MapMod.map;
+    if (!map || !map.getLayer('mobile-base-light')) return null;
+    const tiles = map.getStyle().sources['mobile-base-light'].tiles || [];
+    return {
+      dark: map.getLayoutProperty('base', 'visibility'),
+      light: map.getLayoutProperty('mobile-base-light', 'visibility'),
+      lightTiles: tiles[0] && decodeURIComponent(new URL(tiles[0]).pathname)
+    };
+  });
   await page.goto(WORKER);
+  await expect.poll(basemap).toMatchObject({ dark: 'visible', light: 'none' });
   await page.locator('#js-theme').click();
   await expect(page.locator('body')).toHaveClass(/light/);
-  await expect.poll(() => page.evaluate(() => MapMod.tileLayer && MapMod.tileLayer._url)).toBe(
-    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
-  );
+  await expect.poll(basemap).toEqual({
+    dark: 'none',
+    light: 'visible',
+    lightTiles: '/maps/dataviz-light/{z}/{x}/{y}.png'
+  });
   await page.reload();
   await expect(page.locator('body')).toHaveClass(/light/);
-  await expect.poll(() => page.evaluate(() => MapMod.tileLayer && MapMod.tileLayer._url)).toBe(
-    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
-  );
+  await expect.poll(basemap).toMatchObject({ dark: 'none', light: 'visible' });
 });
 
 test('shows useful route suggestions from the first character without remote autocomplete', async ({ page }) => {
@@ -896,6 +964,17 @@ test('retries one transient geocode and route network failure', async ({ page },
       if (url.pathname === '/v2/geocode') {
         window.__networkRetryCounts.geocode += 1;
         if (window.__networkRetryCounts.geocode === 1) return Promise.reject(new TypeError('Failed to fetch'));
+        // The Worker geocodes through Nominatim, which a hermetic run cannot reach (and the
+        // page's service worker hides from Playwright routes): answer successful geocodes
+        // here so the only transient failure is the injected first one.
+        const stations = { 台中車站: [24.1371092, 120.6868719], 桃園車站: [24.9893416, 121.3135656] };
+        const name = url.searchParams.get('q');
+        const [lat, lng] = stations[name];
+        return Promise.resolve(new Response(JSON.stringify({
+          status: 'ok',
+          updatedAt: new Date().toISOString(),
+          data: [{ name, displayName: name, sub: '', lat, lng, type: 'station' }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
       }
       if (url.pathname === '/v2/routes' && String(options?.method || 'GET').toUpperCase() === 'POST') {
         window.__networkRetryCounts.route += 1;
@@ -907,6 +986,11 @@ test('retries one transient geocode and route network failure', async ({ page },
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('台中車站');
   await page.locator('#js-route-end').fill('桃園車站');
+  // The place-suggestion list drops over the plan button while the field is focused. Dismiss
+  // it (Escape) instead of picking a suggestion: picking one would supply coordinates and
+  // skip the geocode requests this test exists to exercise.
+  await page.locator('#js-route-end').press('Escape');
+  await expect(page.locator('#suggest-end')).toBeHidden();
   await page.locator('#js-route-btn').click();
 
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
@@ -942,6 +1026,7 @@ test('replaces a repeated route network failure with a Chinese recovery message'
 
 test('keeps a cleared route empty when an older conditions request finishes', async ({ page }) => {
   await page.goto(WORKER);
+  await waitForMapReady(page);
   await page.evaluate(() => {
     window.__releaseConditions = null;
     AppServices.loadRouteConditions = function() {
@@ -963,30 +1048,40 @@ test('keeps a cleared route empty when an older conditions request finishes', as
   await expect.poll(() => page.evaluate(() => typeof window.__releaseConditions)).toBe('function');
 
   await page.evaluate(() => RouteMod.clear());
-  await page.evaluate(() => window.__releaseConditions());
-  await page.waitForTimeout(100);
+  // Resolve the late answer, then let every handler it triggers run before looking.
+  await page.evaluate(async () => {
+    window.__releaseConditions();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
   const clearedState = await page.evaluate(() => ({
     routeAllPoints: AppState.routeAllPoints,
-    routeConditions: AppState.routeConditions,
-    startEndMarkers: MapMod.startEndMarkers.length
+    routeConditions: AppState.routeConditions
   }));
   expect(clearedState).toEqual({
     routeAllPoints: [],
-    routeConditions: null,
-    startEndMarkers: 0
+    routeConditions: null
   });
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
+  // The late conditions must not repaint anything on the map either.
+  await expect(mapRoot(page).locator('.desktop-start-marker, .desktop-end-marker')).toHaveCount(0);
+  await expect(mapRoot(page).locator('.desktop-event-marker')).toHaveCount(0);
+  expect(await readMapFeatures(page, 'desktop-sections')).toEqual([]);
+  expect(await readMapFeatures(page, 'desktop-route')).toEqual([]);
 });
 
 test('does not restore a route whose analysis finishes after it was cleared', async ({ page }) => {
   await page.goto(WORKER);
+  await waitForMapReady(page);
   await page.evaluate(() => {
     window.__releaseRouteAnalysis = null;
-    AppServices.createRoute = function() {
-      return new Promise((resolve) => {
+    const createRoute = AppServices.createRoute;
+    // Hold the analysis back, then let the Worker's real (valid, safe) answer through late:
+    // an invalid payload would be rejected on its own and prove nothing about staleness.
+    AppServices.createRoute = function(...args) {
+      return new Promise((resolve, reject) => {
         window.__releaseRouteAnalysis = function() {
-          resolve({ status: 'ok', data: {} });
+          return createRoute.apply(AppServices, args).then(resolve, reject);
         };
       });
     };
@@ -998,23 +1093,27 @@ test('does not restore a route whose analysis finishes after it was cleared', as
   await expect.poll(() => page.evaluate(() => typeof window.__releaseRouteAnalysis)).toBe('function');
 
   await page.evaluate(() => RouteMod.clear());
-  await page.evaluate(() => window.__releaseRouteAnalysis());
-  await page.waitForTimeout(100);
+  // Resolve the late answer, then let every handler it triggers run before looking.
+  await page.evaluate(async () => {
+    await window.__releaseRouteAnalysis();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
   const clearedState = await page.evaluate(() => ({
     activeRoute: AppState.activeRoute,
     routeAllPoints: AppState.routeAllPoints,
     routeActive: RouteMod.active,
-    analyzing: RouteMod.analyzing,
-    routeLayer: Boolean(MapMod.routeLayer)
+    analyzing: RouteMod.analyzing
   }));
   expect(clearedState).toEqual({
     activeRoute: null,
     routeAllPoints: [],
     routeActive: false,
-    analyzing: false,
-    routeLayer: false
+    analyzing: false
   });
+  // ...and no route line or start/end marker was drawn for the discarded analysis.
+  expect((await readMapFeatures(page, 'desktop-route')) || []).toEqual([]);
+  await expect(mapRoot(page).locator('.desktop-start-marker, .desktop-end-marker')).toHaveCount(0);
 });
 
 test('preserves ordered Google Maps waypoints when importing a route', async ({ page }) => {
@@ -1105,8 +1204,9 @@ test('keeps all large camera result sets reachable through progressive loading',
       searchText: `測試攝影機 ${index}`
     }));
     Data.allCams = () => cameras;
-    ListMod.visibleLimit = ListMod.PAGE_SIZE;
-    ListMod.render();
+    // ListMod is private to the bundle (#61); a camera-data update is the public way to
+    // make the list re-render from Data.allCams().
+    Bus.emit('cams:updated');
   });
   await openList(page);
 
@@ -1251,7 +1351,7 @@ test('keeps manual route entry available when location is denied', async ({ page
   await expect(page.locator('#js-route-start')).toHaveValue('台中市政府');
 });
 
-test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }) => {
+test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }, testInfo) => {
   test.skip(browserName !== 'chromium', 'Offline service-worker verification runs in Chromium.');
   await page.goto(WORKER);
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -1265,25 +1365,77 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
     return snapshot?.route?.validation?.status;
   })).toBe('safe');
   await page.reload();
-  await expect(page.getByRole('heading', { name: '\u74b0\u5cf6\u8def\u6cc1\u6307\u63ee\u4e2d\u5fc3' })).toBeVisible();
+  await expectAppShell(page);
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole('heading', { name: '\u74b0\u5cf6\u8def\u6cc1\u6307\u63ee\u4e2d\u5fc3' })).toBeVisible();
+  await expectAppShell(page);
   await expect(page.locator('#pwa-network-banner')).toBeVisible();
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#route-summary')).toContainText('離線快照');
   await expect(page.locator('#js-route-status')).toContainText('快照資料暫停更新');
-  await expect.poll(() => page.evaluate(() =>
-    Array.isArray(MapMod.routeLayer)
-      && MapMod.routeLayer.length === 3
-      && MapMod.routeLayer.every((layer) => MapMod.map.hasLayer(layer))
-  )).toBe(true);
-  const apiResult = await page.evaluate(async (origin) => {
-    const response = await fetch(origin + '/v2/weather');
-    return { status: response.status, body: await response.json() };
-  }, workerOrigin);
-  expect(apiResult.status).toBe(503);
-  expect(apiResult.body.status).toBe('error');
-  expect(apiResult.body.message).toContain('\u96e2\u7dda');
+  // The restored snapshot route is drawn on the (tile-less) map: one route line, and the three
+  // route layers (casing, glow, core) that render it.
+  await waitForMapReady(page);
+  await expect.poll(async () => (await readMapFeatures(page, 'desktop-route'))?.[0]?.geometry.coordinates.length).toBeGreaterThan(1);
+  expect(await page.evaluate((isDesktop) => {
+    const map = (isDesktop ? DesktopDashboardMod.getRenderer() : MapMod.renderer).map;
+    return ['desktop-route-casing', 'desktop-route-glow', 'desktop-route-core'].map((id) => Boolean(map.getLayer(id)));
+  }, isDesktopViewport(page))).toEqual([true, true, true]);
+  // API contract while offline: a refused request is a 503 offline notice, never stale data.
+  // Playwright's offline emulation does not reach requests the service worker itself makes
+  // (the worker's fetch to loopback still succeeded while the context was offline), so the API
+  // going away is modelled directly: a throwaway API on the one extra loopback port the CSP
+  // allows answers once, then is shut down, and the very same URL must now be refused.
+  if (testInfo.project.name === 'desktop-chromium') {
+    await context.setOffline(false);
+    const api = http.createServer((request, response) => {
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store'
+      });
+      response.end(JSON.stringify({ status: 'ok', updatedAt: new Date().toISOString(), data: { 台北市: { temp: 27 } } }));
+    });
+    await new Promise((resolve) => api.listen(8790, '127.0.0.1', resolve));
+    const readWeather = () => page.evaluate(async () => {
+      const response = await fetch('http://127.0.0.1:8790/v2/weather');
+      return { status: response.status, body: await response.json() };
+    });
+    const live = await readWeather();
+    expect(live.status).toBe(200);
+    expect(live.body.data['台北市'].temp).toBe(27);
+    await new Promise((resolve) => { api.close(resolve); api.closeAllConnections(); });
+    const offline = await readWeather();
+    expect(offline.status).toBe(503);
+    expect(offline.body.status).toBe('error');
+    expect(offline.body.data).toBeNull();
+    expect(offline.body.message).toContain('離線');
+  }
+});
+
+test('serves the cached app shell when its own origin stops answering', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Service-worker shell fallback runs once.');
+  // Playwright's offline emulation does not reach the service worker's own fetches, so the shell
+  // fallback cannot be exercised by setOffline. Instead the app is served from a throwaway origin
+  // and that origin is shut down. It is opened as `localhost`: the worker treats every
+  // 127.0.0.1 request as API traffic (network only), so on the shared 127.0.0.1 server it has
+  // no cached shell to fall back to by design.
+  const site = await startStaticOrigin();
+  try {
+    await page.goto(`${site.origin}/?worker=${workerOrigin}`);
+    await expectAppShell(page);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+
+    await site.stop();
+    await page.reload();
+    await expectAppShell(page);
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    // The cached scripts and styles booted the app, not just the static HTML.
+    await expect(page.locator('#route-collapsed:visible, #route-expanded:visible')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(window.AppState && window.Config))).toBe(true);
+  } finally {
+    await site.stop();
+  }
 });
