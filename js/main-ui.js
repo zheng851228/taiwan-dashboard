@@ -95,6 +95,23 @@
     dark: Storage.get(THEME_KEY, 'dark') !== 'light',
     init: function() {
       Dom.onId('js-theme', 'click', function() { ThemeMod.toggle(); });
+      ThemeMod.placeButton();
+    },
+    // Phones have no header bar on the map: the theme toggle becomes the last button of the map
+    // control group.  Desktop keeps it in the header.  One element, moved, so ids stay unique.
+    placeButton: function() {
+      var btn = Dom.byId('js-theme');
+      var stack = document.querySelector('.map-control-stack');
+      var tools = document.querySelector('.header-tools');
+      if (!btn || !stack || !tools || !window.matchMedia) return;
+      var query = window.matchMedia('(max-width: 1199px)');
+      function place() {
+        if (query.matches) { if (btn.parentNode !== stack) stack.appendChild(btn); }
+        else if (btn.parentNode !== tools) tools.appendChild(btn);
+      }
+      place();
+      if (query.addEventListener) query.addEventListener('change', place);
+      else if (query.addListener) query.addListener(place);
     },
     toggle: function() {
       ThemeMod.dark = !ThemeMod.dark;
@@ -378,6 +395,8 @@
       else if (action === 'nearby-overlay-upsert') MapMod._nearbyUpsert(request.center, request.radiusMeters);
       else if (action === 'nearby-overlay-radius') MapMod._nearbySetRadius(request.radiusMeters);
       else if (action === 'nearby-overlay-clear') MapMod._nearbyClear();
+      else if (action === 'user-location-upsert') MapMod._userUpsert(request.center, request.accuracyMeters, request.recenter !== false);
+      else if (action === 'user-location-clear') MapMod._userClear();
       else if (action === 'clear-waypoint-overlays') {
         // MapLibre draws no waypoint overlays; keep the shared state contract.
         if (window.AppState) AppState.waypointMapMarkers = [];
@@ -806,20 +825,18 @@
         map.addLayer({
           id: 'mobile-nearby-fill', type: 'fill', source: 'mobile-nearby',
           filter: ['==', ['get', 'kind'], 'radius'],
-          paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.12 }
+          paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.04 }
         });
         map.addLayer({
           id: 'mobile-nearby-line', type: 'line', source: 'mobile-nearby',
           filter: ['==', ['get', 'kind'], 'radius'],
-          paint: { 'line-color': '#38bdf8', 'line-width': 2, 'line-opacity': 0.7 }
+          paint: { 'line-color': '#38bdf8', 'line-width': 1.5, 'line-opacity': 0.55, 'line-dasharray': [3, 3] }
         });
         map.addLayer({
           id: 'mobile-nearby-dot', type: 'circle', source: 'mobile-nearby',
           filter: ['==', ['get', 'kind'], 'center'],
-          paint: {
-            'circle-radius': 6, 'circle-color': '#38bdf8',
-            'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2
-          }
+          // Contract layer only: the search radius is NOT the user's position (see mobile-user-*).
+          paint: { 'circle-radius': 2, 'circle-opacity': 0, 'circle-stroke-opacity': 0 }
         });
       } catch (error) {}
       MapMod._nearbyMarker = true;
@@ -827,6 +844,71 @@
       try {
         map.flyTo({ center: [lng, lat], zoom: 14, duration: 600 });
       } catch (error) {}
+    },
+
+    // "You are here": accuracy circle + a 16px blue dot with a white ring.  Separate from the
+    // nearby search-radius overlay.  recenter=true makes exactly ONE camera move.
+    _userUpsert: function(center, accuracyMeters, recenter) {
+      var map = MapMod.map;
+      if (!map || !center) return;
+      var lat = Number(center[0]);
+      var lng = Number(center[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      var acc = Math.max(5, Number(accuracyMeters) || 0);
+      var features = [{ type: 'Feature', properties: { kind: 'center' }, geometry: { type: 'Point', coordinates: [lng, lat] } }];
+      if (window.MapGeoUtils) {
+        features.push({ type: 'Feature', properties: { kind: 'accuracy' },
+          geometry: { type: 'Polygon', coordinates: [window.MapGeoUtils.circlePolygon(lng, lat, acc)] } });
+      }
+      var data = { type: 'FeatureCollection', features: features };
+      try {
+        var src = map.getSource('mobile-user');
+        if (src && src.setData) src.setData(data);
+        else {
+          map.addSource('mobile-user', { type: 'geojson', data: data });
+          map.addLayer({ id: 'mobile-user-accuracy', type: 'fill', source: 'mobile-user',
+            filter: ['==', ['get', 'kind'], 'accuracy'],
+            paint: { 'fill-color': '#2f80ed', 'fill-opacity': 0.14 } });
+          map.addLayer({ id: 'mobile-user-accuracy-line', type: 'line', source: 'mobile-user',
+            filter: ['==', ['get', 'kind'], 'accuracy'],
+            paint: { 'line-color': '#2f80ed', 'line-width': 1, 'line-opacity': 0.45 } });
+          map.addLayer({ id: 'mobile-user-dot', type: 'circle', source: 'mobile-user',
+            filter: ['==', ['get', 'kind'], 'center'],
+            paint: { 'circle-radius': 8, 'circle-color': '#2f80ed',
+              'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
+        }
+      } catch (error) {}
+      MapMod._userCenter = [lat, lng];
+      if (!recenter) {
+        // Live update: only pan when the dot is about to leave the open part of the map
+        // (under the top card / behind the controls / sheet); zoom is left alone.
+        try {
+          var canvas = map.getCanvas();
+          var pt = map.project([lng, lat]);
+          var w = canvas.clientWidth; var h = canvas.clientHeight;
+          if (pt.x < 48 || pt.x > w - 72 || pt.y < 150 || pt.y > h - 230) map.easeTo({ center: [lng, lat], duration: 600 });
+        } catch (error) {}
+        return;
+      }
+      // One move: zoom 16, or whatever fits the accuracy circle if that is larger (never below ~12).
+      var zoom = 16;
+      try {
+        var dLat = acc / 111320;
+        var dLng = acc / (111320 * Math.max(0.2, Math.cos(lat * Math.PI / 180)));
+        var cam = map.cameraForBounds([[lng - dLng, lat - dLat], [lng + dLng, lat + dLat]], { padding: 70, maxZoom: 16 });
+        if (cam && Number.isFinite(cam.zoom)) zoom = Math.max(12, Math.min(16, cam.zoom));
+      } catch (error) {}
+      map.easeTo({ center: [lng, lat], zoom: zoom, duration: 700 });
+    },
+
+    _userClear: function() {
+      var map = MapMod.map;
+      MapMod._userCenter = null;
+      if (!map) return;
+      ['mobile-user-dot', 'mobile-user-accuracy-line', 'mobile-user-accuracy'].forEach(function(id) {
+        try { if (map.getLayer(id)) map.removeLayer(id); } catch (error) {}
+      });
+      try { if (map.getSource('mobile-user')) map.removeSource('mobile-user'); } catch (error) {}
     },
 
     _nearbySetRadius: function(radiusMeters) {

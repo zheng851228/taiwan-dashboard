@@ -125,6 +125,8 @@ var NearbyMod = {
     });
     var radiusBtns = Dom.queryAll('.nearby-r-btn');
     Dom.onId('js-loc', 'click', function() { NearbyMod.locate(); });
+    Dom.onId('js-nearby-open', 'click', function() { NearbyMod.openFromTools(); });
+    LocateMod.init();
     Dom.onId('nearby-close', 'click', function() { NearbyMod.hide(); });
     Dom.onAll('.nearby-r-btn', 'click', function(btn) {
         radiusBtns.forEach(function(b) { b.classList.remove('text-orange-400','font-bold'); b.classList.add('text-slate-400'); });
@@ -133,7 +135,27 @@ var NearbyMod = {
         if (NearbyMod.userLat !== null) NearbyMod.render();
     });
   },
+  // Phones: the locate button is a pure "where am I" control (see LocateMod).  Desktop keeps the
+  // original behaviour (fills the start field, opens the nearby list).
   locate: function() {
+    if (LocateMod.isPhone()) { LocateMod.press(); return; }
+    NearbyMod.locateLegacy();
+  },
+  // Tools page > nearby cameras: the only phone path into the nearby panel.
+  openFromTools: function() {
+    if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
+    var navMap = Dom.byId('nav-map');
+    if (navMap) navMap.click();
+    Toast.show('\u5b9a\u4f4d\u4e2d...', 6000);
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      NearbyMod.userLat = pos.coords.latitude;
+      NearbyMod.userLng = pos.coords.longitude;
+      NearbyMod.showOnMap();
+      NearbyMod.render();
+      NearbyMod.show();
+    }, LocateMod.reportError, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  },
+  locateLegacy: function() {
     if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
     var btn = Dom.byId('js-loc');
     if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-lg"></i>';
@@ -183,7 +205,7 @@ var NearbyMod = {
       center: [NearbyMod.userLat, NearbyMod.userLng],
       radiusMeters: NearbyMod.radius * 1000
     });
-    Bus.emit('map:request', { action: 'set-view', center: [NearbyMod.userLat, NearbyMod.userLng], zoom: 12 });
+    // The upsert already moves the camera once; no second set-view here.
   },
   getNearby: function() {
     if (NearbyMod.userLat === null) return [];
@@ -241,6 +263,96 @@ var NearbyMod = {
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex','flex-col'); }
     Bus.emit('map:request', { action: 'nearby-overlay-clear' });
     NearbyMod.userLat = null; NearbyMod.userLng = null;
+  }
+};
+
+// "You are here" on phones: a blue dot + accuracy circle (drawn by MapMod), one camera move per
+// press, then watchPosition keeps the dot live.  Idle -> locating (spinner, no toast) -> active.
+// Watching stops when the page is hidden or after 5 minutes without a tap, to save battery.
+var LocateMod = {
+  state: 'idle', watchId: null, last: null, idleTimer: null,
+  IDLE_MS: 5 * 60 * 1000,
+  ICON: '<i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i>',
+  isPhone: function() { return !!(window.matchMedia && window.matchMedia('(max-width: 1199px)').matches); },
+  init: function() {
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState !== 'visible' && LocateMod.state !== 'idle') LocateMod.stop(true);
+    });
+  },
+  paint: function() {
+    var btn = Dom.byId('js-loc');
+    if (!btn) return;
+    btn.classList.toggle('is-locating', LocateMod.state === 'locating');
+    btn.classList.toggle('is-active', LocateMod.state === 'active');
+    btn.setAttribute('aria-pressed', LocateMod.state === 'active' ? 'true' : 'false');
+    btn.setAttribute('aria-busy', LocateMod.state === 'locating' ? 'true' : 'false');
+    btn.innerHTML = LocateMod.state === 'locating'
+      ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>'
+      : LocateMod.ICON;
+  },
+  reportError: function(err) {
+    var msgs = { 1: '\u8acb\u5141\u8a31\u4f4d\u7f6e\u6b0a\u9650\uff08\u8a2d\u5b9a > Safari > \u4f4d\u7f6e\uff09', 2: '\u7121\u6cd5\u53d6\u5f97\u4f4d\u7f6e', 3: '\u5b9a\u4f4d\u903e\u6642\uff0c\u8acb\u91cd\u8a66' };
+    Toast.show(msgs[err && err.code] || '\u5b9a\u4f4d\u5931\u6557', 4000);
+  },
+  armIdle: function() {
+    clearTimeout(LocateMod.idleTimer);
+    LocateMod.idleTimer = setTimeout(function() { LocateMod.stop(true); }, LocateMod.IDLE_MS);
+  },
+  publish: function(pos, recenter) {
+    LocateMod.last = pos;
+    Bus.emit('map:request', {
+      action: 'user-location-upsert',
+      center: [pos.coords.latitude, pos.coords.longitude],
+      accuracyMeters: pos.coords.accuracy,
+      recenter: recenter
+    });
+  },
+  stop: function(clearDot) {
+    if (LocateMod.watchId !== null && navigator.geolocation && navigator.geolocation.clearWatch) {
+      try { navigator.geolocation.clearWatch(LocateMod.watchId); } catch (e) {}
+    }
+    LocateMod.watchId = null;
+    clearTimeout(LocateMod.idleTimer);
+    LocateMod.state = 'idle';
+    LocateMod.last = null;
+    if (clearDot) Bus.emit('map:request', { action: 'user-location-clear' });
+    LocateMod.paint();
+  },
+  press: function() {
+    if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
+    if (LocateMod.state === 'locating') return;
+    if (LocateMod.state === 'active' && LocateMod.last) {
+      // Tapping again recentres; if the map is already on you, it turns locating off.
+      var m = window.MapMod && MapMod.map;
+      var here = LocateMod.last.coords;
+      if (m && m.getCenter) {
+        var c = m.getCenter();
+        if (haversineKm(here.latitude, here.longitude, c.lat, c.lng) < 0.03 && m.getZoom() >= 14.5) { LocateMod.stop(true); return; }
+      }
+      LocateMod.publish(LocateMod.last, true);
+      LocateMod.armIdle();
+      return;
+    }
+    LocateMod.state = 'locating';
+    LocateMod.paint();
+    var started = false;
+    function first(pos) {
+      if (started) return;
+      started = true;
+      LocateMod.state = 'active';
+      LocateMod.publish(pos, true);
+      LocateMod.paint();
+      LocateMod.armIdle();
+      if (navigator.geolocation.watchPosition) {
+        LocateMod.watchId = navigator.geolocation.watchPosition(function(p) {
+          if (LocateMod.state === 'active') LocateMod.publish(p, false);
+        }, function() {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+      }
+    }
+    function fail(err) { LocateMod.stop(false); LocateMod.reportError(err); }
+    navigator.geolocation.getCurrentPosition(first, function() {
+      navigator.geolocation.getCurrentPosition(first, fail, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
   }
 };
 

@@ -189,6 +189,19 @@
       waiting.postMessage({ type: 'SKIP_WAITING' });
     });
 
+    Dom.onId('pwa-update-dismiss', 'click', function() { setVisible('pwa-update-banner', false); });
+
+    // Most people never see the notice: a waiting update is applied the moment the app is
+    // backgrounded.  No reload here (that would drop an open route); the next launch is new.
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState !== 'hidden') return;
+      var waiting = updateRegistration && updateRegistration.waiting;
+      if (!waiting) return;
+      reloadForUpdate = false;
+      setVisible('pwa-update-banner', false);
+      try { waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (error) {}
+    });
+
     navigator.serviceWorker.addEventListener('controllerchange', function() {
       if (!reloadForUpdate) return;
       reloadForUpdate = false;

@@ -751,6 +751,7 @@ body.light .desktop-disclaimer {
   font-size: 14px;
   line-height: 1.35;
 }
+.pwa-banner-text { flex: 1; min-width: 0; overflow: hidden; color: var(--c-text); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .pwa-network-banner { padding-right: 12px; font-weight: 600; }
 .pwa-network-banner i { flex: 0 0 auto; color: var(--s-slow); font-size: 16px; }
 .pwa-network-banner span {
@@ -916,10 +917,43 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   .route-action-btn:hover { filter: brightness(1.06); }
   .route-action-btn:active { transform: scale(0.985); }
   .route-action-btn:disabled { cursor: progress; }
+  /* Notices (offline / update / install): ONE slim 44px line each, hanging off the top card like
+     the toast.  They never push the card; the toast steps below them. */
+  :root { --notice-line: 44px; }
+  body:has(#pwa-network-banner:not(.hidden)) { --notice-nb: var(--notice-line); }
+  body:has(#pwa-update-banner:not(.hidden)) { --notice-ub: var(--notice-line); }
+  body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: var(--notice-line); }
+  .notice-region {
+    top: var(--toast-top, calc(var(--header-h) + 8px));
+    left: var(--toast-left, var(--edge-l));
+    right: auto;
+    width: var(--toast-w, calc(100vw - var(--edge-l) - var(--edge-r)));
+    max-width: calc(100vw - var(--edge-l) - var(--edge-r));
+    margin: 0;
+    gap: 0;
+  }
+  .pwa-network-banner,
+  .pwa-action-banner,
+  .pwa-install-nudge {
+    height: var(--notice-line);
+    padding: 0 0 0 14px;
+    border-width: 0 1px 1px;
+    border-color: var(--c-border);
+    border-radius: 0 0 var(--r-card) var(--r-card);
+    box-shadow: var(--shadow-float);
+    font-size: 14px;
+  }
+  .pwa-network-banner { padding-right: 12px; }
+  .pwa-network-banner span { -webkit-line-clamp: 1; }
+  .pwa-action-banner button,
+  .pwa-install-nudge-actions button { min-width: var(--hit); min-height: var(--hit); padding: 0 12px; background: transparent; color: var(--c-text-2); font-weight: 600; }
+  #pwa-update-action,
+  #pwa-install-nudge-open { color: var(--c-info); font-weight: 700; background: transparent; }
+  #pwa-update-dismiss i { font-size: 14px; }
   /* Toast: a slim strip hanging off the bottom edge of the top card (same left edge and width,
      set from JS via --toast-left / --toast-w), not a floating pill.  Auto-dismisses. */
   .toast {
-    top: var(--toast-top, calc(var(--header-h) + 6px + var(--notice-h)));
+    top: calc(var(--toast-top, calc(var(--header-h) + 6px)) + var(--notice-h));
     left: var(--toast-left, max(var(--edge-l), calc((100vw - 32rem) / 2)));
     right: auto;
     width: var(--toast-w, min(32rem, calc(100vw - var(--edge-l) - var(--edge-r))));
@@ -1009,6 +1043,30 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   .brand-copy small { display: none; }
   .desktop-only-header,
   .desktop-header-action { display: none; }
+  /* Phase D: no header bar on the map.  The map runs full-bleed under the status bar; a soft
+     scrim keeps the iOS clock legible.  Everything stays in the DOM (desktop and tests use it). */
+  body:has(#pg-map.active) { --header-h: var(--safe-top); }
+  body:has(#pg-map.active) .app-header {
+    height: calc(var(--safe-top) + 16px);
+    padding: 0;
+    border: 0;
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--c-bg) 78%, transparent), transparent);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    pointer-events: none;
+  }
+  body:has(#pg-map.active) .app-header-inner { display: none; }
+  /* Secondary pages: no bar either, just the logo (home) in the page's own top-left; the page
+     title is in the content. */
+  body:not(:has(#pg-map.active)) .app-header {
+    background: var(--c-bg);
+    border-bottom: 0;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  body:not(:has(#pg-map.active)) .brand-copy,
+  body:not(:has(#pg-map.active)) .header-tools { display: none; }
   @media (max-width: 640px) {
     #js-clock-wrap { display: none; }
     /* the clock is hidden on phones, so its display toggle has nothing to switch */
@@ -1059,7 +1117,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
      on one compact row.  The planner form opens inside the same surface.  Children carry no
      border / shadow of their own. */
   .map-top-panel {
-    top: calc(var(--header-h) + 6px + var(--notice-h));
+    top: calc(var(--header-h) + 8px);
     left: var(--edge-l);
     right: var(--edge-r);
     margin: 0 auto;
@@ -1071,7 +1129,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   /* PWA contract (tests/pwa.test.js): the top card must clear a visible update
      banner. --notice-h already includes --notice-ub; stated explicitly here. */
   body:has(#pwa-update-banner:not(.hidden)) .map-top-panel {
-    top: calc(var(--header-h) + 6px + var(--notice-h));
+    top: calc(var(--header-h) + 8px); /* the update line hangs under the card; it never pushes it */
   }
   .map-top-panel .glass { border: 0; background: none; box-shadow: none; border-radius: 0; }
   /* The idle "還沒規劃路線" row is gone; the bar only exists (visually) once there is a route. */
@@ -1422,17 +1480,28 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     z-index: 400;
     gap: 0;
   }
-  .map-btn {
+  .map-btn,
+  .map-control-stack #js-theme {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--hit);
+    height: var(--hit);
     border: 1px solid var(--c-border);
     border-top-width: 0;
-    border-radius: 0 0 var(--r-ctl) var(--r-ctl);
+    border-radius: 0;
+    background: var(--c-surface);
     box-shadow: var(--shadow-float);
+    color: var(--c-text);
     font-size: 18px;
     cursor: pointer;
   }
+  /* group = zoom + / zoom - (MapLibre) + locate + theme, one flush column, 44px each */
+  .map-control-stack #js-theme { border-radius: 0 0 var(--r-ctl) var(--r-ctl); color: var(--c-text-2); }
   .map-btn:hover { background: var(--c-surface-2); color: var(--c-text); }
-  #js-loc { color: var(--c-text); }
+  /* locate: idle = plain, locating = spinner, active = tinted blue (matches the map dot) */
+  #js-loc.is-active { background: var(--c-info); border-color: var(--c-info); color: #0b1a2a; }
+  #js-loc.is-locating { color: var(--c-info); }
   #js-fullscreen { display: none; }
   /* The traffic legend lives with the route ribbon once a route exists (see the sheet).  Before
      that the only key that matters is "grey = no data": bare text beside the attribution "i",
@@ -1451,6 +1520,11 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     box-shadow: none;
     pointer-events: none;
   }
+  /* Phase D: nothing grey exists on an empty map, so there is nothing to explain; the
+     "資料不足" guidance lives in the route sheet beside the ribbon. */
+  .map-legend { display: none; }
+  /* ...except while the planner form is open (tests/e2e dashboard.spec.js:545 pins the key there). */
+  #pg-map:has(#route-expanded:not(.hidden)) .map-legend { display: flex; }
   body[data-route-state="ready"] .map-legend { display: none; }
   .map-legend-title { display: none; }
   .map-legend-item { display: none; }
@@ -1493,15 +1567,15 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   #map .maplibregl-ctrl-group {
     position: absolute;
     right: var(--edge-r);
-    bottom: calc(var(--nav-h) + var(--dock) + var(--edge) + 44px);
+    bottom: calc(var(--nav-h) + var(--dock) + var(--edge) + 88px);
     overflow: hidden;
-    border: 1px solid var(--c-border);
+    border: 0;
     border-radius: var(--r-ctl) var(--r-ctl) 0 0;
     background: var(--c-surface);
   }
   #map .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-float); }
-  #map .maplibregl-ctrl-group button { width: var(--hit); height: var(--hit); }
-  #map .maplibregl-ctrl-group button + button { border-top: 1px solid var(--c-border); }
+  #map .maplibregl-ctrl-group button { box-sizing: border-box; width: var(--hit); height: var(--hit); border: 1px solid var(--c-border); }
+  #map .maplibregl-ctrl-group button + button { border-top-width: 0; }
   #map .maplibregl-ctrl-group button:not(:disabled):hover { background-color: var(--c-surface-2); }
   #map .maplibregl-ctrl-compass { display: none; }
   body:not(.light) #map .maplibregl-ctrl-group .maplibregl-ctrl-icon { filter: invert(1); }
