@@ -102,43 +102,59 @@ test('loads the validated Pages camera snapshot without waiting for the producti
   expect(workerCameraRequests).toBe(0);
 });
 
-test('projects cameras that arrive after the route without rebuilding the route', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-chromium', 'Late camera projection behavior runs once.');
-  const pendingCameraRequests = [];
-  let camerasReleased = false;
-  const cameraResponse = () => ({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      status: 'ok',
-      updatedAt: new Date().toISOString(),
-      data: [{
-        id: 'late-route-cam',
-        name: '台北車站沿途測試攝影機',
-        lat: 25.0478,
-        lng: 121.517,
-        imageUrl: 'https://example.com/late-camera.jpg'
-      }]
-    })
-  });
-  await page.route('**/v2/cams', route => {
-    if (camerasReleased) return route.fulfill(cameraResponse());
-    pendingCameraRequests.push(route);
-  });
+// Playwright cannot see requests that the page's service worker forwards, and the app's
+// worker takes control a moment after first load; block it so the stubbed /v2/cams answer
+// is what the page gets no matter when the camera load starts.
+test.describe('late camera projection', () => {
+  test.use({ serviceWorkers: 'block' });
 
-  await page.goto(WORKER);
-  await openRoutePlanner(page);
-  await page.locator('#js-route-start').fill('25.0478,121.5170');
-  await page.locator('#js-route-end').fill('24.7570,121.7530');
-  await page.locator('#js-route-btn').click();
-  await expect.poll(() => page.evaluate(() => Boolean(AppState.activeRoute && RouteMod.active))).toBe(true);
-  await expect.poll(() => pendingCameraRequests.length).toBeGreaterThan(0);
-  expect(await page.evaluate(() => RouteMod.filteredCams.length)).toBe(0);
+  test('projects cameras that arrive after the route without rebuilding the route', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chromium', 'Late camera projection behavior runs once.');
+    let routeRequests = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/v2/routes') routeRequests += 1;
+    });
+    await page.route('**/v2/cams', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        updatedAt: new Date().toISOString(),
+        data: [{
+          id: 'late-route-cam',
+          name: '台北車站沿途測試攝影機',
+          lat: 25.0478,
+          lng: 121.517,
+          imageUrl: 'https://example.com/late-camera.jpg'
+        }]
+      })
+    }));
+    // The national camera list is normally fetched when the browser is idle. Hold that
+    // scheduled fetch back so the route is guaranteed to finish first, then start the load
+    // by hand: "cameras arrive after the route" without racing the request's own 6s timeout.
+    await page.addInitScript(() => { window.requestIdleCallback = () => 0; });
 
-  camerasReleased = true;
-  await Promise.all(pendingCameraRequests.splice(0).map(route => route.fulfill(cameraResponse())));
-  await expect.poll(() => page.evaluate(() => RouteMod.filteredCams.map(camera => camera.id))).toContain('late-route-cam');
-  await expect(page.locator('.desktop-cctv-marker[title="台北車站沿途測試攝影機"]')).toBeVisible();
+    await page.goto(WORKER);
+    await waitForMapReady(page);
+    await openRoutePlanner(page);
+    await page.locator('#js-route-start').fill('25.0478,121.5170');
+    await page.locator('#js-route-end').fill('24.7570,121.7530');
+    await page.locator('#js-route-btn').click();
+    await expect.poll(() => page.evaluate(() => Boolean(AppState.activeRoute && RouteMod.active))).toBe(true);
+    expect(await page.evaluate(() => ({ state: Data.camsState, projected: RouteMod.filteredCams.length })))
+      .toEqual({ state: 'idle', projected: 0 });
+    const routeId = await page.evaluate(() => AppState.activeRoute.routeId);
+    await expect.poll(async () => (await readMapFeatures(page, 'desktop-route'))?.length).toBe(1);
+    const routeFeatures = await readMapFeatures(page, 'desktop-route');
+
+    await page.evaluate(() => Data.loadDynamic());
+    await expect.poll(() => page.evaluate(() => RouteMod.filteredCams.map(camera => camera.id))).toContain('late-route-cam');
+    await expect(page.locator('.desktop-cctv-marker[title="台北車站沿途測試攝影機"]')).toBeVisible();
+    // Projection only: same route, no second route request, route geometry untouched.
+    expect(await page.evaluate(() => AppState.activeRoute.routeId)).toBe(routeId);
+    expect(routeRequests).toBe(1);
+    expect(await readMapFeatures(page, 'desktop-route')).toEqual(routeFeatures);
+  });
 });
 
 test('plans a validated motorcycle route and renders ordered conditions', async ({ page }) => {
@@ -948,6 +964,17 @@ test('retries one transient geocode and route network failure', async ({ page },
       if (url.pathname === '/v2/geocode') {
         window.__networkRetryCounts.geocode += 1;
         if (window.__networkRetryCounts.geocode === 1) return Promise.reject(new TypeError('Failed to fetch'));
+        // The Worker geocodes through Nominatim, which a hermetic run cannot reach (and the
+        // page's service worker hides from Playwright routes): answer successful geocodes
+        // here so the only transient failure is the injected first one.
+        const stations = { 台中車站: [24.1371092, 120.6868719], 桃園車站: [24.9893416, 121.3135656] };
+        const name = url.searchParams.get('q');
+        const [lat, lng] = stations[name];
+        return Promise.resolve(new Response(JSON.stringify({
+          status: 'ok',
+          updatedAt: new Date().toISOString(),
+          data: [{ name, displayName: name, sub: '', lat, lng, type: 'station' }]
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
       }
       if (url.pathname === '/v2/routes' && String(options?.method || 'GET').toUpperCase() === 'POST') {
         window.__networkRetryCounts.route += 1;
@@ -959,6 +986,11 @@ test('retries one transient geocode and route network failure', async ({ page },
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('台中車站');
   await page.locator('#js-route-end').fill('桃園車站');
+  // The place-suggestion list drops over the plan button while the field is focused. Dismiss
+  // it (Escape) instead of picking a suggestion: picking one would supply coordinates and
+  // skip the geocode requests this test exists to exercise.
+  await page.locator('#js-route-end').press('Escape');
+  await expect(page.locator('#suggest-end')).toBeHidden();
   await page.locator('#js-route-btn').click();
 
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
