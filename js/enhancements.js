@@ -270,7 +270,7 @@ var NearbyMod = {
 // press, then watchPosition keeps the dot live.  Idle -> locating (spinner, no toast) -> active.
 // Watching stops when the page is hidden or after 5 minutes without a tap, to save battery.
 var LocateMod = {
-  state: 'idle', watchId: null, last: null, idleTimer: null,
+  state: 'idle', follow: false, watchId: null, last: null, idleTimer: null,
   IDLE_MS: 5 * 60 * 1000,
   ICON: '<i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i>',
   isPhone: function() { return !!(window.matchMedia && window.matchMedia('(max-width: 1199px)').matches); },
@@ -278,13 +278,28 @@ var LocateMod = {
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState !== 'visible' && LocateMod.state !== 'idle') LocateMod.stop(true);
     });
+    // Follow mode (like Google / Apple Maps): any user gesture on the map, or any other feature
+    // moving the camera (set-view, focus-*), turns following off.  The dot keeps updating; the
+    // camera never moves on its own again until locate is pressed.
+    Bus.on('map:user-gesture', function() { LocateMod.setFollow(false); });
+    Bus.on('map:request', function(request) {
+      var action = request && request.action;
+      if (action === 'set-view' || action === 'focus-route' || action === 'focus-camera' || action === 'focus-section') LocateMod.setFollow(false);
+    });
+  },
+  setFollow: function(on) {
+    if (LocateMod.state !== 'active' || LocateMod.follow === on) return;
+    LocateMod.follow = on;
+    LocateMod.paint();
   },
   paint: function() {
     var btn = Dom.byId('js-loc');
     if (!btn) return;
     btn.classList.toggle('is-locating', LocateMod.state === 'locating');
     btn.classList.toggle('is-active', LocateMod.state === 'active');
+    btn.classList.toggle('is-following', LocateMod.state === 'active' && LocateMod.follow);
     btn.setAttribute('aria-pressed', LocateMod.state === 'active' ? 'true' : 'false');
+    btn.setAttribute('data-follow', LocateMod.state === 'active' && LocateMod.follow ? 'true' : 'false');
     btn.setAttribute('aria-busy', LocateMod.state === 'locating' ? 'true' : 'false');
     btn.innerHTML = LocateMod.state === 'locating'
       ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>'
@@ -304,7 +319,8 @@ var LocateMod = {
       action: 'user-location-upsert',
       center: [pos.coords.latitude, pos.coords.longitude],
       accuracyMeters: pos.coords.accuracy,
-      recenter: recenter
+      recenter: recenter,
+      follow: LocateMod.follow
     });
   },
   stop: function(clearDot) {
@@ -314,6 +330,7 @@ var LocateMod = {
     LocateMod.watchId = null;
     clearTimeout(LocateMod.idleTimer);
     LocateMod.state = 'idle';
+    LocateMod.follow = false;
     LocateMod.last = null;
     if (clearDot) Bus.emit('map:request', { action: 'user-location-clear' });
     LocateMod.paint();
@@ -322,14 +339,12 @@ var LocateMod = {
     if (!navigator.geolocation) { Toast.show('\u700f\u89bd\u5668\u4e0d\u652f\u63f4\u5b9a\u4f4d'); return; }
     if (LocateMod.state === 'locating') return;
     if (LocateMod.state === 'active' && LocateMod.last) {
-      // Tapping again recentres; if the map is already on you, it turns locating off.
-      var m = window.MapMod && MapMod.map;
-      var here = LocateMod.last.coords;
-      if (m && m.getCenter) {
-        var c = m.getCenter();
-        if (haversineKm(here.latitude, here.longitude, c.lat, c.lng) < 0.03 && m.getZoom() >= 14.5) { LocateMod.stop(true); return; }
-      }
+      // Following and centred: a second tap turns locating off.  Otherwise (the user panned away,
+      // so follow is off): recentre once and follow again.
+      if (LocateMod.follow) { LocateMod.stop(true); return; }
+      LocateMod.follow = true;
       LocateMod.publish(LocateMod.last, true);
+      LocateMod.paint();
       LocateMod.armIdle();
       return;
     }
@@ -340,12 +355,13 @@ var LocateMod = {
       if (started) return;
       started = true;
       LocateMod.state = 'active';
+      LocateMod.follow = true;
       LocateMod.publish(pos, true);
       LocateMod.paint();
       LocateMod.armIdle();
       if (navigator.geolocation.watchPosition) {
         LocateMod.watchId = navigator.geolocation.watchPosition(function(p) {
-          if (LocateMod.state === 'active') LocateMod.publish(p, false);
+          if (LocateMod.state === 'active') { LocateMod.publish(p, false); if (LocateMod.follow) LocateMod.armIdle(); }
         }, function() {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
       }
     }
