@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, rendererBudgets, stubTerrain, test } from './helpers/hermetic-map.js';
 
 const workerPort = process.env.E2E_WORKER_PORT || '8787';
 const WORKER = `/?worker=http://127.0.0.1:${workerPort}`;
@@ -15,7 +15,20 @@ async function buildFixtureRoute(page) {
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
+  // The panel opens as soon as the route is planned; the conditions follow from a second request.
+  await expect.poll(() => page.evaluate(() => Boolean(AppState.routeConditions))).toBe(true);
 }
+
+// A terrain + pitched camera repaint takes one to three seconds per frame in software WebGL
+// (measured with and without the DOM markers, so it is the terrain pass itself), and every
+// Playwright action waits on a couple of frames. Camera tests therefore wait for the real
+// camera state with a long patience budget instead of a short fixed one. The assertions
+// themselves are unchanged.
+// Terrain frames cost roughly in proportion to the canvas, so the pure camera / 3D tests run on the
+// smallest desktop layout (>= 1200px wide). Nothing they assert depends on the viewport size.
+const CAMERA_VIEWPORT = { width: 1280, height: 720 };
+const CAMERA_SETTLE_MS = 150000;
+const CAMERA_TEST_TIMEOUT_MS = 900000;
 
 test('desktop command center keeps the initial map focused and expands on a ready route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop command-center verification only.');

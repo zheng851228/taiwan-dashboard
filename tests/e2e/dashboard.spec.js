@@ -1,10 +1,16 @@
-import { expect, test } from '@playwright/test';
+import http from 'node:http';
+import { expect, test } from './helpers/hermetic-map.js';
+import { startStaticOrigin } from './helpers/static-origin.js';
+import { isDesktopViewport, mapRoot, readEventMarkerPositions, readMapFeatures, waitForMapReady } from './helpers/map-probe.js';
 
 const workerPort = process.env.E2E_WORKER_PORT || '8787';
 const workerOrigin = `http://127.0.0.1:${workerPort}`;
 const WORKER = `/?worker=${workerOrigin}`;
 
 async function expandConditionsIfCollapsed(page) {
+  // The panel only collapses (phones) once the conditions have rendered; expanding before
+  // that point is undone a moment later, so wait for real data first.
+  await expect(page.locator('#condition-coverage')).not.toHaveText('--');
   const toggle = page.locator('#condition-toggle');
   if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
 }
@@ -22,10 +28,20 @@ async function expectMapReady(page) {
 }
 
 async function expectEventMarker(page, kind) {
-  if ((page.viewportSize()?.width || 0) >= 1200) {
-    await expect(page.locator('.desktop-event-' + kind)).toBeVisible();
+  // The same MapRenderer draws event markers on phones (#map) and desktop (#desktop-map).
+  await expect(mapRoot(page).locator('.desktop-event-marker.desktop-event-' + kind)).toBeVisible();
+}
+
+// The app shell is served (here: from the service-worker cache while offline). The header, and
+// the title in it, only exists on phones' map page as a scrim since the redesign (#83), so a
+// phone proves the shell by its page title and bottom navigation instead of the header heading.
+async function expectAppShell(page) {
+  await expect(page).toHaveTitle('環島路況指揮中心');
+  if (isDesktopViewport(page)) {
+    await expect(page.getByRole('heading', { name: '環島路況指揮中心' })).toBeVisible();
   } else {
-    await expect(page.locator('.route-incident-pin.road-event-' + kind)).toBeVisible();
+    await expect(page.locator('.bottom-navigation')).toBeVisible();
+    await expect(page.locator('#route-collapsed, #route-expanded').first()).toBeVisible();
   }
 }
 
@@ -48,7 +64,7 @@ async function openList(page) {
 }
 
 async function openMap(page) {
-  await page.evaluate(() => NavMod.go('map'));
+  await page.locator('#nav-map').click();
 }
 
 test('ignores an arbitrary Worker override and keeps the production origin', async ({ page }) => {
