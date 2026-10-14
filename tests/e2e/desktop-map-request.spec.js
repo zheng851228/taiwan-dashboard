@@ -1,80 +1,80 @@
 import { expect, test } from '@playwright/test';
 
+// MapMod is the mobile MapLibre map (#76 removed the Leaflet map). It only
+// becomes ready when #map is visible, so these bus-seam checks run at a phone
+// viewport. MapTiler tiles are stubbed so the map loads without network.
+const TILE_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+async function openMobileMap(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('https://api.maptiler.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'image/png',
+    headers: { 'access-control-allow-origin': '*' },
+    body: TILE_PNG
+  }));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => Boolean(
+    window.Bus && window.MapMod && window.MapMod._ready && window.MapMod.map
+  )), { timeout: 15000 }).toBe(true);
+}
+
 test('legacy map view commands flow through map:request bus events', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
-  await page.setViewportSize({ width: 1536, height: 1024 });
-  await page.goto('/');
-
-  await expect.poll(() => page.evaluate(() => Boolean(
-    window.Bus && window.MapMod && window.MapMod.map
-  ))).toBe(true);
+  await openMobileMap(page);
 
   const result = await page.evaluate(() => {
-    const map = window.MapMod.map;
-    const originalInvalidateSize = map.invalidateSize;
-    const originalFocusRoute = window.MapMod.focusRoute;
+    const mapMod = window.MapMod;
+    const map = mapMod.map;
+    const originals = {
+      easeTo: map.easeTo,
+      invalidateSize: mapMod.invalidateSize,
+      focusRouteNow: mapMod._focusRouteNow
+    };
+    const easeCalls = [];
     let invalidateCalls = 0;
     let focusRouteCalls = 0;
 
-    map.invalidateSize = function() {
-      invalidateCalls += 1;
+    map.easeTo = function(options) {
+      easeCalls.push({ center: options.center, zoom: options.zoom });
       return map;
     };
-    window.MapMod.focusRoute = function() {
-      focusRouteCalls += 1;
-    };
+    mapMod.invalidateSize = function() { invalidateCalls += 1; };
+    mapMod._focusRouteNow = function() { focusRouteCalls += 1; };
 
-    window.Bus.emit('map:request', {
-      action: 'set-view',
-      center: [24.1477, 120.6736],
-      zoom: 11
-    });
-    const firstCenter = map.getCenter();
-    const firstZoom = map.getZoom();
-
+    window.Bus.emit('map:request', { action: 'set-view', center: [24.1477, 120.6736], zoom: 11 });
     window.Bus.emit('map:request', { action: 'invalidate-size' });
     window.Bus.emit('map:request', { action: 'focus-route' });
     window.Bus.emit('map:request', { action: 'set-view', center: ['bad', 120], zoom: 9 });
     window.Bus.emit('map:request', { action: 'unknown' });
 
-    const finalCenter = map.getCenter();
-    const finalZoom = map.getZoom();
+    map.easeTo = originals.easeTo;
+    mapMod.invalidateSize = originals.invalidateSize;
+    mapMod._focusRouteNow = originals.focusRouteNow;
 
-    map.invalidateSize = originalInvalidateSize;
-    window.MapMod.focusRoute = originalFocusRoute;
-
-    return {
-      firstCenter: [firstCenter.lat, firstCenter.lng],
-      firstZoom,
-      finalCenter: [finalCenter.lat, finalCenter.lng],
-      finalZoom,
-      invalidateCalls,
-      focusRouteCalls
-    };
+    return { easeCalls, invalidateCalls, focusRouteCalls };
   });
 
-  expect(result.firstCenter[0]).toBeCloseTo(24.1477, 3);
-  expect(result.firstCenter[1]).toBeCloseTo(120.6736, 3);
-  expect(result.firstZoom).toBe(11);
-  expect(result.finalCenter[0]).toBeCloseTo(result.firstCenter[0], 6);
-  expect(result.finalCenter[1]).toBeCloseTo(result.firstCenter[1], 6);
-  expect(result.finalZoom).toBe(11);
+  // MapLibre takes [lng, lat]; the bus payload is [lat, lng].
+  expect(result.easeCalls).toHaveLength(1);
+  expect(result.easeCalls[0].center[0]).toBeCloseTo(120.6736, 6);
+  expect(result.easeCalls[0].center[1]).toBeCloseTo(24.1477, 6);
+  expect(result.easeCalls[0].zoom).toBe(11);
   expect(result.invalidateCalls).toBe(1);
   expect(result.focusRouteCalls).toBe(1);
 });
 
 test('PWA route drawing command flows through map:request bus events', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
-  await page.goto('/');
-
-  await expect.poll(() => page.evaluate(() => Boolean(
-    window.Bus && window.MapMod && window.MapMod.map
-  ))).toBe(true);
+  await openMobileMap(page);
 
   const calls = await page.evaluate(() => {
-    const originalDrawRoute = window.MapMod.drawRoute;
+    const original = window.MapMod._drawRouteNow;
     const observed = [];
-    window.MapMod.drawRoute = function(coords, mode) {
+    window.MapMod._drawRouteNow = function(coords, mode) {
       observed.push([coords, mode]);
     };
 
@@ -86,7 +86,7 @@ test('PWA route drawing command flows through map:request bus events', async ({ 
     window.Bus.emit('map:request', { action: 'draw-route', coords: [[24.1, 120.6]], mode: 'car' });
     window.Bus.emit('map:request', { action: 'draw-route', coords: null, mode: 'car' });
 
-    window.MapMod.drawRoute = originalDrawRoute;
+    window.MapMod._drawRouteNow = original;
     return observed;
   });
 
@@ -97,26 +97,21 @@ test('PWA route drawing command flows through map:request bus events', async ({ 
 
 test('route-condition map commands flow through map:request bus events', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
-  await page.goto('/');
+  await openMobileMap(page);
 
-  await expect.poll(() => page.evaluate(() => Boolean(
-    window.Bus && window.MapMod && window.MapMod.map
-  ))).toBe(true);
-
-  const calls = await page.evaluate(() => {
-    const originals = {
-      drawStartEnd: window.MapMod.drawStartEnd,
-      focusCam: window.MapMod.focusCam,
-      drawConditionSections: window.MapMod.drawConditionSections,
-      focusSection: window.MapMod.focusSection
-    };
+  const result = await page.evaluate(() => {
+    const mapMod = window.MapMod;
+    const names = ['_drawStartEndNow', '_focusCamNow', '_drawConditionSectionsNow', '_focusSectionNow'];
+    const originals = {};
     const observed = [];
+    names.forEach(name => { originals[name] = mapMod[name]; });
 
-    window.MapMod.drawStartEnd = function(points) { observed.push(['draw-start-end', points]); };
-    window.MapMod.focusCam = function(camera) { observed.push(['focus-camera', camera && camera.id]); };
-    window.MapMod.drawConditionSections = function(sections) { observed.push(['draw-condition-sections', sections && sections.length]); };
-    window.MapMod.focusSection = function(order) { observed.push(['focus-section', order]); };
+    mapMod._drawStartEndNow = function(points) { observed.push(['draw-start-end', points]); };
+    mapMod._focusCamNow = function(camera) { observed.push(['focus-camera', camera && camera.id]); };
+    mapMod._drawConditionSectionsNow = function(sections) { observed.push(['draw-condition-sections', sections && sections.length]); };
+    mapMod._focusSectionNow = function(order) { observed.push(['focus-section', order]); };
 
+    // Payload keys exactly as route-conditions.js / pwa.js emit them.
     window.Bus.emit('map:request', { action: 'draw-start-end', points: [[24.1, 120.6], [24.2, 120.7]] });
     window.Bus.emit('map:request', { action: 'focus-camera', camera: { id: 'camera-1', lat: 24.1, lng: 120.6 } });
     window.Bus.emit('map:request', { action: 'draw-condition-sections', sections: [{ order: 1 }] });
@@ -124,19 +119,25 @@ test('route-condition map commands flow through map:request bus events', async (
     window.Bus.emit('map:request', { action: 'focus-camera' });
     window.Bus.emit('map:request', { action: 'draw-condition-sections', sections: null });
     window.Bus.emit('map:request', { action: 'focus-section', order: 'bad' });
+    const busCalls = observed.splice(0);
 
-    window.MapMod.drawStartEnd = originals.drawStartEnd;
-    window.MapMod.focusCam = originals.focusCam;
-    window.MapMod.drawConditionSections = originals.drawConditionSections;
-    window.MapMod.focusSection = originals.focusSection;
+    // MapMod's own wrappers use `coords` / `cam`, and drawStartEnd(null) clears.
+    mapMod.focusCam({ id: 'camera-2', lat: 24.3, lng: 120.8 });
+    mapMod.drawStartEnd(null);
+    const wrapperCalls = observed.splice(0);
 
-    return observed;
+    names.forEach(name => { mapMod[name] = originals[name]; });
+    return { busCalls, wrapperCalls };
   });
 
-  expect(calls).toEqual([
+  expect(result.busCalls).toEqual([
     ['draw-start-end', [[24.1, 120.6], [24.2, 120.7]]],
     ['focus-camera', 'camera-1'],
     ['draw-condition-sections', 1],
     ['focus-section', 3]
+  ]);
+  expect(result.wrapperCalls).toEqual([
+    ['focus-camera', 'camera-2'],
+    ['draw-start-end', []]
   ]);
 });
