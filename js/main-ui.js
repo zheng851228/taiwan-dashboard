@@ -365,17 +365,37 @@
         return;
       }
       var action = request.action;
+      // Bus emitters (route-conditions.js, pwa.js) send `points` / `camera`;
+      // MapMod's own wrappers send `coords` / `cam`. Accept both, and drop
+      // malformed payloads instead of handing them to the renderer.
+      var points = Array.isArray(request.points) ? request.points : request.coords;
+      var camera = request.camera || request.cam;
       if (action === 'invalidate-size') MapMod.invalidateSize();
       else if (action === 'focus-route') MapMod._focusRouteNow();
       else if (action === 'nearby-overlay-upsert') MapMod._nearbyUpsert(request.center, request.radiusMeters);
       else if (action === 'nearby-overlay-radius') MapMod._nearbySetRadius(request.radiusMeters);
       else if (action === 'nearby-overlay-clear') MapMod._nearbyClear();
-      else if (action === 'clear-waypoint-overlays') { /* no-op: no waypoint overlays */ }
-      else if (action === 'draw-route') MapMod._drawRouteNow(request.coords, request.mode);
-      else if (action === 'draw-start-end') MapMod._drawStartEndNow(request.coords);
-      else if (action === 'focus-camera') MapMod._focusCamNow(request.cam);
-      else if (action === 'draw-condition-sections') MapMod._drawConditionSectionsNow(request.sections);
-      else if (action === 'focus-section') MapMod._focusSectionNow(request.order);
+      else if (action === 'clear-waypoint-overlays') {
+        // MapLibre draws no waypoint overlays; keep the shared state contract.
+        if (window.AppState) AppState.waypointMapMarkers = [];
+      }
+      else if (action === 'draw-route') {
+        if (Array.isArray(request.coords) && request.coords.length >= 2) MapMod._drawRouteNow(request.coords, request.mode);
+      }
+      else if (action === 'draw-start-end') {
+        // null/undefined = clear (RouteMod.clear relies on this); arrays draw.
+        if (points == null) MapMod._drawStartEndNow([]);
+        else if (Array.isArray(points)) MapMod._drawStartEndNow(points);
+      }
+      else if (action === 'focus-camera') {
+        if (camera) MapMod._focusCamNow(camera);
+      }
+      else if (action === 'draw-condition-sections') {
+        if (Array.isArray(request.sections)) MapMod._drawConditionSectionsNow(request.sections);
+      }
+      else if (action === 'focus-section') {
+        if (Number.isFinite(Number(request.order)) && request.order !== null && request.order !== '') MapMod._focusSectionNow(Number(request.order));
+      }
       else if (action === 'draw-cameras') MapMod._drawCamerasNow();
       else if (action === 'clear-cameras') MapMod._clearCamerasNow();
       else if (action === 'clear-route') MapMod._clearRouteNow();
