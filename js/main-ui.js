@@ -160,6 +160,10 @@
       ['map','list','tools'].forEach(function(k) {
         Dom.onId('nav-' + k, 'click', function() { NavMod.go(k); });
       });
+      if (window.matchMedia) {
+        var brandQuery = window.matchMedia('(max-width: 1199px)');
+        if (brandQuery.addEventListener) brandQuery.addEventListener('change', NavMod.placeBrand);
+      }
     },
     go: function(key) {
       ['map','list','tools'].forEach(function(k) {
@@ -171,7 +175,28 @@
           btn.classList.toggle('text-slate-500', k !== key);
         }
       });
+      NavMod.placeBrand();
       if (key === 'map') setTimeout(function() { MapMod.invalidateSize(); }, 50);
+    },
+    // Phones: the logo (#brand-home, still the "back to the planner" button) lives in the title row
+    // of the page being shown (路況 / 工具); on the map and on desktop it stays in the header.
+    placeBrand: function() {
+      var brand = Dom.byId('brand-home');
+      var inner = document.querySelector('.app-header-inner');
+      if (!brand || !inner) return;
+      var phone = window.matchMedia && window.matchMedia('(max-width: 1199px)').matches;
+      var row = null;
+      if (phone) {
+        if (document.getElementById('pg-list').classList.contains('active')) row = document.querySelector('#pg-list .list-filter-head');
+        else if (document.getElementById('pg-tools').classList.contains('active')) row = document.querySelector('#pg-tools .tool-card-head');
+      }
+      if (row) {
+        if (brand.parentNode !== row) row.insertBefore(brand, row.firstChild);
+        brand.classList.add('in-title-row');
+      } else {
+        brand.classList.remove('in-title-row');
+        if (brand.parentNode !== inner) inner.insertBefore(brand, inner.firstChild);
+      }
     }
   };
 

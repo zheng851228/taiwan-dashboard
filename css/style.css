@@ -524,7 +524,9 @@ body.light .desktop-disclaimer {
 .list-filter-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 10px; }
 .list-filter-hint { max-width: 12rem; color: var(--c-text-3); font-size: 13px; line-height: 1.4; text-align: right; }
 @media (max-width: 599px) {
-  .list-filter-head { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  /* Phones: the title row (logo + page title) is the page's only header; the hint is redundant. */
+  .list-filter-head { align-items: center; justify-content: flex-start; }
+  .list-filter-hint { display: none; }
 }
 /* Region tabs: one segmented row, selected = raised ink fill. */
 .list-tabs-grid {
@@ -1045,7 +1047,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   .desktop-header-action { display: none; }
   /* Phase D: no header bar on the map.  The map runs full-bleed under the status bar; a soft
      scrim keeps the iOS clock legible.  Everything stays in the DOM (desktop and tests use it). */
-  body:has(#pg-map.active) { --header-h: var(--safe-top); }
+  body { --header-h: var(--safe-top); }
   body:has(#pg-map.active) .app-header {
     height: calc(var(--safe-top) + 16px);
     padding: 0;
@@ -1056,17 +1058,12 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     pointer-events: none;
   }
   body:has(#pg-map.active) .app-header-inner { display: none; }
-  /* Secondary pages: no bar either, just the logo (home) in the page's own top-left; the page
-     title is in the content. */
-  body:not(:has(#pg-map.active)) .app-header {
-    background: var(--c-bg);
-    border-bottom: 0;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: none;
-  }
-  body:not(:has(#pg-map.active)) .brand-copy,
-  body:not(:has(#pg-map.active)) .header-tools { display: none; }
+  /* Secondary pages: no bar.  JS (NavMod.placeBrand) moves #brand-home into the page's title row
+     (logo mark, then the title); the header strip itself is never shown off the map. */
+  body:not(:has(#pg-map.active)) .app-header { display: none; }
+  .brand-home.in-title-row { flex: 0 0 auto; gap: 0; margin-right: 0; }
+  .brand-home.in-title-row .brand-copy { display: none; }
+  #pg-tools .tools-hero-shell .tool-card-head { justify-content: flex-start; }
   @media (max-width: 640px) {
     #js-clock-wrap { display: none; }
     /* the clock is hidden on phones, so its display toggle has nothing to switch */
@@ -1523,8 +1520,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   /* Phase D: nothing grey exists on an empty map, so there is nothing to explain; the
      "資料不足" guidance lives in the route sheet beside the ribbon. */
   .map-legend { display: none; }
-  /* ...except while the planner form is open (tests/e2e dashboard.spec.js:545 pins the key there). */
-  #pg-map:has(#route-expanded:not(.hidden)) .map-legend { display: flex; }
   body[data-route-state="ready"] .map-legend { display: none; }
   .map-legend-title { display: none; }
   .map-legend-item { display: none; }
@@ -2156,7 +2151,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   .pwa-install-card > p { color: var(--c-text-3); font-size: 13px; }
   /* Secondary pages: keep content clear of the fixed header + bottom nav. */
   #pg-list,
-  #pg-tools { padding: calc(var(--header-h) + 12px) calc(var(--safe-right) + 16px) calc(var(--nav-h) + 16px) calc(var(--safe-left) + 16px) !important; }
+  #pg-tools { padding: calc(var(--header-h) + 8px) calc(var(--safe-right) + 16px) calc(var(--nav-h) + 16px) calc(var(--safe-left) + 16px) !important; }
   body.light input,
   body.light textarea,
   body.light select { background: var(--c-surface-2) !important; color: var(--c-text); }

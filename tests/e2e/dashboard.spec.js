@@ -551,7 +551,8 @@ test('keeps the mobile route planner focused on the active task', async ({ page 
 
   await expect(page.locator('#route-expanded')).toBeVisible();
   await expect(page.locator('#ride-status-card')).toBeHidden();
-  await expect(page.locator('.map-legend-item').filter({ hasText: '資料不足' })).toBeVisible();
+  // No route yet, so nothing grey to explain: the 資料不足 key stays hidden while planning.
+  await expect(page.locator('.map-legend-item').filter({ hasText: '資料不足' })).toBeHidden();
   await expect(page.locator('.route-title-kicker')).toBeHidden();
 
   const plannerBox = await page.locator('#route-expanded').boundingBox();
