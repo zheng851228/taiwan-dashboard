@@ -1039,6 +1039,11 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 68px; }
     right: var(--edge);
     margin: 0 auto;
   }
+  /* PWA contract (tests/pwa.test.js): the top card must clear a visible update
+     banner. --notice-h already includes --notice-ub; stated explicitly here. */
+  body:has(#pwa-update-banner:not(.hidden)) .map-top-panel {
+    top: calc(var(--header-h) + 8px + var(--notice-h));
+  }
   .ride-verdict-shell {
     display: flex;
     align-items: center;
