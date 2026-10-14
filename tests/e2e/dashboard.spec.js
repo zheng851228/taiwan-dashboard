@@ -600,15 +600,23 @@ test('lets users optionally hide and restore the top clock and route banner', as
   });
   await page.goto(WORKER);
 
-  await expect(page.locator('#js-clock-wrap')).toBeVisible();
-  await page.locator('#js-clock-hide').click();
-  await expect(page.locator('#js-clock-wrap')).toBeHidden();
+  if ((page.viewportSize()?.width || 0) <= 640) {
+    // Phone redesign (#83): the map page has no header bar, so there is no clock to hide or
+    // restore and the Tools page does not offer a switch for it.
+    await expect(page.locator('#js-clock-wrap')).toBeHidden();
+    await openTools(page);
+    await expect(page.locator('#js-clock-setting')).toBeHidden();
+  } else {
+    await expect(page.locator('#js-clock-wrap')).toBeVisible();
+    await page.locator('#js-clock-hide').click();
+    await expect(page.locator('#js-clock-wrap')).toBeHidden();
 
-  await openTools(page);
-  await expect(page.locator('#js-clock-setting')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#js-clock-setting-state')).toHaveText('已隱藏');
-  await page.locator('#js-clock-setting').click();
-  await expect(page.locator('#js-clock-wrap')).toBeVisible();
+    await openTools(page);
+    await expect(page.locator('#js-clock-setting')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#js-clock-setting-state')).toHaveText('已隱藏');
+    await page.locator('#js-clock-setting').click();
+    await expect(page.locator('#js-clock-wrap')).toBeVisible();
+  }
 
   if ((page.viewportSize()?.width || 0) >= 1200) {
     await page.locator('#desktop-settings-toggle').click();
@@ -702,8 +710,9 @@ test('keeps the completed mobile route map-first with compact controls', async (
     page.locator('#route-conditions-panel').boundingBox(),
     page.locator('.bottom-navigation').boundingBox()
   ]);
-  expect(routeBox?.height).toBeLessThanOrEqual(48);
-  expect(conditionsBox?.height).toBeLessThanOrEqual(52);
+  // Redesign (#83) budget at 390x664: top card 60px, collapsed conditions peek sheet 112px.
+  expect(routeBox?.height).toBeLessThanOrEqual(64);
+  expect(conditionsBox?.height).toBeLessThanOrEqual(116);
   expect(
     routeBox && conditionsBox && conditionsBox.y - (routeBox.y + routeBox.height)
   ).toBeGreaterThanOrEqual(350);
@@ -759,7 +768,11 @@ test('surfaces a conditions refresh failure even when the mobile panel was colla
 
   await expect(page.locator('#route-conditions-panel')).not.toHaveClass(/is-collapsed/);
   await expect(page.locator('#condition-error')).toBeVisible();
-  await expect(page.locator('#condition-error')).toContainText('測試更新失敗');
+  // Snapshot-honesty copy (#78): what happened and what to do, never the raw engineering error.
+  await expect(page.locator('#condition-error')).toContainText('沿途路況快照暫時無法取得');
+  await expect(page.locator('#condition-error')).toContainText('稍後再試');
+  await expect(page.locator('#condition-error')).not.toContainText('測試更新失敗');
+  await expect(page.locator('#condition-retry')).toBeVisible();
   await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'true');
 });
@@ -774,18 +787,31 @@ test('turns a hanging conditions request into an actionable timeout', async ({ p
   await page.locator('#js-route-btn').click();
   await expect(page.locator('#route-conditions-panel')).toBeVisible();
   await page.evaluate(() => {
-    Config.CONDITIONS_TIMEOUT_MS = 40;
-    const originalFetch = window.fetch;
+    // 1000 ms is the shortest timeout the request layer honours (services.js clamps anything lower).
+    Config.CONDITIONS_TIMEOUT_MS = 1000;
+    window.__realFetch = window.fetch;
     window.fetch = (input, options) => String(input).includes('/conditions')
       ? new Promise(() => {})
-      : originalFetch(input, options);
+      : window.__realFetch(input, options);
     RouteConditionsMod.refresh();
   });
 
-  await expect(page.locator('#condition-error')).toBeVisible({ timeout: 3000 });
-  await expect(page.locator('#condition-error')).toContainText('逾時');
+  // A request that never answers must still end in a visible, actionable failure. The app gives
+  // up after the timeout above; the wait here is only patience for a busy CPU, not a speed claim.
+  await expect(page.locator('#condition-error')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#condition-error')).toContainText('沿途路況快照暫時無法取得');
+  await expect(page.locator('#condition-error')).toContainText('稍後再試');
   await expect(page.locator('#condition-source-badge')).toHaveText('更新失敗');
   await expect(page.locator('#condition-event-status')).toContainText('目前沒有可用的快照資料');
+
+  // ...and the retry it offers works once the network answers again.
+  await page.evaluate(() => {
+    Config.CONDITIONS_TIMEOUT_MS = 8000;
+    window.fetch = window.__realFetch;
+  });
+  await page.locator('#condition-retry').click();
+  await expect(page.locator('#condition-error')).toBeHidden();
+  await expect(page.locator('#condition-source-badge')).not.toHaveText('更新失敗');
 });
 
 test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
@@ -1293,7 +1319,7 @@ test('keeps manual route entry available when location is denied', async ({ page
   await expect(page.locator('#js-route-start')).toHaveValue('台中市政府');
 });
 
-test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }) => {
+test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }, testInfo) => {
   test.skip(browserName !== 'chromium', 'Offline service-worker verification runs in Chromium.');
   await page.goto(WORKER);
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -1307,25 +1333,77 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
     return snapshot?.route?.validation?.status;
   })).toBe('safe');
   await page.reload();
-  await expect(page.getByRole('heading', { name: '\u74b0\u5cf6\u8def\u6cc1\u6307\u63ee\u4e2d\u5fc3' })).toBeVisible();
+  await expectAppShell(page);
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole('heading', { name: '\u74b0\u5cf6\u8def\u6cc1\u6307\u63ee\u4e2d\u5fc3' })).toBeVisible();
+  await expectAppShell(page);
   await expect(page.locator('#pwa-network-banner')).toBeVisible();
   await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#route-summary')).toContainText('離線快照');
   await expect(page.locator('#js-route-status')).toContainText('快照資料暫停更新');
-  await expect.poll(() => page.evaluate(() =>
-    Array.isArray(MapMod.routeLayer)
-      && MapMod.routeLayer.length === 3
-      && MapMod.routeLayer.every((layer) => MapMod.map.hasLayer(layer))
-  )).toBe(true);
-  const apiResult = await page.evaluate(async (origin) => {
-    const response = await fetch(origin + '/v2/weather');
-    return { status: response.status, body: await response.json() };
-  }, workerOrigin);
-  expect(apiResult.status).toBe(503);
-  expect(apiResult.body.status).toBe('error');
-  expect(apiResult.body.message).toContain('\u96e2\u7dda');
+  // The restored snapshot route is drawn on the (tile-less) map: one route line, and the three
+  // route layers (casing, glow, core) that render it.
+  await waitForMapReady(page);
+  await expect.poll(async () => (await readMapFeatures(page, 'desktop-route'))?.[0]?.geometry.coordinates.length).toBeGreaterThan(1);
+  expect(await page.evaluate((isDesktop) => {
+    const map = (isDesktop ? DesktopDashboardMod.getRenderer() : MapMod.renderer).map;
+    return ['desktop-route-casing', 'desktop-route-glow', 'desktop-route-core'].map((id) => Boolean(map.getLayer(id)));
+  }, isDesktopViewport(page))).toEqual([true, true, true]);
+  // API contract while offline: a refused request is a 503 offline notice, never stale data.
+  // Playwright's offline emulation does not reach requests the service worker itself makes
+  // (the worker's fetch to loopback still succeeded while the context was offline), so the API
+  // going away is modelled directly: a throwaway API on the one extra loopback port the CSP
+  // allows answers once, then is shut down, and the very same URL must now be refused.
+  if (testInfo.project.name === 'desktop-chromium') {
+    await context.setOffline(false);
+    const api = http.createServer((request, response) => {
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store'
+      });
+      response.end(JSON.stringify({ status: 'ok', updatedAt: new Date().toISOString(), data: { 台北市: { temp: 27 } } }));
+    });
+    await new Promise((resolve) => api.listen(8790, '127.0.0.1', resolve));
+    const readWeather = () => page.evaluate(async () => {
+      const response = await fetch('http://127.0.0.1:8790/v2/weather');
+      return { status: response.status, body: await response.json() };
+    });
+    const live = await readWeather();
+    expect(live.status).toBe(200);
+    expect(live.body.data['台北市'].temp).toBe(27);
+    await new Promise((resolve) => { api.close(resolve); api.closeAllConnections(); });
+    const offline = await readWeather();
+    expect(offline.status).toBe(503);
+    expect(offline.body.status).toBe('error');
+    expect(offline.body.data).toBeNull();
+    expect(offline.body.message).toContain('離線');
+  }
+});
+
+test('serves the cached app shell when its own origin stops answering', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Service-worker shell fallback runs once.');
+  // Playwright's offline emulation does not reach the service worker's own fetches, so the shell
+  // fallback cannot be exercised by setOffline. Instead the app is served from a throwaway origin
+  // and that origin is shut down. It is opened as `localhost`: the worker treats every
+  // 127.0.0.1 request as API traffic (network only), so on the shared 127.0.0.1 server it has
+  // no cached shell to fall back to by design.
+  const site = await startStaticOrigin();
+  try {
+    await page.goto(`${site.origin}/?worker=${workerOrigin}`);
+    await expectAppShell(page);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+
+    await site.stop();
+    await page.reload();
+    await expectAppShell(page);
+    expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    // The cached scripts and styles booted the app, not just the static HTML.
+    await expect(page.locator('#route-collapsed:visible, #route-expanded:visible')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(window.AppState && window.Config))).toBe(true);
+  } finally {
+    await site.stop();
+  }
 });
