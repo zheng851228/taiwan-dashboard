@@ -511,7 +511,7 @@
           state.terrainMode = '2d';
           Storage.set(TERRAIN_PREF_KEY, '2d');
           var note = Dom.byId('desktop-source-note');
-          if (note) note.textContent = '3D 地形暫時無法載入，已切換 2D；路況資料仍可使用。';
+          if (note) note.textContent = '3D 地形暫時無法載入，已切換 2D；路況資料仍可使用。灰色資料不足，不代表順暢。';
           syncTerrainControls();
           syncCameraControls();
         }
