@@ -763,9 +763,9 @@
       if (!renderer) return;
       renderer.routeCoords = [];
       renderer.routeFitApplied = false;
-      var routeSource = renderer.map && renderer.map.getSource('desktop-route');
-      if (routeSource && typeof routeSource.setData === 'function') {
-        try { routeSource.setData({ type: 'FeatureCollection', features: [] }); } catch (error) {}
+      // Through the renderer so its record of what is drawn stays in step.
+      if (typeof renderer._setSourceData === 'function') {
+        try { renderer._setSourceData('desktop-route', { type: 'FeatureCollection', features: [] }); } catch (error) {}
       }
       // drawConditionSections([]) also removes its event DOM markers.
       if (typeof renderer.drawConditionSections === 'function') renderer.drawConditionSections([]);

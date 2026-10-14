@@ -557,3 +557,124 @@ test('missing Tailwind shell styles show a recovery screen instead of overlappin
   expect(bounds.width).toBeGreaterThanOrEqual(1534);
   expect(bounds.height).toBeGreaterThanOrEqual(1022);
 });
+
+test('selecting a route stop zooms the desktop map to that section', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop section focus verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(WORKER);
+  await buildFixtureRoute(page);
+  await expect(page.locator('body')).toHaveAttribute('data-route-state', 'ready');
+
+  const stops = page.locator('.desktop-route-stop');
+  expect(await stops.count()).toBeGreaterThan(1);
+  const order = Number(await stops.last().getAttribute('data-section-order'));
+
+  // The section's own geometry (GeoJSON [lng, lat]) against what the map is showing right now.
+  const readView = (sectionOrder) => page.evaluate((wanted) => {
+    const renderer = window.DesktopDashboardMod.getRenderer();
+    const map = renderer.map;
+    const sections = renderer.getSourceData('desktop-sections');
+    const feature = sections && sections.features.find((item) => Number(item.properties.order) === wanted);
+    const view = { zoom: map.getZoom(), moving: map.isMoving(), found: Boolean(feature), sectionInView: false, centerInSection: false };
+    if (feature) {
+      const lngs = feature.geometry.coordinates.map((point) => point[0]);
+      const lats = feature.geometry.coordinates.map((point) => point[1]);
+      const box = [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+      const bounds = map.getBounds();
+      view.sectionInView = bounds.contains([box[0], box[1]]) && bounds.contains([box[2], box[3]]);
+      const center = map.getCenter();
+      view.centerInSection = center.lng >= box[0] && center.lng <= box[2] && center.lat >= box[1] && center.lat <= box[3];
+    }
+    return view;
+  }, sectionOrder);
+
+  // Let the map finish fitting the whole route before taking the baseline.
+  await expect.poll(async () => (await readView(order)).moving, { timeout: CAMERA_SETTLE_MS }).toBe(false);
+  const before = await readView(order);
+  expect(before.found).toBe(true);
+
+  await stops.last().click();
+  await expect(stops.last()).toHaveClass(/active/);
+  await expect.poll(async () => {
+    const view = await readView(order);
+    return !view.moving && view.zoom > before.zoom + 0.5;
+  }, { timeout: CAMERA_SETTLE_MS }).toBe(true);
+  const after = await readView(order);
+  expect(after.sectionInView).toBe(true);
+  expect(after.centerInSection).toBe(true);
+});
+
+// The renderer's terrain fallback is a wall-clock budget; hermetic-map.js holds it so these two
+// tests (and every other 3D test) decide when it runs out instead of racing a slow software GPU.
+test('a 3D switch made after the map loaded is not abandoned when the load-time budget runs out', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop terrain verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
+  // A terrain provider the test controls: the TileJSON answers, the DEM tiles wait.
+  let deliverTiles;
+  const tilesDelivered = new Promise((resolve) => { deliverTiles = resolve; });
+  await stubTerrain(page, { tileGate: tilesDelivered });
+  const budgets = rendererBudgets(page);
+  try {
+    await page.goto(WORKER);
+    await expect.poll(() => page.evaluate(() => Boolean(window.DesktopDashboardMod.getRenderer()))).toBe(true);
+
+    // Everything the renderer armed up to now belongs to the map load, which started in 2D.
+    const loadMark = await budgets.mark();
+    await page.locator('#desktop-map-3d').click();
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('3d');
+
+    // The eight seconds counted from map load run out while the DEM tiles are still on their way.
+    // The switch only just happened, so it must not be written off for them.
+    await budgets.expire({ kind: 'terrain', through: loadMark });
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('3d');
+    await expect(page.locator('#desktop-source-note')).not.toContainText('3D 地形暫時無法載入');
+
+    // The terrain arrives, the switch's own budget runs out with it loaded, and 3D stays.
+    deliverTiles();
+    await expect.poll(
+      () => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.isSourceLoaded('terrainSource')),
+      { timeout: CAMERA_SETTLE_MS * 2 }
+    ).toBe(true);
+    await budgets.expire({ kind: 'terrain' });
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
+    await expect(page.locator('#desktop-source-note')).not.toContainText('3D 地形暫時無法載入');
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('3d');
+  } finally {
+    deliverTiles();
+  }
+});
+
+test('3D terrain that never arrives falls back to 2D and says so', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop terrain verification only.');
+  test.setTimeout(CAMERA_TEST_TIMEOUT_MS);
+  await page.setViewportSize(CAMERA_VIEWPORT);
+  let deliverTiles;
+  const tilesDelivered = new Promise((resolve) => { deliverTiles = resolve; });
+  await stubTerrain(page, { tileGate: tilesDelivered });
+  const budgets = rendererBudgets(page);
+  try {
+    await page.goto(WORKER);
+    await expect.poll(() => page.evaluate(() => Boolean(window.DesktopDashboardMod.getRenderer()))).toBe(true);
+
+    await page.locator('#desktop-map-3d').click();
+    await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
+    await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
+    // The switch armed its own budget, and the provider never answers within it.
+    expect(await budgets.pending()).toContain('terrain');
+    await budgets.expire({ kind: 'terrain' });
+
+    await expect(page.locator('#desktop-map-2d')).toHaveClass(/active/);
+    await expect(page.locator('#desktop-map-3d')).not.toHaveClass(/active/);
+    await expect(page.locator('#desktop-camera-toggle')).toBeDisabled();
+    await expect(page.locator('#desktop-source-note')).toContainText('3D 地形暫時無法載入');
+    expect(await page.evaluate(() => window.DesktopDashboardMod.getRenderer().mode)).toBe('2d');
+    expect(await page.evaluate(() => localStorage.getItem('tw_desktop_terrain_mode_v1'))).toBe('2d');
+  } finally {
+    deliverTiles();
+  }
+});

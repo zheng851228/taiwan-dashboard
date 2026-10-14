@@ -209,14 +209,7 @@
           self.map.on('load', function() {
             self._addDataLayers();
             self._addPlaceLabels();
-            if (!simpleMode) {
-              self.terrainTimer = window.setTimeout(function() {
-                if (self.mode === '3d' && self.map && !self.map.isSourceLoaded('terrainSource')) {
-                  self.setTerrainMode('2d');
-                  self.onStatus('terrain-unavailable');
-                }
-              }, 8000);
-            }
+            if (self.mode === '3d') self._armTerrainFallback();
             self._syncProviderLogo();
             self.onReady(self);
             if (self.satelliteAvailable && self.basemap === 'satellite') {
@@ -312,9 +305,17 @@
             .addTo(self.map);
         });
       },
+      // MapLibre keeps its own copy of GeoJSON source data in a private,
+      // version-specific shape (v6: `{ geojson }`), so the renderer remembers
+      // what it last drew instead of reading `source._data`.
       _setSourceData: function(id, data) {
+        this._sourceData = this._sourceData || {};
+        this._sourceData[id] = data;
         var source = this.map && this.map.getSource(id);
         if (source) source.setData(data);
+      },
+      getSourceData: function(id) {
+        return this._sourceData && this._sourceData[id] || null;
       },
       clear: function() {
         this._setSourceData('desktop-route', { type: 'FeatureCollection', features: [] });
@@ -363,9 +364,8 @@
       },
       focusSection: function(order) {
         this.selectedOrder = Number(order);
-        var source = this.map && this.map.getSource('desktop-sections');
-        if (!source || !source._data) return;
-        var feature = (source._data.features || []).find(function(item) { return Number(item.properties.order) === Number(order); });
+        var sections = this.getSourceData('desktop-sections');
+        var feature = sections && (sections.features || []).find(function(item) { return Number(item.properties.order) === Number(order); });
         if (!feature) return;
         var bounds = makeBounds(this.module, feature.geometry.coordinates.map(function(point) { return [point[1], point[0]]; }));
         if (bounds) this.map.fitBounds(bounds, { padding: 90, maxZoom: 13, duration: 550 });
@@ -392,8 +392,8 @@
         if (normalized === 'reset' && !this.routeCoords.length) {
           camera = { center: [Config.MAP_CENTER[1], Config.MAP_CENTER[0]], zoom: Config.MAP_ZOOM, pitch: 0, bearing: 0 };
         } else if (normalized === 'along') {
-          var sectionSource = this.map.getSource('desktop-sections');
-          var feature = sectionSource && sectionSource._data && (sectionSource._data.features || []).find(function(item) {
+          var sectionData = this.getSourceData('desktop-sections');
+          var feature = sectionData && (sectionData.features || []).find(function(item) {
             return selected !== null && Number(item.properties.order) === Number(selected);
           });
           var points = feature && feature.geometry && feature.geometry.coordinates;
@@ -453,10 +453,27 @@
       resetView: function() {
         return this.setCameraPreset('reset');
       },
+      // 3D gets 8 seconds, counted from the moment terrain is switched on (map load when it
+      // starts in 3D), to get its DEM tiles; otherwise fall back to 2D and say so. Counting
+      // from map load instead would abandon a 3D switch made shortly before that mark.
+      _armTerrainFallback: function() {
+        var self = this;
+        if (simpleMode) return;
+        if (this.terrainTimer) window.clearTimeout(this.terrainTimer);
+        this.terrainTimer = window.setTimeout(function() {
+          self.terrainTimer = null;
+          if (self.mode === '3d' && self.map && !self.map.isSourceLoaded('terrainSource')) {
+            self.setTerrainMode('2d');
+            self.onStatus('terrain-unavailable');
+          }
+        }, 8000);
+      },
       setTerrainMode: function(mode) {
         if (!this.map || simpleMode) return;
+        var wasMode = this.mode;
         this.mode = mode === '3d' ? '3d' : '2d';
         if (this.mode === '3d') {
+          if (wasMode !== '3d') this._armTerrainFallback();
           this.map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
           this.map.setPitch(58);
           if (this.map.getLayer('hillshade')) this.map.setLayoutProperty('hillshade', 'visibility', 'visible');
