@@ -320,7 +320,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
         if (ce) ce.classList.toggle('hidden', !end);
         var wpCount = AppState.pendingWaypoints.length;
         if (start && end) {
-          var msg = wpCount > 0 ? '起點→' + wpCount + '個停靠點→終點，解析中...' : '起終點已帶入，解析中...';
+          var msg = wpCount > 0 ? '起點、' + wpCount + ' 個停靠點、終點已帶入，解析中...' : '起終點已帶入，解析中...';
           Toast.show(msg, 2000);
           analyzeNextFrame();
         } else if (end && !start) {
@@ -472,10 +472,10 @@ var HistoryMod = {
       var mIco = item.mode === 'motorcycle'
         ? '<i class="fa-solid fa-motorcycle" aria-hidden="true"></i>'
         : '<i class="ico ico-car" aria-hidden="true"></i>';
-      var wpTxt = item.waypoints && item.waypoints.length ? ' \u00b7 '+item.waypoints.length+'\u505c\u9760' : '';
+      var wpTxt = item.waypoints && item.waypoints.length ? ' '+item.waypoints.length+' \u500b\u505c\u9760\u9ede' : '';
       html += '<div class="hist-item flex items-center gap-2 px-3 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0" data-idx="'+idx+'">'
-        + '<div class="hist-item-main flex-1 min-w-0"><div class="hist-item-route text-xs font-bold truncate">'+escapeHtml(item.start.slice(0,10))+' \u2192 '+escapeHtml(item.end.slice(0,10))+'</div>'
-        + '<div class="hist-item-meta text-[10px] text-slate-500 mt-0.5">'+mIco+' '+(item.distance||'?')+'km'+wpTxt+' \u00b7 '+ds+'</div></div>'
+        + '<div class="hist-item-main flex-1 min-w-0"><div class="hist-item-route text-xs font-bold truncate">'+escapeHtml(item.start.slice(0,10))+' \u5230 '+escapeHtml(item.end.slice(0,10))+'</div>'
+        + '<div class="hist-item-meta text-[10px] text-slate-500 mt-0.5">'+mIco+' '+(item.distance||'?')+' \u516c\u91cc'+wpTxt+'\u3000'+ds+'</div></div>'
         + '<button type="button" class="hist-del text-slate-600 hover:text-red-400 text-sm px-1 shrink-0" data-idx="'+idx+'" aria-label="\u522a\u9664\u9019\u7b46\u8def\u7dda">\u00d7</button></div>';
     });
     panel.innerHTML = html;
@@ -597,7 +597,7 @@ var RouteStripMod = (function() {
         ? '<span class="strip-cam-badge yt">YT</span>'
         : '<span class="strip-cam-badge cctv">CCTV</span>';
       var w = Data.weather[cam.county];
-      var wTxt = w ? (' \u00b7 ' + w.temp + '\u00B0C') : '';
+      var wTxt = w ? (' ' + w.temp + '\u00B0C') : '';
       var imgHtml = thumbSrc ? '<img data-src="' + escapeHtml(thumbSrc) + '" alt="" />' : '';
       card.innerHTML =
         '<div class="strip-cam-img">' +

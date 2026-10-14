@@ -117,7 +117,7 @@
       <div class="header-tools flex items-center gap-2">
         <div id="js-clock-wrap" class="ui-clock-wrap">
           <button id="js-clock-hide" type="button" class="ui-dismiss-btn" aria-label="隱藏頂端時間" title="隱藏頂端時間">
-            <span id="js-clk" class="text-xs font-mono font-bold text-slate-300">--:--:--</span>
+            <span id="js-clk" class="text-xs font-bold text-slate-300">--:--:--</span>
             <i class="fa-solid fa-xmark" aria-hidden="true"></i>
           </button>
         </div>
@@ -182,6 +182,7 @@
           class="w-full bg-transparent text-xs text-slate-300 outline-none placeholder-slate-500"
           placeholder="貼上地圖路線連結" aria-label="貼上 Google Maps 或 Apple Maps 路線連結" />
         <div id="route-summary" class="route-summary hidden text-[10px] text-orange-300/90 font-bold mt-0.5 truncate"></div>
+        <div id="route-summary-line" class="route-summary-line" aria-hidden="true"></div>
       </div>
       <button id="route-toggle" class="route-mini-btn text-orange-300 text-xs shrink-0 hover:text-orange-200">輸入起終點</button>
       <button id="js-route-clear-small" type="button" class="icon-btn ghost route-clear-small text-[10px] text-slate-500 hover:text-orange-400 hidden" aria-label="清除路線" title="清除路線"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
@@ -190,7 +191,6 @@
       <!-- 歷史路線 -->
       <div class="route-expanded-head flex items-center justify-between px-1">
         <div class="route-title-group">
-          <div class="route-title-kicker text-[10px] uppercase tracking-[0.22em] text-orange-400/80 font-black">Route Planner</div>
           <div class="route-title-text text-sm font-black text-slate-100">規劃機車安全路線</div>
         </div>
         <div class="route-head-actions flex items-center gap-2">
@@ -223,7 +223,7 @@
           <input type="text" id="js-route-start" autocomplete="off"
             class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
             placeholder="起點" aria-label="起點" />
-          <button id="clear-start" type="button" class="route-field-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none" aria-label="清除起點"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+          <button id="clear-start" type="button" class="route-field-clear text-slate-500 hidden text-xs leading-none" aria-label="清除起點"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
           <div id="suggest-start" class="suggest-box route-suggest-box bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
         </div>
       </div>
@@ -238,7 +238,7 @@
           <input type="text" id="js-route-end" autocomplete="off"
             class="route-text-input w-full px-3 py-2 pr-7 text-xs focus:outline-none"
             placeholder="終點" aria-label="終點" />
-          <button id="clear-end" type="button" class="route-field-clear absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-orange-400 hidden text-xs leading-none" aria-label="清除終點"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+          <button id="clear-end" type="button" class="route-field-clear text-slate-500 hidden text-xs leading-none" aria-label="清除終點"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
           <div id="suggest-end" class="suggest-box route-suggest-box bg-slate-900 border border-white/10 rounded-xl overflow-hidden max-h-32 overflow-y-auto"></div>
         </div>
       </div>
@@ -265,7 +265,6 @@
     <section id="ride-status-card" class="ride-status-shell glass mt-3 p-3 rounded-[28px]">
       <div class="ride-status-head flex items-center justify-between gap-3">
         <div>
-          <div class="ride-status-kicker text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Ride Status</div>
           <div class="ride-status-title text-sm font-black text-slate-100">旅行狀態列</div>
         </div>
         <button id="js-open-favorites" class="route-mini-btn text-[11px] text-cyan-200 hover:text-cyan-100 flex items-center gap-1">
@@ -337,7 +336,6 @@
     <div class="condition-panel-head">
       <div id="condition-grabber" class="condition-grabber" aria-hidden="true"></div>
       <div class="condition-head-main">
-        <div class="condition-kicker">Route Intelligence</div>
         <div class="condition-title-row">
           <h2>沿途狀況時間軸</h2>
           <span id="condition-source-badge" class="condition-source-badge">等待資料</span>
@@ -358,15 +356,13 @@
         </button>
       </div>
       <div class="condition-peek">
+        <span id="condition-ribbon" class="condition-ribbon" aria-hidden="true"></span>
         <div class="condition-peek-line">
-          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
           <span id="condition-peek-validation">安全路線</span>
           <span id="condition-peek-meta" class="condition-peek-meta"></span>
+          <span class="condition-peek-issue"><span id="condition-collapsed-summary" class="condition-collapsed-summary">事件來源未回報</span></span>
         </div>
-        <div class="condition-peek-issue">
-          <span id="condition-ribbon" class="condition-ribbon" aria-hidden="true"></span>
-          <span id="condition-collapsed-summary" class="condition-collapsed-summary">事件來源未回報</span>
-        </div>
+        <div id="condition-ribbon-note" class="condition-ribbon-note"></div>
       </div>
     </div>
       <div id="condition-event-status" class="condition-sr-status" role="status" aria-live="polite"></div>
@@ -379,7 +375,7 @@
     </div>
     <div id="condition-demo-warning" class="condition-demo-warning hidden">
       <i class="fa-solid fa-flask"></i>
-      示範資料僅供介面測試，不代表真實路況、天氣或合法導航。
+      示範資料，不代表真實路況或合法導航。
     </div>
     <div id="condition-loading" class="condition-loading hidden">
       <span class="condition-skeleton wide"></span>
@@ -565,7 +561,6 @@
   <aside id="favorites-panel" class="dock-panel hidden absolute right-4 top-[calc(var(--safe-top)+12.5rem)] z-[520] w-[min(22rem,calc(100vw-2rem))] glass rounded-[28px] overflow-hidden">
     <div class="dock-panel-head flex items-center justify-between px-4 py-3 border-b border-white/10">
       <div class="dock-panel-title-block">
-        <div class="dock-panel-kicker text-[10px] uppercase tracking-[0.22em] text-cyan-300/80 font-black">Favorites</div>
         <div class="font-black text-sm text-slate-100">我的停靠點 / 收藏</div>
       </div>
       <button id="favorites-close" type="button" class="icon-btn ghost w-8 h-8 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20" aria-label="關閉收藏">
@@ -584,7 +579,6 @@
     <div class="list-filter-shell sticky top-0 z-10">
       <div class="list-filter-head">
         <div>
-          <div class="page-kicker">Traffic Browser</div>
           <h2 class="page-title">路況列表分類</h2>
         </div>
         <div class="list-filter-hint">依地區、縣市、關鍵詞快速篩選</div>
@@ -632,10 +626,8 @@
     <section class="tool-card tools-hero-shell">
       <div class="tool-card-head">
         <div>
-          <div class="page-kicker">Rider Console</div>
           <h2 class="page-title">出發前檢查</h2>
         </div>
-        <div class="tool-icon tools-hero-icon"><i class="fa-solid fa-compass" aria-hidden="true"></i></div>
       </div>
       <div id="ride-checklist" class="tool-stack">
         <div class="tool-empty">尚未建立檢查清單。</div>
@@ -645,9 +637,7 @@
     <section class="tool-card tools-weather-shell">
       <div class="tool-card-head">
         <div class="tool-card-title-group">
-          <div class="tool-icon tools-weather-icon"><i class="fa-solid fa-cloud-sun" aria-hidden="true"></i></div>
           <div>
-            <div class="page-kicker">Weather Deck</div>
             <h2 class="tool-title">全台天氣總覽</h2>
           </div>
         </div>
@@ -665,9 +655,7 @@
     <section class="tool-card">
       <div class="tool-card-head">
         <div class="tool-card-title-group">
-          <div class="tool-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
           <div>
-            <div class="page-kicker">Risk Brief</div>
             <h2 class="tool-title">路線風險摘要</h2>
           </div>
         </div>
@@ -679,9 +667,7 @@
     <section class="tool-card">
       <div class="tool-card-head">
         <div class="tool-card-title-group">
-          <div class="tool-icon"><i class="fa-solid fa-bookmark" aria-hidden="true"></i></div>
           <div>
-            <div class="page-kicker">Stops</div>
             <h2 class="tool-title">我的停靠點 / 收藏</h2>
           </div>
         </div>
@@ -707,9 +693,7 @@
     <section class="tool-card">
       <div class="tool-card-head">
         <div class="tool-card-title-group">
-          <div class="tool-icon"><i class="fa-solid fa-sliders" aria-hidden="true"></i></div>
           <div>
-            <div class="page-kicker">Display</div>
             <h2 class="tool-title">畫面顯示</h2>
           </div>
         </div>
@@ -728,14 +712,13 @@
     <section class="tool-card">
       <div class="tool-card-head">
         <div class="tool-card-title-group">
-          <div class="tool-icon"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></div>
           <h2 class="tool-title">關於本系統</h2>
         </div>
       </div>
       <p class="tool-note">
         整合官方路況、氣象與 CCTV 現場畫面，提供出發前及途中停靠判斷。灰色路段代表資料不足；攝影機不做 AI 自動判讀，仍請依現場標誌與實際狀況騎乘。
       </p>
-      <a class="ride-verdict-feedback ride-verdict-feedback-block" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener">💬 回報問題 / 許願新功能</a>
+      <a class="ride-verdict-feedback ride-verdict-feedback-block" href="https://github.com/zheng851228/taiwan-dashboard/issues/new" target="_blank" rel="noopener">回報問題或許願新功能</a>
       <div class="tool-stats">
         <div class="tool-stat">
           <div class="tool-stat-value" id="js-stat-cams">0</div>
@@ -837,8 +820,8 @@
 
 </div>
 
-<script src="js/dist/app.js?v=fbfe459"></script>
-<script src="js/dist/app2.js?v=fbfe459"></script>
+<script src="js/dist/app.js?v=e242d54"></script>
+<script src="js/dist/app2.js?v=e242d54"></script>
 
 </body>
 </html>

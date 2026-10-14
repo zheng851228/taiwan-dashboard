@@ -1283,7 +1283,7 @@
         if (score < 0) return;
         scored.push({
           name: cam.name,
-          sub: [cam.county, getRoadCategoryLabel(cam.cat)].filter(Boolean).join(' · '),
+          sub: [cam.county, getRoadCategoryLabel(cam.cat)].filter(Boolean).join('\u3000'),
           lat: cam.lat,
           lng: cam.lng,
           camId: cam.id,
@@ -1562,7 +1562,7 @@
           + '</div>'
           + '<div class="cam-card-body">'
           + '<div class="cam-card-name">'+escapeHtml(cam.name)+'</div>'
-          + '<div class="cam-card-sub">'+escapeHtml(cam.county)+(wt?' \u00B7 '+escapeHtml(wt):'')+'</div>'
+          + '<div class="cam-card-sub">'+escapeHtml(cam.county)+(wt?'\u3000'+escapeHtml(wt):'')+'</div>'
           + '<div class="cam-card-meta">'
           + '<span class="meta-chip">'+escapeHtml(catLabel)+'</span>'
           + (isRouteCam ? '<span class="meta-chip">\u6cbf\u9014</span>' : '')
@@ -1574,7 +1574,7 @@
       });
       if (hasMore) {
         html += '<button type="button" class="list-load-more">'
-          + '目前顯示 ' + listCams.length + ' / ' + cams.length + ' 支 · 載入更多'
+          + '載入更多（已顯示 ' + listCams.length + ' / ' + cams.length + ' 支）'
           + '</button>';
       }
       el.innerHTML = html;
@@ -1716,19 +1716,57 @@
     Dom.onId('js-strip-btn', 'click', function() { RouteStripMod.toggle(); });
     Dom.onId('route-strip-close', 'click', function() { RouteStripMod.hide(); });
 
-    // Mobile: the toast sits directly below the merged top card, never over it.
+    // Mobile: the toast is a slim strip hanging off the bottom edge of the merged top card
+    // (same left edge and width), never over it and never a floating pill in the map.
     var topCard = document.querySelector('.map-top-panel');
     var mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 1199px)') : null;
     window.Toast.anchor = function() {
       var root = document.documentElement;
       if (!topCard || !mobileQuery || !mobileQuery.matches || !topCard.offsetParent) {
         root.style.removeProperty('--toast-top');
+        root.style.removeProperty('--toast-left');
+        root.style.removeProperty('--toast-w');
         return;
       }
-      root.style.setProperty('--toast-top', Math.round(topCard.getBoundingClientRect().bottom + 8) + 'px');
+      var box = topCard.getBoundingClientRect();
+      root.style.setProperty('--toast-top', Math.round(box.bottom - 1) + 'px');
+      root.style.setProperty('--toast-left', Math.round(box.left) + 'px');
+      root.style.setProperty('--toast-w', Math.round(box.width) + 'px');
     };
     if (topCard && window.ResizeObserver) new ResizeObserver(function() { window.Toast.anchor(); }).observe(topCard);
     window.addEventListener('resize', function() { window.Toast.anchor(); });
+
+    // Mobile top card: mirror #route-summary as a typographic line (big figures, small units).
+    // The summary text itself is the summary model's contract and is left untouched.
+    var routeSummary = Dom.byId('route-summary');
+    var routeSummaryLine = Dom.byId('route-summary-line');
+    function renderRouteSummaryLine() {
+      if (!routeSummaryLine) return;
+      routeSummaryLine.textContent = '';
+      var text = routeSummary ? routeSummary.textContent : '';
+      var match = /(\d+(?:\.\d+)?)\s*km\s*\/\s*(\d+)\s*\u5206/.exec(text);
+      if (!match) return;
+      [[match[1], '\u516c\u91cc'], [match[2], '\u5206\u9418']].forEach(function(pair) {
+        var figure = document.createElement('span');
+        figure.className = 'route-line-fig';
+        var value = document.createElement('b');
+        value.textContent = pair[0];
+        figure.appendChild(value);
+        figure.appendChild(document.createTextNode(' ' + pair[1]));
+        routeSummaryLine.appendChild(figure);
+      });
+      var tagText = /\u96e2\u7dda\u5feb\u7167/.test(text) ? '\u96e2\u7dda\u5feb\u7167' : (/\u5df2\u9a57\u8b49/.test(text) ? '\u5df2\u9a57\u8b49' : '');
+      if (tagText) {
+        var tag = document.createElement('span');
+        tag.className = 'route-line-tag';
+        tag.textContent = tagText;
+        routeSummaryLine.appendChild(tag);
+      }
+    }
+    if (routeSummary && window.MutationObserver) {
+      new MutationObserver(renderRouteSummaryLine).observe(routeSummary, { childList: true, characterData: true, subtree: true });
+    }
+    renderRouteSummaryLine();
 
     // Mobile map: MapLibre opens its attribution on first paint. Keep the
     // compact "i" button collapsed until the rider taps it (presentation only).

@@ -69,7 +69,7 @@
         return '<div class="favorite-item">'
           + '<div class="favorite-main">'
           + '<div class="favorite-title">' + escapeHtml(item.name) + '</div>'
-          + '<div class="favorite-sub">' + escapeHtml(item.county) + ' · ' + formatUpdatedAt(item.savedAt) + ' 收藏</div>'
+          + '<div class="favorite-sub">' + escapeHtml(item.county) + '，' + formatUpdatedAt(item.savedAt) + ' 收藏</div>'
           + '</div>'
           + '<button class="favorite-action active" data-open-favorite="' + escapeHtml(item.id) + '" aria-label="\u5728\u5730\u5716\u67e5\u770b ' + escapeHtml(item.name) + '"><i class="fa-solid fa-location-arrow" aria-hidden="true"></i></button>'
           + '<button class="favorite-action" data-remove-favorite="' + escapeHtml(item.id) + '" aria-label="\u79fb\u9664\u6536\u85cf ' + escapeHtml(item.name) + '"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>'
@@ -248,7 +248,7 @@
       AppState.routeReport = {
         cameraCount: Object.keys(cameraIds).length,
         counties: [],
-        routeLabel: '安全路線 · ' + sections.length + ' 段',
+        routeLabel: '安全路線，' + sections.length + ' 段',
         sectionCount: sections.length,
         rainSections: overall.rainSections || 0,
         weatherSummary: weatherSummary,
