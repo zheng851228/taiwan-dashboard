@@ -426,8 +426,10 @@ test('camera custom state is not persisted and reset returns to the full route',
   // A real user gesture (mouse wheel over the map) is what makes the camera "custom".
   const mapBox = await page.locator('#desktop-map canvas').first().boundingBox();
   await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+  const zoomBefore = await page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getZoom());
   await page.mouse.wheel(0, -400);
-  await expect(page.locator('#desktop-camera-state')).toHaveText('自訂');
+  await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getZoom()), { timeout: CAMERA_SETTLE_MS }).not.toBeCloseTo(zoomBefore, 2);
+  await expect(page.locator('#desktop-camera-state')).toHaveText('自訂', { timeout: CAMERA_SETTLE_MS });
   expect(await page.evaluate(() => localStorage.getItem('tw_desktop_camera_preset_v1'))).toBe('birdseye');
 
   await camera.click();

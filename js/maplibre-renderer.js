@@ -19,6 +19,13 @@
   var maplibreModule = null;
   var maplibrePromise = null;
 
+  // True while one of MapLibre's user-gesture handlers (wheel, drag, pinch, rotate, pitch,
+  // double-click / tap zoom, box zoom) is driving the camera.
+  function gestureHandlerActive(map) {
+    return ['scrollZoom', 'dragPan', 'dragRotate', 'touchZoomRotate', 'touchPitch', 'doubleClickZoom', 'boxZoom']
+      .some(function(name) { return map[name] && typeof map[name].isActive === 'function' && map[name].isActive(); });
+  }
+
   function loadMapLibre() {
     if (maplibreModule) return Promise.resolve(maplibreModule);
     if (maplibrePromise) return maplibrePromise;
@@ -204,15 +211,10 @@
           // navigation buttons) carry an originalEvent; our own fitBounds after a late route redraw,
           // map.resize() on layout changes and preset eases do not, and must not flip the label.
           // MapLibre attaches originalEvent to drag / pinch / button moves but not to scroll-zoom
-          // moves, so a wheel or touch-move on the canvas layer marks the NEXT move as the user's
-          // (within 5 s, which covers very slow frames; consumed by that move; a plain tap does not).  The canvas container holds the canvas and markers, not our own controls.
-          var markInput = function() { self._lastInputAt = Date.now(); };
-          ['wheel', 'touchmove'].forEach(function(type) {
-            self.map.getCanvasContainer().addEventListener(type, markInput, { passive: true, capture: true });
-          });
+          // moves; those are recognised by the gesture handler being active when the move starts.
+          // Deterministic - no time window - so slow frames cannot turn a wheel into a non-user move.
           self.map.on('movestart', function(event) {
-            self._userMove = Boolean(event && event.originalEvent) || (Date.now() - (self._lastInputAt || 0) < 5000);
-            self._lastInputAt = 0;
+            self._userMove = Boolean(event && event.originalEvent) || gestureHandlerActive(self.map);
           });
           self.map.on('moveend', function(event) {
             var user = self._userMove || Boolean(event && event.originalEvent);

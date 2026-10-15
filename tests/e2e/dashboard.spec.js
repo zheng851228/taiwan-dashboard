@@ -1247,22 +1247,6 @@ test('does not interrupt first load and keeps a fixed iPhone install entry', asy
 });
 
 
-// TEMP-DIAG: state dump for the CI-only install-nudge failures (removed once understood).
-async function nudgeDiag(page) {
-  return page.evaluate(() => JSON.stringify({
-    ua: navigator.userAgent,
-    standaloneMq: window.matchMedia('(display-mode: standalone)').matches,
-    navStandalone: navigator.standalone,
-    onLine: navigator.onLine,
-    controller: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
-    sheets: [...document.styleSheets].map((sheet) => { let n = -1; try { n = sheet.cssRules.length; } catch (e) {} return [String(sheet.href || 'inline').slice(-40), n]; }),
-    nudgeDisplay: getComputedStyle(document.getElementById('pwa-install-nudge')).display,
-    banners: ['pwa-update-banner', 'pwa-network-banner', 'pwa-install-sheet'].map((id) => [id, (document.getElementById(id) || { className: 'missing' }).className]),
-    keys: ['tw_pwa_install_dismissed_v1', 'tw_pwa_install_prompted_v2'].map((k) => [k, localStorage.getItem(k)]),
-    route: window.AppState && AppState.activeRoute ? { id: AppState.activeRoute.routeId, v: AppState.activeRoute.validation && AppState.activeRoute.validation.status } : null
-  }));
-}
-
 test('shows one non-blocking install nudge after the first live safe route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'iPhone Safari install guidance verification only.');
   await page.addInitScript(() => {
@@ -1289,7 +1273,7 @@ test('shows one non-blocking install nudge after the first live safe route', asy
   const nudge = page.locator('#pwa-install-nudge');
   const sheet = page.locator('#pwa-install-sheet');
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
-  try { await expect(nudge).toBeVisible(); } catch (error) { throw new Error('DIAG ' + await nudgeDiag(page)); }
+  await expect(nudge).toBeVisible();
   await expect(sheet).toBeHidden();
   await expect(page.locator('#pwa-install-nudge-open')).toBeVisible();
   await page.locator('#pwa-install-nudge-open').click();
@@ -1376,8 +1360,8 @@ test('keeps manual route entry available when location is denied', async ({ page
 
 test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }, testInfo) => {
   test.skip(browserName !== 'chromium', 'Offline service-worker verification runs in Chromium.');
+  // 1. Online, on the shared server: build a safe route; the app saves its snapshot.
   await page.goto(WORKER);
-  await page.evaluate(() => navigator.serviceWorker.ready);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -1387,14 +1371,33 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
     const snapshot = JSON.parse(localStorage.getItem('tw_last_route_snapshot_v1') || 'null');
     return snapshot?.route?.validation?.status;
   })).toBe('safe');
+  const saved = await page.evaluate(() => Object.fromEntries(
+    Object.keys(localStorage).filter((key) => key.startsWith('tw_')).map((key) => [key, localStorage.getItem(key)])
+  ));
+
+  // 2. The offline part runs on a throwaway `localhost` origin carrying the same saved state: the
+  // service worker treats every 127.0.0.1 request as API traffic (network only), so on the shared
+  // server its styles and scripts only "worked offline" in browsers whose offline emulation missed
+  // the worker's own fetches (older Chromium; Chrome 149 does not - CSS and JS failed to load).
+  // (The Worker's CORS list does not include a random port, hence the route is built in step 1.)
+  const site = await startStaticOrigin();
+  page.on('close', () => site.stop());
+  await page.goto(`${site.origin}/?worker=${workerOrigin}`);
+  await page.evaluate((entries) => {
+    Object.entries(entries).forEach(([key, value]) => localStorage.setItem(key, value));
+  }, saved);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 15000 }).toBe(true);
   await page.reload();
   await expectAppShell(page);
 
+  // Offline for real: the app's origin is gone too, so the shell can only come from the cache.
+  await site.stop();
   await context.setOffline(true);
   await page.reload();
   await expectAppShell(page);
   await expect(page.locator('#pwa-network-banner')).toBeVisible();
-  try { await expect(page.locator('#pwa-install-nudge')).toBeHidden(); } catch (error) { throw new Error('DIAG ' + await nudgeDiag(page)); }
+  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
   await expect(page.locator('#route-summary')).toContainText('離線快照');
   await expect(page.locator('#js-route-status')).toContainText('快照資料暫停更新');
   // The restored snapshot route is drawn on the (tile-less) map: one route line, and the three
