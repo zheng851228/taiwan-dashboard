@@ -1070,20 +1070,27 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     #js-clock-setting { display: none; }
   }
   /* ---- Viewport / bottom edge (iOS standalone) --------------------------------------------
-     Known WebKit behaviour: in an iOS home-screen app with viewport-fit=cover and
-     apple-mobile-web-app-status-bar-style=black-translucent the web view is drawn from the very top
-     of the screen, but the layout viewport (100vh, 100%, -webkit-fill-available, and anything
-     `position: fixed; bottom: 0`) ends one status-bar inset short of the physical bottom, leaving a
-     band under the nav (WebKit bug 237961; innerHeight is also off, bug 210009).  Emulators do not
-     reproduce it, so the fix is defensive and self-calibrating:
-       1. #app is a fixed box whose height is --app-h (set by js/main-ui.js ViewportMod ONLY when it
-          measures that standalone gap; otherwise it falls back to 100dvh, so Safari tabs and
-          Android Chrome are untouched);
-       2. the nav is pinned to #app (position: absolute; bottom: 0), not to the viewport, so its
-          surface reaches the physical bottom edge and its content sits safe-bottom above it;
-       3. html is painted with the nav surface, so any residual sliver is the same colour as the nav. */
+     Known WebKit behaviour (bug 237961): in an iOS home-screen app with viewport-fit=cover and a
+     black-translucent status bar, the layout viewport ends one status-bar inset (47-59pt) short of
+     the physical bottom, and NOTHING is painted below it: a fixed box sized to the full screen is
+     simply cut off there (confirmed on the owner's iPhone, 390x844: content clipped at 797pt, and the
+     band below shows the body background).  So the shell is never sized past what WebKit paints.
+     When js/main-ui.js ViewportMod measures that exact gap it adds html.vp-gap and sets --app-h to
+     innerHeight; then:
+       1. the nav drops its safe-bottom padding: the home indicator lives inside the unpainted band,
+          so the painted area already ends above it;
+       2. the body (which WebKit shows in the band) is painted with the nav surface, so the nav reads
+          as one bar down to the bottom edge.
+     Safari tabs, Android and standalone without the gap keep 100dvh and the normal safe-bottom. */
   html { background: var(--c-surface); }
   html:has(body.light) { background: #ffffff; }
+  html.vp-gap { --safe-bottom: 0px; }
+  @media (display-mode: standalone) {
+    body { background: var(--c-surface); }
+    body.light { background: #ffffff; }
+  }
+  html.vp-gap body { background: var(--c-surface); }
+  html.vp-gap body.light { background: #ffffff; }
   #app { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); }
   .bottom-navigation { position: absolute; }
   /* Bottom navigation: 52px + safe area.  Active = ink + solid glyph, not orange. */
