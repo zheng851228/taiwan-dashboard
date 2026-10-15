@@ -31,12 +31,21 @@ test('desktop builds only the desktop MapLibre canvas and keeps the MapMod queue
   await expect(page.locator('#desktop-map canvas.maplibregl-canvas')).toHaveCount(1);
   await expect(page.locator('#map canvas')).toHaveCount(0);
   const idle = await page.evaluate(() => ({
+    desktopQuery: window.Config.DESKTOP_QUERY,
+    mapDesktopQuery: window.MapMod.DESKTOP_QUERY,
     renderer: window.MapMod.renderer,
     map: window.MapMod.map,
     ready: window.MapMod._ready,
     started: window.MapMod._rendererStarted
   }));
-  expect(idle).toEqual({ renderer: null, map: null, ready: false, started: false });
+  expect(idle).toEqual({
+    desktopQuery: '(min-width: 1200px)',
+    mapDesktopQuery: '(min-width: 1200px)',
+    renderer: null,
+    map: null,
+    ready: false,
+    started: false
+  });
 
   // The settings row no longer advertises the removed "traditional map" (Leaflet).
   await expect(page.locator('#desktop-map-mode-setting')).not.toContainText('傳統');
@@ -62,21 +71,50 @@ test('desktop builds only the desktop MapLibre canvas and keeps the MapMod queue
 test('shrinking a desktop viewport below 1200px lazily builds the MapMod map and replays queued requests', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop viewport verification only.');
   await stubTiles(page);
+  await page.addInitScript(() => {
+    const position = { coords: { latitude: 24.25, longitude: 121.25, accuracy: 25 } };
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition(success) { setTimeout(() => success(position), 0); },
+        watchPosition() { return 1; },
+        clearWatch() {}
+      }
+    });
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await waitForMapReady(page);
   expect(await page.evaluate(() => window.MapMod._rendererStarted)).toBe(false);
 
-  await page.evaluate(() => window.Bus.emit('map:request', { action: 'set-view', center: [24.5, 121.5], zoom: 12 }));
+  await page.evaluate(() => {
+    window.MapMod.setTile(window.Config.TILE_LIGHT);
+    window.MapMod.drawRoute([[24.4, 121.4], [24.5, 121.5]], 'motorcycle');
+    window.MapMod.drawStartEnd([[24.4, 121.4], [24.5, 121.5]]);
+    window.Bus.emit('map:request', { action: 'set-view', center: [24.5, 121.5], zoom: 12 });
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => Boolean(window.MapMod._ready && window.MapMod.map)), { timeout: 15000 }).toBe(true);
+  await page.locator('#js-loc').click();
+  await expect(page.locator('#js-loc')).toHaveAttribute('aria-pressed', 'true');
   const after = await page.evaluate(() => ({
     pending: window.MapMod._pending.length,
-    target: window.MapMod.map.getCenter()
+    route: window.MapMod.renderer.routeCoords,
+    routeSource: Boolean(window.MapMod.map.getSource('desktop-route')),
+    userSource: Boolean(window.MapMod.map.getSource('mobile-user')),
+    userCenter: window.MapMod._userCenter,
+    darkVisibility: window.MapMod.map.getLayoutProperty('base', 'visibility'),
+    lightVisibility: window.MapMod.map.getLayoutProperty('mobile-base-light', 'visibility')
   }));
   expect(after.pending).toBe(0);
-  // The queued set-view was replayed (easeTo is animated, so wait for it to settle).
-  await expect.poll(() => page.evaluate(() => Math.abs(window.MapMod.map.getCenter().lat - 24.5) < 0.05), { timeout: 10000 }).toBe(true);
+  expect(after.route).toEqual([[24.4, 121.4], [24.5, 121.5]]);
+  expect(after.routeSource).toBe(true);
+  expect(after.userSource).toBe(true);
+  expect(after.userCenter).toEqual([24.25, 121.25]);
+  expect(after.darkVisibility).toBe('none');
+  expect(after.lightVisibility).toBe('visible');
+  await expect(page.locator('#map .desktop-start-marker')).toHaveCount(1);
+  await expect(page.locator('#map .desktop-end-marker')).toHaveCount(1);
   // The desktop renderer is torn down below 1200px, leaving exactly the MapMod canvas.
   await expect.poll(canvasCount.bind(null, page)).toBe(1);
 });

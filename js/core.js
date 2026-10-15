@@ -47,6 +47,7 @@
   }
 
   window.Config = {
+    DESKTOP_QUERY: '(min-width: 1200px)',
     MAP_CENTER: [23.9, 121.0],
     MAP_ZOOM: 7,
     ROUTE_FILTER_KM: 20.0,

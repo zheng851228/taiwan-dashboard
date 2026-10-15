@@ -351,7 +351,7 @@
     startEndMarkers: [], waypointMapMarkers: [],
     _nearbyMarker: null, _nearbyCircle: null,
 
-    DESKTOP_QUERY: '(min-width: 1200px)',
+    DESKTOP_QUERY: Config.DESKTOP_QUERY,
 
     _webgl2Available: function() {
       try {
