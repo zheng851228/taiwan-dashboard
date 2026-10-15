@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as valhalla from '../worker/src/valhalla.js';
 import { scheduled } from '../worker/src/index.js';
 import { providerCameraSnapshotSlotKey, providerSnapshotSlotKey } from '../worker/src/provider-snapshot.js';
 import { clearJsonResponseCache } from '../worker/src/providers.js';
 import { SNAPSHOT_HEALTH_KEY } from '../worker/src/snapshot-honesty.js';
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   clearJsonResponseCache();
 });
@@ -221,5 +224,63 @@ describe('scheduled snapshot', () => {
     expect(result.ok).toBe(true);
     expect(result.skipped).toBe(true);
     expect(kv.put).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('scheduled warmup alongside snapshots', () => {
+  it('registers pending warmup without delaying or changing successful snapshot writes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(EVENT_TIME));
+    stubFetchCameras(1);
+    const cameraFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      if (String(url).includes('opendata.cwa.gov.tw')) {
+        return new Response(JSON.stringify({ records: { Station: [{
+          GeoInfo: { Coordinates: [{ CoordinateName: 'WGS84', StationLatitude: 25.05, StationLongitude: 121.52 }] },
+          WeatherElement: { Weather: '晴', AirTemperature: 27 },
+          ObsTime: { DateTime: EVENT_TIME }
+        }] } }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return cameraFetch(url, init);
+    }));
+    const event = { scheduledTime: Date.parse(EVENT_TIME) };
+    const baselineKv = createSnapshotKv();
+    const baseline = await scheduled(event, kvEnv(baselineKv, { CWA_API_KEY: 'test-key' }));
+    clearJsonResponseCache();
+    const kv = createSnapshotKv();
+    const env = kvEnv(kv, { CWA_API_KEY: 'test-key' });
+    let finish;
+    const pending = new Promise((resolve) => { finish = resolve; });
+    const warmup = vi.spyOn(valhalla, 'warmPrimaryEngine').mockReturnValueOnce(pending);
+    const ctx = { waitUntil: vi.fn() };
+    try {
+      const result = await scheduled(event, env, ctx);
+      expect(result).toEqual(baseline);
+      expect(result.ok).toBe(true);
+      expect(result.results).toHaveLength(2);
+      expect(result.results.every((line) => line.endsWith(': written'))).toBe(true);
+      expect(warmup).toHaveBeenCalledExactlyOnceWith(env);
+      expect(ctx.waitUntil).toHaveBeenCalledExactlyOnceWith(pending);
+      expect(putKeys(kv)).toEqual(putKeys(baselineKv));
+      for (const key of [providerSnapshotSlotKey(new Date(EVENT_TIME)), providerCameraSnapshotSlotKey(new Date(EVENT_TIME))]) {
+        expect(kv.store.get(key)).toEqual(baselineKv.store.get(key));
+      }
+      expect(healthRecord(kv).ok).toBe(true);
+    } finally {
+      finish();
+      await pending;
+    }
+  });
+
+  it.each([undefined, {}])('accepts a missing waitUntil context (%j)', async (ctx) => {
+    stubFetchCameras(1);
+    const kv = createSnapshotKv();
+    const event = { scheduledTime: Date.parse(EVENT_TIME) };
+    const result = ctx === undefined
+      ? await scheduled(event, kvEnv(kv))
+      : await scheduled(event, kvEnv(kv), ctx);
+    expect(result.ok).toBe(true);
+    expect(kv.store.has(providerCameraSnapshotSlotKey(new Date(EVENT_TIME)))).toBe(true);
   });
 });
