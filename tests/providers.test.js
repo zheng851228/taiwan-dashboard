@@ -363,6 +363,35 @@ describe('Valhalla route attribution', () => {
     expect(edges.map((edge) => [edge.beginShapeIndex, edge.endShapeIndex])).toEqual([[0, 2]]);
   });
 
+  it('extends the final edge in route order when several edges share the last end index', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      edges: [
+        { names: ['幹道'], way_id: 1, forward: true, length: 0.023, begin_shape_index: 0, end_shape_index: 1 },
+        { names: ['終點連絡道'], way_id: 2, forward: true, length: 0, begin_shape_index: 1, end_shape_index: 1 }
+      ]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    const edges = await traceRouteAttributes({
+      geometry: [[25.034014, 121.563623], [25.03401, 121.563852], [25.034009, 121.563871]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' });
+
+    expect(edges.map((edge) => [edge.names[0], edge.beginShapeIndex, edge.endShapeIndex]))
+      .toEqual([['幹道', 0, 1], ['終點連絡道', 1, 2]]);
+  });
+
+  it('rejects a route shorter than the stub tolerance when no segment was traced', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      edges: [{ names: ['point'], way_id: 1, forward: true, length: 0, begin_shape_index: 0, end_shape_index: 0 }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    await expect(traceRouteAttributes({
+      geometry: [[25.03401, 121.563852], [25.034009, 121.563871]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
+      .rejects.toThrow('partial road coverage');
+  });
+
   it('still rejects an untraced terminal segment longer than a few metres', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       edges: [{

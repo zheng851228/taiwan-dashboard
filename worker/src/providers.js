@@ -172,16 +172,17 @@ export async function traceRouteAttributes(route, costing, env) {
   });
   if (!edges.length) throw new Error('Valhalla trace_attributes returned no road edges');
   assertTraceCoverage(edges, route.geometry.length, 'combined route', terminalStubSegments(route.geometry));
-  const lastEdge = edges.reduce((last, edge) => (edge.endShapeIndex > last.endShapeIndex ? edge : last));
+  const lastEdge = edges.reduce((last, edge) => (edge.endShapeIndex >= last.endShapeIndex ? edge : last));
   lastEdge.endShapeIndex = route.geometry.length - 1;
   return edges;
 }
 
-// How many trailing shape segments fit inside TRACE_TERMINAL_STUB_KM.
+// How many trailing shape segments fit inside TRACE_TERMINAL_STUB_KM.  At least one segment
+// must still be traced, so a route shorter than the stub is not accepted untraced.
 function terminalStubSegments(geometry) {
   let segments = 0;
   let distanceKm = 0;
-  for (let index = geometry.length - 1; index > 0; index -= 1) {
+  for (let index = geometry.length - 1; index > 1; index -= 1) {
     distanceKm += haversineKm(geometry[index - 1], geometry[index]);
     if (distanceKm > TRACE_TERMINAL_STUB_KM) break;
     segments += 1;
