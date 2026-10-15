@@ -1394,7 +1394,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   }
   .route-plate-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 2px;
       padding: 2px;
       border: 0;
@@ -1425,7 +1425,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
       border-radius: 2px;
       background: #f8fafc;
     }
-  .route-mode-btn[data-plate="yellow"]::before { background: #fbd33b; }
   .route-mode-btn[data-plate="red"]::before { background: #e5483d; }
   .route-car-btn::before {
       width: auto;
@@ -2892,7 +2891,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
       border-radius: 2px;
       background: #f8fafc;
     }
-  .route-mode-btn[data-plate="yellow"]::before { background: #fbd33b; }
   .route-mode-btn[data-plate="red"]::before { background: #e5483d; }
   .route-car-btn::before {
       width: auto;
@@ -3007,7 +3005,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
       border-radius: 2px;
       background: #f8fafc;
     }
-  .desktop-vehicle-tab[data-desktop-plate="yellow"]::before { background: #fbd33b; }
   .desktop-vehicle-tab[data-desktop-plate="red"]::before { background: #e5483d; }
   .desktop-vehicle-tab[data-desktop-mode="car"]::before {
       width: auto;

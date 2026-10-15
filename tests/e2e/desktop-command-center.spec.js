@@ -46,7 +46,7 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-left-insights')).toBeVisible();
   await expect(page.locator('#desktop-vehicle-tabs')).toBeVisible();
   await expect(page.locator('#route-expanded > .route-vehicle-shell')).toBeHidden();
-  await expect(page.locator('.desktop-vehicle-tab')).toHaveText(['白牌', '黃牌', '紅牌', '汽車']);
+  await expect(page.locator('.desktop-vehicle-tab')).toHaveText(['白牌', '紅牌', '汽車']);
   await expect(page.locator('#desktop-route-context')).toBeHidden();
   await expect(page.locator('#desktop-cctv-card')).toBeHidden();
   await expect(page.locator('#route-conditions-panel')).toBeHidden();
@@ -89,9 +89,9 @@ test('desktop command center keeps the initial map focused and expands on a read
   await expect(page.locator('#desktop-map-3d')).toHaveClass(/active/);
   await expect(page.locator('#desktop-camera-toggle')).toBeEnabled();
   await page.locator('#desktop-map-2d').click();
-  await page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]').click();
-  await expect(page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.route-mode-btn[data-plate="yellow"]')).toHaveClass(/active/);
+  await page.locator('.desktop-vehicle-tab[data-desktop-plate="red"]').click();
+  await expect(page.locator('.desktop-vehicle-tab[data-desktop-plate="red"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.route-mode-btn[data-plate="red"]')).toHaveClass(/active/);
 
   await page.locator('#condition-clear').click();
   await expect(page.locator('body')).toHaveAttribute('data-route-state', 'empty');
