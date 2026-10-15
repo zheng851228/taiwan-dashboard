@@ -338,6 +338,53 @@ describe('Valhalla route attribution', () => {
     expect(edges[0]).toMatchObject({ beginShapeIndex: 0, endShapeIndex: 2 });
   });
 
+  it('attributes a few-metre terminal stub that Valhalla leaves untraced to the last edge', async () => {
+    // Taipei Main Station -> Taipei 101: the route shape ends with a ~2 m segment that
+    // trace_attributes (edge_walk) does not return an edge for.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      edges: [{
+        names: ['信義路五段'],
+        way_id: 1,
+        road_class: 'primary',
+        use: 'road',
+        forward: true,
+        traversability: 'both',
+        length: 0.023,
+        begin_shape_index: 0,
+        end_shape_index: 1
+      }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    const edges = await traceRouteAttributes({
+      geometry: [[25.034014, 121.563623], [25.03401, 121.563852], [25.034009, 121.563871]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' });
+
+    expect(edges.map((edge) => [edge.beginShapeIndex, edge.endShapeIndex])).toEqual([[0, 2]]);
+  });
+
+  it('still rejects an untraced terminal segment longer than a few metres', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      edges: [{
+        names: ['road'],
+        way_id: 1,
+        road_class: 'primary',
+        use: 'road',
+        forward: true,
+        traversability: 'both',
+        length: 0.023,
+        begin_shape_index: 0,
+        end_shape_index: 1
+      }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    await expect(traceRouteAttributes({
+      geometry: [[25.034014, 121.563623], [25.03401, 121.563852], [25.03401, 121.5642]],
+      encodedShape: 'unused'
+    }, 'motorcycle', { VALHALLA_BASE_URL: 'https://valhalla.test' }))
+      .rejects.toThrow('partial road coverage');
+  });
+
   it('uses the overlapped next chunk to cover one omitted terminal segment', async () => {
     let requestIndex = 0;
     vi.stubGlobal('fetch', vi.fn(async () => {
