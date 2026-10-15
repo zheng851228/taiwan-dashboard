@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resetValhallaBreakers, valhallaEngines, valhallaPost } from '../worker/src/valhalla.js';
+import { resetValhallaBreakers, valhallaEngines, valhallaPost, warmPrimaryEngine } from '../worker/src/valhalla.js';
 import { clearIdTokenCache, signServiceAccountJwt } from '../worker/src/gcp-auth.js';
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   resetValhallaBreakers();
   clearIdTokenCache();
@@ -175,5 +177,103 @@ describe('Valhalla engine chain', () => {
     const jwt = await signServiceAccountJwt(key, 'https://x.a.run.app', 1000);
     const claims = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString('utf8'));
     expect([claims.iat, claims.exp]).toEqual([1000, 4600]);
+  });
+});
+
+
+describe('Cloud Run primary warmup', () => {
+  const primary = 'https://valhalla-tw.a.run.app';
+
+  async function cloudRunEnv() {
+    const { key } = await serviceAccount();
+    return { VALHALLA_PRIMARY_URL: `${primary}/`, GCP_SERVICE_ACCOUNT_KEY: JSON.stringify(key) };
+  }
+
+  function stubWarmup(statusFetch) {
+    const fetchMock = vi.fn(async (url, init) => {
+      if (url === 'https://oauth2.googleapis.com/token') return json({ id_token: 'warm-token' });
+      return statusFetch(url, init);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('sends exactly one authenticated GET /status and reuses the ID token cache', async () => {
+    const env = await cloudRunEnv();
+    const statusFetch = vi.fn(async () => json({ version: 'test' }));
+    const fetchMock = stubWarmup(statusFetch);
+    await warmPrimaryEngine(env);
+    expect(statusFetch).toHaveBeenCalledExactlyOnceWith(`${primary}/status`, expect.objectContaining({
+      method: 'GET', headers: { Authorization: 'Bearer warm-token' }, signal: expect.any(AbortSignal)
+    }));
+    await warmPrimaryEngine(env);
+    expect(fetchMock.mock.calls.filter(([url]) => url === 'https://oauth2.googleapis.com/token')).toHaveLength(1);
+  });
+
+  it.each([
+    ['VM mode even with a GCP key', { VALHALLA_PRIMARY_URL: primary, VALHALLA_PRIMARY_KEY: 'vm-key', GCP_SERVICE_ACCOUNT_KEY: '{}' }],
+    ['no primary', { GCP_SERVICE_ACCOUNT_KEY: '{}' }],
+    ['blank primary', { VALHALLA_PRIMARY_URL: '  ', GCP_SERVICE_ACCOUNT_KEY: '{}' }],
+    ['no GCP key', { VALHALLA_PRIMARY_URL: primary }],
+    ['invalid GCP key', { VALHALLA_PRIMARY_URL: primary, GCP_SERVICE_ACCOUNT_KEY: '{}' }]
+  ])('makes no requests with %s', async (_, env) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(warmPrimaryEngine(env)).resolves.toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['network', 'http', 'auth'])('warns without throwing on %s failure', async (failure) => {
+    const env = await cloudRunEnv();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchMock = stubWarmup(async () => {
+      if (failure === 'network') throw new TypeError('fetch failed');
+      return json({}, 503);
+    });
+    if (failure === 'auth') fetchMock.mockResolvedValue(json({}, 403));
+    await expect(warmPrimaryEngine(env)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts /status after 10 seconds without rejecting', async () => {
+    const env = await cloudRunEnv();
+    // Cache a real test ID token before starting fake timers / the hanging request.
+    stubWarmup(async () => json({}));
+    await warmPrimaryEngine(env);
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let signal;
+    stubWarmup(async (_, init) => new Promise((resolve, reject) => {
+      signal = init.signal;
+      signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+    const pending = warmPrimaryEngine(env);
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toBeUndefined();
+    expect(signal.aborted).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not open or clear route breakers, on either failed or successful warmup', async () => {
+    const env = await cloudRunEnv();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const statusFetch = vi.fn(async () => json({}, 503));
+    const fetchMock = stubWarmup(statusFetch);
+    await warmPrimaryEngine(env);
+    statusFetch.mockResolvedValue(json({ trip: { legs: [{}] } }));
+    expect((await valhallaPost('/route', {}, env)).engine).toBe('valhalla-tw.a.run.app');
+    // A user route failure opens the primary breaker and falls back to public.
+    statusFetch.mockImplementation(async (url) => json({}, url.startsWith(primary) ? 503 : 200));
+    await valhallaPost('/route', {}, env);
+    for (const status of [503, 200]) {
+      statusFetch.mockImplementation(async (url) => json({}, url === `${primary}/status` ? status : 200));
+      await warmPrimaryEngine(env);
+      fetchMock.mockClear();
+      expect((await valhallaPost('/route', {}, env)).engine).toBe('valhalla1.openstreetmap.de');
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['https://valhalla1.openstreetmap.de/route']);
+    }
   });
 });

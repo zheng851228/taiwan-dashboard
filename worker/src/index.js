@@ -6,6 +6,7 @@ import {
   isFresh
 } from './conditions.js';
 import { roadEventState } from './road-events.js';
+import { warmPrimaryEngine } from './valhalla.js';
 import {
   buildFixtureCameras,
   buildFixtureCountyWeather,
@@ -104,6 +105,9 @@ export default {
  *   失敗清單與 lastFailureAt / lastSuccessAt，供 GET /v2/health 查詢。
  */
 export async function scheduled(event, env, ctx) {
+  // Independent of snapshot mode / KV availability; do not await on the snapshot path.
+  // Direct test/tool callers may omit the Workers execution context.
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(warmPrimaryEngine(env));
   const binding = env.PROVIDER_SNAPSHOTS || env.ROUTE_CACHE;
   if (!binding) {
     console.error('scheduled snapshot: 沒有可用的 KV binding（PROVIDER_SNAPSHOTS/ROUTE_CACHE）');

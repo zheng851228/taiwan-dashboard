@@ -24,7 +24,7 @@
 ## Worker（`worker/`）
 
 - Cloudflare Worker，設定在 `worker/wrangler.jsonc`，分 `staging`、`production` 兩個環境。
-- 路線：`worker/src/valhalla.js` 依序嘗試自架 Valhalla（`VALHALLA_PRIMARY_URL`，VM 經 Cloudflare Tunnel）再退回公共伺服器；`worker/src/providers.js` 的 `traceRouteAttributes` 把路線對應到道路，供 `conditions.js`、`rules.js` 使用。
+- 路線：`worker/src/valhalla.js` 依序嘗試自架 Valhalla（`VALHALLA_PRIMARY_URL`，VM 經 Cloudflare Tunnel 的密鑰模式，或 Cloud Run 的 ID token 模式）再退回公共伺服器；`worker/src/providers.js` 的 `traceRouteAttributes` 把路線對應到道路，供 `conditions.js`、`rules.js` 使用。
 - 單元測試用 `vi.stubGlobal('fetch', …)` 模擬上游；不要在測試裡打真實 API。
 
 ## 驗證

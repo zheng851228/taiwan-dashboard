@@ -48,6 +48,33 @@ export function valhallaEngines(env = {}) {
   return engines;
 }
 
+/** Best-effort Cloud Run keepalive; never changes route breakers or writes KV. */
+export async function warmPrimaryEngine(env = {}) {
+  const engine = valhallaEngines(env).find((entry) => entry.primary && entry.auth === 'gcp');
+  if (!engine || !env.GCP_SERVICE_ACCOUNT_KEY) return;
+  try {
+    const token = await getIdToken(env, engine.url);
+    if (!token) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(`${engine.url}/status`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal
+      });
+      // Only the status code matters; release the body without buffering it.
+      if (response.body) await response.body.cancel();
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      // /status success does not prove route readiness: leave existing breakers alone.
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (error) {
+    console.warn(`valhalla warmup failed (${engine.id}): ${error.message || error}`);
+  }
+}
+
 function isOpen(engine, now) {
   const until = breaker.get(engine.id);
   return Boolean(until && until > now);
