@@ -26,7 +26,7 @@ install -m 0644 "$SRC/cloudflared-config.yml.template" "$BASE/cloudflared-config
 install -m 0755 "$SRC/build-tiles.sh" "$BASE/build-tiles.sh"
 install -m 0755 "$SRC/tunnel.sh" "$BASE/tunnel.sh"
 umask 077
-printf 'VALHALLA_KEY=%s\n' "$VALHALLA_KEY" > "$BASE/.env"
+printf 'VALHALLA_KEY=%s\nVALHALLA_MEM=%s\nBUILD_MEM=%s\n' "$VALHALLA_KEY" "${VALHALLA_MEM:-2g}" "${BUILD_MEM:-3g}" > "$BASE/.env"
 chmod 600 "$BASE/.env"
 umask 022
 

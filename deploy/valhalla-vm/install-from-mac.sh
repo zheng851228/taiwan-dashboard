@@ -25,7 +25,51 @@ else
   read -r -p "區域 (zone): " ZONE
 fi
 echo "使用 VM: $VM ($ZONE)"
-ask "確認要在這台 VM 上安裝 Valhalla（會與遊戲伺服器共用，限制 1.5 核 / 2GB，建置時最多 3GB）？" || exit 1
+
+step "1b. 讀取 VM 記憶體與 Minecraft（java）設定"
+# prints: TOTAL_MB AVAILABLE_MB JAVA_XMX_MB(0 if none) JAVA_RSS_MB(0 if none)
+# (a function, not a heredoc inside $(...): macOS bash 3.2 mis-parses `case ... )` there)
+probe_memory() {
+gcloud compute ssh "$VM" --zone "$ZONE" --command 'bash -s' <<'PROBE'
+total=$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo)
+avail=$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo)
+xmx=0; rss=0
+for pid in $(pgrep -f java || true); do
+  arg=$(tr '\0' '\n' < /proc/$pid/cmdline 2>/dev/null | grep -E '^-Xmx[0-9]+[gGmMkK]?$' | tail -1)
+  if [ -n "$arg" ]; then
+    v=${arg#-Xmx}; n=${v%[gGmMkK]}; u=${v#$n}
+    case "$u" in g|G) n=$((n*1024));; k|K) n=$((n/1024));; m|M|'') ;; esac
+    [ "$n" -gt "$xmx" ] && xmx=$n
+  fi
+  r=$(awk '/^VmRSS:/{print int($2/1024)}' /proc/$pid/status 2>/dev/null || echo 0); rss=$((rss + ${r:-0}))
+done
+echo "$total $avail $xmx $rss"
+PROBE
+}
+MEM="$(probe_memory)"
+read -r TOTAL_MB AVAIL_MB XMX_MB JAVA_RSS_MB <<<"$(printf '%s\n' "$MEM" | tail -1)"
+echo "VM 記憶體：總共 ${TOTAL_MB} MB，目前可用 ${AVAIL_MB} MB"
+if [ "${XMX_MB:-0}" -gt 0 ]; then
+  echo "Minecraft（java）：-Xmx ${XMX_MB} MB，目前實際使用 ${JAVA_RSS_MB} MB"
+  # the JVM uses more than its heap (metaspace, threads, native): reserve heap + 25%
+  JAVA_RESERVE=$(( XMX_MB * 125 / 100 ))
+  [ "$JAVA_RSS_MB" -gt "$JAVA_RESERVE" ] && JAVA_RESERVE=$JAVA_RSS_MB
+else
+  echo "沒找到 java 的 -Xmx（伺服器可能沒在跑）；以目前已使用的記憶體估算"
+  JAVA_RESERVE=$(( TOTAL_MB - AVAIL_MB ))
+fi
+HEADROOM=$(( TOTAL_MB - JAVA_RESERVE - 1024 ))   # 1 GB for the OS
+echo "扣掉遊戲與系統後可給 Valhalla：約 ${HEADROOM} MB（平常的服務 + 每週建置同時在跑時都要放得下）"
+if [ "$HEADROOM" -ge 6144 ]; then
+  VALHALLA_MEM=2g; BUILD_MEM=3g
+elif [ "$HEADROOM" -ge 4096 ]; then
+  VALHALLA_MEM=1g; BUILD_MEM=2g
+else
+  echo "空間不夠，為了不影響 Minecraft，這台 VM 不安裝。建議改用 Cloud Run（deploy/valhalla/README.md）。" >&2
+  exit 1
+fi
+echo "設定：Valhalla 最多 ${VALHALLA_MEM}，每週建置最多 ${BUILD_MEM}，CPU 最多 1.5 核"
+ask "確認要在這台 VM 上安裝 Valhalla？" || exit 1
 
 step "2. 產生密鑰並存進 Worker（production）"
 KEY="$(openssl rand -hex 32)"
@@ -43,7 +87,7 @@ if [ -d /opt/valhalla/repo/.git ]; then
 else
   mkdir -p /opt/valhalla && git clone -q --depth 1 -b $BRANCH https://github.com/zheng851228/taiwan-dashboard /opt/valhalla/repo
 fi
-VALHALLA_KEY='$KEY' bash /opt/valhalla/repo/deploy/valhalla-vm/setup.sh
+VALHALLA_KEY='$KEY' VALHALLA_MEM='$VALHALLA_MEM' BUILD_MEM='$BUILD_MEM' bash /opt/valhalla/repo/deploy/valhalla-vm/setup.sh
 REMOTE
 fi
 

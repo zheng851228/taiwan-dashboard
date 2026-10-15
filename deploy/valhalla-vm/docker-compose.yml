@@ -9,7 +9,7 @@ services:
   valhalla:
     image: valhalla-tw:current
     restart: unless-stopped
-    mem_limit: 2g
+    mem_limit: ${VALHALLA_MEM:-2g}
     cpus: 1.5
     networks: [internal]
 
