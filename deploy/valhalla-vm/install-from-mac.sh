@@ -43,6 +43,12 @@ for pid in $(pgrep -f java || true); do
   fi
   r=$(awk '/^VmRSS:/{print int($2/1024)}' /proc/$pid/status 2>/dev/null || echo 0); rss=$((rss + ${r:-0}))
 done
+echo "前 5 個最吃記憶體的程式（MB / 名稱）：" >&2
+ps -eo rss=,comm=,args= --sort=-rss 2>/dev/null | head -5 | awk '{printf "  %6d MB  %s  %s\n", $1/1024, $2, substr($0, index($0,$3), 70)}' >&2
+if command -v docker >/dev/null 2>&1; then
+  echo "Docker 容器：" >&2
+  sudo docker ps --format '  {{.Names}}  {{.Image}}  {{.Status}}' 2>/dev/null >&2 || true
+fi
 echo "$total $avail $xmx $rss"
 PROBE
 }
