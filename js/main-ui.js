@@ -91,10 +91,11 @@
   };
   window.UiPrefsMod = UiPrefsMod;
 
-  // iOS standalone (viewport-fit=cover + black-translucent): the layout viewport can end one status-bar
-  // inset above the physical bottom (WebKit bug 237961).  When - and only when - that exact gap is
-  // measured, size #app to the full screen height so the nav reaches the bottom edge.  Everywhere
-  // else --app-h stays unset and CSS falls back to 100dvh.
+  // iOS standalone (viewport-fit=cover + black-translucent): the layout viewport ends one status-bar
+  // inset above the physical bottom and WebKit paints nothing below it (bug 237961).  When - and only
+  // when - that exact gap is measured, mark html.vp-gap and pin the shell to innerHeight; CSS then drops
+  // the nav's safe-bottom padding (the home indicator sits in the unpainted band) and paints the band
+  // in the nav colour.  Everywhere else --app-h stays unset and CSS falls back to 100dvh.
   var ViewportMod = {
     init: function() {
       var root = document.documentElement;
@@ -106,14 +107,15 @@
         var ua = navigator.userAgent || '';
         var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         var standalone = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-        var h = '';
+        var gapMode = false;
         if (ios && standalone && window.innerHeight > window.innerWidth) {
           var safeTop = parseFloat(getComputedStyle(probe).paddingTop) || 0;
           var full = Math.max(window.screen.width, window.screen.height);
           var gap = full - window.innerHeight;
-          if (safeTop > 0 && gap >= 1 && gap <= safeTop + 4) h = full + 'px';
+          gapMode = safeTop > 0 && gap >= 1 && gap <= safeTop + 4;
         }
-        if (h) root.style.setProperty('--app-h', h);
+        root.classList.toggle('vp-gap', gapMode);
+        if (gapMode) root.style.setProperty('--app-h', window.innerHeight + 'px');
         else root.style.removeProperty('--app-h');
       }
       apply();
@@ -605,10 +607,15 @@
       var map = MapMod.map;
       if (!map || MapMod._eventsBound) return;
       MapMod._eventsBound = true;
-      // Any user gesture (drag, pinch, rotate, wheel, zoom buttons, double-tap) carries an
-      // originalEvent; our own easeTo / flyTo calls do not.  Locate "follow" listens for this.
+      // User gestures (drag, pinch, rotate, zoom buttons, double-tap) carry an originalEvent; our
+      // own easeTo / flyTo calls do not.  Scroll-zoom moves arrive without one, so a move that
+      // starts while a MapLibre gesture handler is active also counts.  Locate "follow" listens.
       map.on('movestart', function(event) {
-        if (event && event.originalEvent) Bus.emit('map:user-gesture');
+        var gesture = (event && event.originalEvent)
+          || ['scrollZoom', 'dragPan', 'dragRotate', 'touchZoomRotate', 'touchPitch', 'doubleClickZoom', 'boxZoom'].some(function(name) {
+            return map[name] && typeof map[name].isActive === 'function' && map[name].isActive();
+          });
+        if (gesture) Bus.emit('map:user-gesture');
       });
       map.on('click', 'mobile-camera-points', function(event) {
         var feature = event.features && event.features[0];

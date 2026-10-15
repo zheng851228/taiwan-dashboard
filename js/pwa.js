@@ -163,13 +163,18 @@
   function initServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
 
+    // An update exists only if an OLDER worker already controlled this page when it loaded.  On a
+    // first visit there is nothing to update - but WebKit can deliver the new worker's 'installed'
+    // statechange after it has already activated and claimed the page, so checking the live
+    // controller at that moment showed 「有新版本」 to first-time Safari users.
+    var hadController = Boolean(navigator.serviceWorker.controller);
     navigator.serviceWorker.register('./sw.js').then(function(registration) {
-      if (registration.waiting && navigator.serviceWorker.controller) showUpdate(registration);
+      if (registration.waiting && hadController) showUpdate(registration);
       registration.addEventListener('updatefound', function() {
         var worker = registration.installing;
         if (!worker) return;
         worker.addEventListener('statechange', function() {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          if (worker.state === 'installed' && hadController && registration.waiting === worker) {
             showUpdate(registration);
           }
         });

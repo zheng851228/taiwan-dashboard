@@ -72,4 +72,18 @@ test('locate follows until the user pans away; the dot keeps updating but the ca
   // 5. following again: the next position update moves the camera with the dot
   await context.setGeolocation({ latitude: 24.1720, longitude: 120.6570, accuracy: 12 });
   await expect.poll(async () => (await snap()).lat, { timeout: 8000 }).toBeCloseTo(24.172, 4);
+  await settled();
+
+  // 6. a scroll / pinch zoom is a user gesture too (MapLibre sends no originalEvent for it)
+  await page.mouse.move(200, 420);
+  await page.mouse.wheel(0, 300);
+  await expect(page.locator('#js-loc')).toHaveAttribute('data-follow', 'false');
+
+  // 7. a plain tap on the map is not: follow survives a tap
+  await page.locator('#js-loc').click();
+  await expect(page.locator('#js-loc')).toHaveAttribute('data-follow', 'true');
+  await settled();
+  await page.mouse.click(200, 420);
+  await page.waitForTimeout(600);
+  await expect(page.locator('#js-loc')).toHaveAttribute('data-follow', 'true');
 });

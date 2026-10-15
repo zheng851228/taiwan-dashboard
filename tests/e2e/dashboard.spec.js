@@ -75,6 +75,11 @@ test('ignores an arbitrary Worker override and keeps the production origin', asy
   await expect(page.locator('#route-collapsed:visible, #route-expanded:visible')).toBeVisible();
 });
 
+// The app's service worker forwards fetches Playwright cannot intercept; once it controls the page
+// the idle cam-list.json load would bypass the stub below and read the real 2MB snapshot.
+test.describe('pages camera snapshot', () => {
+  test.use({ serviceWorkers: 'block' });
+
 test('loads the validated Pages camera snapshot without waiting for the production Worker', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Camera snapshot behavior runs once.');
   let workerCameraRequests = 0;
@@ -100,6 +105,7 @@ test('loads the validated Pages camera snapshot without waiting for the producti
     ids: Data.allCams().map(camera => camera.id)
   }))).toEqual({ state: 'ready', ids: ['pages-cam-1'] });
   expect(workerCameraRequests).toBe(0);
+});
 });
 
 // Playwright cannot see requests that the page's service worker forwards, and the app's
@@ -1240,6 +1246,7 @@ test('does not interrupt first load and keeps a fixed iPhone install entry', asy
   await expect(sheet).toBeHidden();
 });
 
+
 test('shows one non-blocking install nudge after the first live safe route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'iPhone Safari install guidance verification only.');
   await page.addInitScript(() => {
@@ -1353,8 +1360,8 @@ test('keeps manual route entry available when location is denied', async ({ page
 
 test('keeps the PWA shell offline without serving stale API data', async ({ page, context, browserName }, testInfo) => {
   test.skip(browserName !== 'chromium', 'Offline service-worker verification runs in Chromium.');
+  // 1. Online, on the shared server: build a safe route; the app saves its snapshot.
   await page.goto(WORKER);
-  await page.evaluate(() => navigator.serviceWorker.ready);
   await openRoutePlanner(page);
   await page.locator('#js-route-start').fill('25.0478,121.5170');
   await page.locator('#js-route-end').fill('24.7570,121.7530');
@@ -1364,9 +1371,28 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
     const snapshot = JSON.parse(localStorage.getItem('tw_last_route_snapshot_v1') || 'null');
     return snapshot?.route?.validation?.status;
   })).toBe('safe');
+  const saved = await page.evaluate(() => Object.fromEntries(
+    Object.keys(localStorage).filter((key) => key.startsWith('tw_')).map((key) => [key, localStorage.getItem(key)])
+  ));
+
+  // 2. The offline part runs on a throwaway `localhost` origin carrying the same saved state: the
+  // service worker treats every 127.0.0.1 request as API traffic (network only), so on the shared
+  // server its styles and scripts only "worked offline" in browsers whose offline emulation missed
+  // the worker's own fetches (older Chromium; Chrome 149 does not - CSS and JS failed to load).
+  // (The Worker's CORS list does not include a random port, hence the route is built in step 1.)
+  const site = await startStaticOrigin();
+  page.on('close', () => site.stop());
+  await page.goto(`${site.origin}/?worker=${workerOrigin}`);
+  await page.evaluate((entries) => {
+    Object.entries(entries).forEach(([key, value]) => localStorage.setItem(key, value));
+  }, saved);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 15000 }).toBe(true);
   await page.reload();
   await expectAppShell(page);
 
+  // Offline for real: the app's origin is gone too, so the shell can only come from the cache.
+  await site.stop();
   await context.setOffline(true);
   await page.reload();
   await expectAppShell(page);
