@@ -1,7 +1,7 @@
 // js/route-filmstrip.js — 沿途 CCTV 膠卷增強層。
 //
 // 背景：js/enhancements.js 的 RouteStripMod 已經負責渲染橫向膠卷
-// （監聽 route:updated → RouteMod.filteredCams，照行進方向排序，點卡片
+// （監聽 route:updated 的 cams，照行進方向排序，點卡片
 // 觸發 camera:open + 地圖聚焦）。本模組不重複渲染，而是掛在既有膠卷上
 // 補三件事：
 //   1. 新鮮度：每張卡顯示「N 分鐘前」，>15 分鐘標示疑似過期樣式。
@@ -198,8 +198,8 @@
   function recheckFromCurrentPosition() {
     var geo = (typeof navigator !== 'undefined') ? navigator.geolocation : null;
     if (!geo) { toast('此裝置不支援定位功能'); return; }
-    var routeMod = (typeof window !== 'undefined') ? window.RouteMod : null;
-    if (routeMod && routeMod.analyzing) return;
+    // An analysis already running: the shell publishes it as body[data-route-state="analyzing"].
+    if (document.body && document.body.dataset.routeState === 'analyzing') return;
     setRecheckBusy(true);
     geo.getCurrentPosition(function(pos) {
       setRecheckBusy(false);

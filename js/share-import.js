@@ -167,8 +167,6 @@
     var emit = function() {
       if (window.Bus && typeof window.Bus.emit === 'function') {
         window.Bus.emit('route:request', { action: 'analyze' });
-      } else if (window.RouteMod && typeof window.RouteMod.analyze === 'function') {
-        window.RouteMod.analyze();
       }
     };
     if (window.requestAnimationFrame) {

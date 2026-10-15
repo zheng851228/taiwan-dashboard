@@ -1233,7 +1233,8 @@
           RouteMod.analyze();
           return;
         }
-        if (action === 'clear') RouteMod.clear();
+        if (action === 'clear') { RouteMod.clear(); return; }
+        if (action === 'restore') RouteMod.restoreSnapshot(request && request.route, request && request.coords);
       });
       Dom.onAll('.route-mode-btn', 'click', function(btn) {
           RouteMod.setVehicle(btn.dataset.mode, btn.dataset.plate || RouteMod.plate);
@@ -1245,6 +1246,21 @@
           if (e.key === 'Enter') RouteMod.analyze();
         });
       });
+    },
+    // Offline / reload restore of a saved route (pwa.js asks via route:request 'restore').  RouteMod
+    // owns its state; the vehicle goes through setVehicle so the plate buttons, the desktop header
+    // and the navigation links (vehicle:changed listeners) match the restored route - a restored car
+    // route used to keep motorcycle / white-plate navigation links.  Old snapshots may carry the
+    // removed yellow plate; the Worker treats it like red, so the UI shows red.
+    restoreSnapshot: function(route, coords) {
+      if (!route || !Array.isArray(coords) || coords.length < 2) return false;
+      var vehicle = route.vehicle || {};
+      var plate = vehicle.plate === 'yellow' ? 'red' : vehicle.plate;
+      RouteMod.active = true;
+      RouteMod.setVehicle(vehicle.type === 'car' ? 'car' : 'motorcycle', plate);
+      RouteMod.routeCoords = coords;
+      RouteMod.filteredCams = [];
+      return true;
     },
     analyze: function() {
       if (RouteMod.analyzing) return;
