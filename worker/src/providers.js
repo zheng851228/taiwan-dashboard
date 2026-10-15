@@ -68,6 +68,9 @@ const CWA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 const CAMERA_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
 const TRACE_CHUNK_DISTANCE_KM = 150;
+// trace_attributes can leave the last few metres of a route shape without an edge (the route
+// ends a hair past the final traced edge).  A stub this short is attributed to the last edge.
+const TRACE_TERMINAL_STUB_KM = 0.01;
 const TDX_ROAD_EVENT_PAGE_SIZE = 1000;
 const JSON_RESPONSE_CACHE_MAX = 256;
 
@@ -151,7 +154,7 @@ export async function traceRouteAttributes(route, costing, env) {
       chunkEdges,
       chunk.geometry.length,
       chunk.startShapeIndex,
-      chunkIndex < chunks.length - 1 ? 1 : 0
+      chunkIndex < chunks.length - 1 ? 1 : terminalStubSegments(chunk.geometry)
     );
     return {
       startShapeIndex: chunk.startShapeIndex,
@@ -168,8 +171,23 @@ export async function traceRouteAttributes(route, costing, env) {
     ));
   });
   if (!edges.length) throw new Error('Valhalla trace_attributes returned no road edges');
-  assertTraceCoverage(edges, route.geometry.length, 'combined route');
+  assertTraceCoverage(edges, route.geometry.length, 'combined route', terminalStubSegments(route.geometry));
+  const lastEdge = edges.reduce((last, edge) => (edge.endShapeIndex >= last.endShapeIndex ? edge : last));
+  lastEdge.endShapeIndex = route.geometry.length - 1;
   return edges;
+}
+
+// How many trailing shape segments fit inside TRACE_TERMINAL_STUB_KM.  At least one segment
+// must still be traced, so a route shorter than the stub is not accepted untraced.
+function terminalStubSegments(geometry) {
+  let segments = 0;
+  let distanceKm = 0;
+  for (let index = geometry.length - 1; index > 1; index -= 1) {
+    distanceKm += haversineKm(geometry[index - 1], geometry[index]);
+    if (distanceKm > TRACE_TERMINAL_STUB_KM) break;
+    segments += 1;
+  }
+  return segments;
 }
 
 function assertTraceCoverage(edges, geometryLength, startShapeIndex, maxTrailingUncoveredSegments = 0) {
