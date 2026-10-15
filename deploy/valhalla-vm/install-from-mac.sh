@@ -77,10 +77,22 @@ fi
 echo "設定：Valhalla 最多 ${VALHALLA_MEM}，每週建置最多 ${BUILD_MEM}，CPU 最多 1.5 核"
 ask "確認要在這台 VM 上安裝 Valhalla？" || exit 1
 
-step "2. 產生密鑰並存進 Worker（production）"
-KEY="$(openssl rand -hex 32)"
-if ask "把密鑰存成 Worker secret VALHALLA_PRIMARY_KEY？"; then
-  (cd "$REPO_DIR/worker" && printf '%s' "$KEY" | npx wrangler secret put VALHALLA_PRIMARY_KEY --env production)
+step "2. 密鑰（存在這台 Mac，只有你能讀；重跑會沿用同一把）"
+KEY_FILE="$HOME/.config/taiwan-dashboard/valhalla-key"
+mkdir -p "$(dirname "$KEY_FILE")"
+if [ -s "$KEY_FILE" ]; then
+  echo "沿用既有密鑰：$KEY_FILE"
+else
+  (umask 077; openssl rand -hex 32 > "$KEY_FILE")
+  echo "已產生新密鑰：$KEY_FILE"
+fi
+chmod 600 "$KEY_FILE"
+KEY="$(cat "$KEY_FILE")"
+if ask "現在也把密鑰存成 Worker secret VALHALLA_PRIMARY_KEY？（需要 wrangler 已登入）"; then
+  if ! (cd "$REPO_DIR/worker" && npx wrangler secret put VALHALLA_PRIMARY_KEY --env production < "$KEY_FILE"); then
+    echo "Worker secret 這次沒設成功（wrangler 沒登入）。不影響 VM 安裝，之後再設：" >&2
+    echo "  cd ~/Projects/taiwan-dashboard/worker && npx wrangler login && npx wrangler secret put VALHALLA_PRIMARY_KEY --env production < $KEY_FILE" >&2
+  fi
 fi
 
 step "3. 在 VM 上安裝（Docker、下載程式、建置台灣路網約 10-20 分鐘）"
