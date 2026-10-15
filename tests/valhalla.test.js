@@ -149,6 +149,27 @@ describe('Valhalla engine chain', () => {
     expect(fallback.engine).toBe('public.test');
   });
 
+  it('calls a key-protected engine (VM behind a Cloudflare Tunnel) with the shared secret', async () => {
+    const seen = [];
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      seen.push([new URL(url).hostname, init.headers['X-Valhalla-Key'], init.headers.Authorization]);
+      return json({ trip: { legs: [{}] } });
+    }));
+    const env = { VALHALLA_PRIMARY_URL: 'https://valhalla.caotaapps.com', VALHALLA_PRIMARY_KEY: 's3cret', VALHALLA_BASE_URL: 'https://public.test' };
+    expect(valhallaEngines(env)[0]).toMatchObject({ id: 'valhalla.caotaapps.com', auth: 'key', primary: true });
+    const result = await valhallaPost('/route', {}, env);
+    expect(result.engine).toBe('valhalla.caotaapps.com');
+    expect(seen).toEqual([['valhalla.caotaapps.com', 's3cret', undefined]]);
+  });
+
+  it('a wrong key (403) falls back to the public engine', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => (
+      new URL(url).hostname === 'valhalla.caotaapps.com' ? json({ error: 'forbidden' }, 403) : json({ trip: { legs: [{}] } })
+    )));
+    const result = await valhallaPost('/route', {}, { VALHALLA_PRIMARY_URL: 'https://valhalla.caotaapps.com', VALHALLA_PRIMARY_KEY: 'wrong', VALHALLA_BASE_URL: 'https://public.test' });
+    expect(result.engine).toBe('public.test');
+  });
+
   it('signs a JWT whose expiry is one hour after issue', async () => {
     const { key } = await serviceAccount();
     const jwt = await signServiceAccountJwt(key, 'https://x.a.run.app', 1000);

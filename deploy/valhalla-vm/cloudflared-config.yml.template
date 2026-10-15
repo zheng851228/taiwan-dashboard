@@ -1,0 +1,7 @@
+# Filled in by tunnel.sh.  The tunnel forwards valhalla.<domain> to the key gate.
+tunnel: __TUNNEL_ID__
+credentials-file: /etc/cloudflared/__TUNNEL_ID__.json
+ingress:
+  - hostname: __HOSTNAME__
+    service: http://gate:8081
+  - service: http_status:404

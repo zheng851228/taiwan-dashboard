@@ -1,7 +1,9 @@
 // Valhalla engines in priority order, with fallback.
 //
-//   1. VALHALLA_PRIMARY_URL  - the self-hosted Cloud Run service (private; called with a Google
-//      ID token minted from GCP_SERVICE_ACCOUNT_KEY).  Optional.
+//   1. VALHALLA_PRIMARY_URL  - the self-hosted engine.  Optional.  Two ways to keep it private:
+//      - VALHALLA_PRIMARY_KEY set: a shared secret sent as `X-Valhalla-Key` (the VM behind a
+//        Cloudflare Tunnel, deploy/valhalla-vm/);
+//      - otherwise a Google ID token minted from GCP_SERVICE_ACCOUNT_KEY (Cloud Run).
 //   2. VALHALLA_BASE_URL     - the public FOSSGIS server (default), always kept as a fallback.
 //   3. VALHALLA_FALLBACK_URLS - optional extra comma-separated public engines.
 //
@@ -40,7 +42,7 @@ export function valhallaEngines(env = {}) {
     seen.add(clean);
     engines.push({ id: engineId(clean), url: clean, auth: null, ...extra });
   };
-  if (env.VALHALLA_PRIMARY_URL) add(env.VALHALLA_PRIMARY_URL, { auth: 'gcp', primary: true });
+  if (env.VALHALLA_PRIMARY_URL) add(env.VALHALLA_PRIMARY_URL, { auth: env.VALHALLA_PRIMARY_KEY ? 'key' : 'gcp', primary: true });
   add(env.VALHALLA_BASE_URL || DEFAULT_VALHALLA_URL);
   String(env.VALHALLA_FALLBACK_URLS || '').split(',').forEach((url) => add(url));
   return engines;
@@ -61,6 +63,7 @@ function shouldFallback(error) {
 
 async function postToEngine(engine, path, body, env, timeoutMs) {
   const headers = { 'Content-Type': 'application/json' };
+  if (engine.auth === 'key') headers['X-Valhalla-Key'] = String(env.VALHALLA_PRIMARY_KEY);
   if (engine.auth === 'gcp') {
     const token = await getIdToken(env, engine.url);
     if (!token) {

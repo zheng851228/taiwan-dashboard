@@ -34,6 +34,7 @@ Worker 每 5 分鐘檢查路況/天氣/攝影機資料源,每小時實測一次�
 |---|---|---|
 | `VALHALLA_PRIMARY_URL` | 變數 | Cloud Run 服務網址;未設定時只用公開的 FOSSGIS 伺服器 |
 | `VALHALLA_BASE_URL` | 變數 | 公開備援(預設 FOSSGIS),永遠保留 |
+| `VALHALLA_PRIMARY_KEY` | secret | 自架 VM（Cloudflare Tunnel）用的共用密鑰；有設定時優先於 GCP 金鑰，見 ../valhalla-vm/ |
 | `GCP_SERVICE_ACCOUNT_KEY` | secret | 呼叫 Cloud Run 用的 invoker 金鑰(JSON) |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | secret | 異常通知 |
 | `NOMINATIM_RATE_LIMITER` | 綁定 | 全站每分鐘最多 50 次 Nominatim 查詢,超過時改用 Photon |
