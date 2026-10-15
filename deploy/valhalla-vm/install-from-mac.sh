@@ -92,7 +92,12 @@ else
   exit 1
 fi
 echo "設定：Valhalla 最多 ${VALHALLA_MEM}，每週建置最多 ${BUILD_MEM}，CPU 最多 1.5 核"
-ask "確認要在這台 VM 上安裝 Valhalla？" || exit 1
+if [ "${INSTALLED:-0}" = 1 ]; then
+  echo "VM 上的 Valhalla 已經裝好並在運作。"
+  ask "繼續（套用上面的記憶體上限，然後設定 Cloudflare Tunnel）？請輸入 y" || exit 1
+else
+  ask "確認要在這台 VM 上安裝 Valhalla？" || exit 1
+fi
 
 step "2. 密鑰（存在這台 Mac，只有你能讀；重跑會沿用同一把）"
 KEY_FILE="$HOME/.config/taiwan-dashboard/valhalla-key"
