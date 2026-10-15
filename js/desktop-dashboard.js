@@ -3,7 +3,7 @@
 (function() {
   'use strict';
 
-  var DESKTOP_BREAKPOINT = '(min-width: 1200px)';
+  var DESKTOP_BREAKPOINT = Config.DESKTOP_QUERY;
   var MAP_PREF_KEY = 'tw_desktop_map_renderer_v1';
   var TERRAIN_PREF_KEY = 'tw_desktop_terrain_mode_v1';
   var BASEMAP_PREF_KEY = 'tw_desktop_basemap_v1';
