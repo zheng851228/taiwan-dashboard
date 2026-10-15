@@ -607,10 +607,16 @@
       var map = MapMod.map;
       if (!map || MapMod._eventsBound) return;
       MapMod._eventsBound = true;
-      // Any user gesture (drag, pinch, rotate, wheel, zoom buttons, double-tap) carries an
-      // originalEvent; our own easeTo / flyTo calls do not.  Locate "follow" listens for this.
+      // User gestures (drag, pinch, rotate, zoom buttons, double-tap) carry an originalEvent; our
+      // own easeTo / flyTo calls do not.  Scroll-zoom moves arrive without one, so a wheel or
+      // touch-move on the canvas layer in the last 400 ms also counts (a plain tap does not; our
+      // own buttons, e.g. locate, are outside the canvas container).  Locate "follow" listens.
+      var lastInputAt = 0;
+      ['wheel', 'touchmove'].forEach(function(type) {
+        map.getCanvasContainer().addEventListener(type, function() { lastInputAt = Date.now(); }, { passive: true, capture: true });
+      });
       map.on('movestart', function(event) {
-        if (event && event.originalEvent) Bus.emit('map:user-gesture');
+        if ((event && event.originalEvent) || Date.now() - lastInputAt < 400) Bus.emit('map:user-gesture');
       });
       map.on('click', 'mobile-camera-points', function(event) {
         var feature = event.features && event.features[0];

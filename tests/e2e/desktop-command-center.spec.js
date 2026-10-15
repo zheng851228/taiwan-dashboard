@@ -412,10 +412,21 @@ test('camera custom state is not persisted and reset returns to the full route',
   await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getPitch()), { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(32, 0);
   await expect.poll(() => page.evaluate(() => window.DesktopDashboardMod.getRenderer().map.getBearing()), { timeout: CAMERA_SETTLE_MS }).toBeCloseTo(0, 0);
 
+  // Programmatic moves (a late route fit, a layout resize) are not the user: the preset label stays.
   await page.evaluate(() => {
     const renderer = window.DesktopDashboardMod.getRenderer();
-    renderer.map.rotateTo(37, { duration: 0 });
+    renderer.resize();
+    renderer.map.fitBounds(renderer.map.getBounds(), { duration: 0 });
+    renderer.map.easeTo({ zoom: renderer.map.getZoom() - 0.5, duration: 0 });
   });
+  // Read after two frames without retrying, so a late "自訂" flip cannot slip past.
+  expect(await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    resolve(document.getElementById('desktop-camera-state').textContent.trim());
+  }))))).toBe('鳥瞰');
+  // A real user gesture (mouse wheel over the map) is what makes the camera "custom".
+  const mapBox = await page.locator('#desktop-map canvas').first().boundingBox();
+  await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+  await page.mouse.wheel(0, -400);
   await expect(page.locator('#desktop-camera-state')).toHaveText('自訂');
   expect(await page.evaluate(() => localStorage.getItem('tw_desktop_camera_preset_v1'))).toBe('birdseye');
 

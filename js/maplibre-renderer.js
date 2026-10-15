@@ -200,8 +200,23 @@
             }, self.mode === '3d' ? { terrain: { source: 'terrainSource', exaggeration: 1 } } : {})
           });
           self.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
-          self.map.on('moveend', function() {
-            if (!self.cameraProgrammatic) {
+          // "自訂" means the USER moved the camera.  Only gestures (drag, wheel, pinch, rotate, the
+          // navigation buttons) carry an originalEvent; our own fitBounds after a late route redraw,
+          // map.resize() on layout changes and preset eases do not, and must not flip the label.
+          // MapLibre attaches originalEvent to drag / pinch / button moves but not to scroll-zoom
+          // moves, so a wheel or touch-move on the canvas layer in the last 400 ms also counts
+          // (a plain tap does not).  The canvas container holds the canvas and markers, not our own controls.
+          var markInput = function() { self._lastInputAt = Date.now(); };
+          ['wheel', 'touchmove'].forEach(function(type) {
+            self.map.getCanvasContainer().addEventListener(type, markInput, { passive: true, capture: true });
+          });
+          self.map.on('movestart', function(event) {
+            self._userMove = Boolean(event && event.originalEvent) || (Date.now() - (self._lastInputAt || 0) < 400);
+          });
+          self.map.on('moveend', function(event) {
+            var user = self._userMove || Boolean(event && event.originalEvent);
+            self._userMove = false;
+            if (user) {
               self.currentPreset = 'custom';
               self.onCameraState({ preset: 'custom', pitch: self.map.getPitch(), bearing: self.map.getBearing() });
             }
@@ -414,15 +429,30 @@
         }
         if (!camera) return false;
         var duration = reduceMotion() ? 0 : (options.duration === undefined ? 650 : options.duration);
+        var self = this;
+        var token = (this._cameraToken || 0) + 1;
+        this._cameraToken = token;
         this.cameraProgrammatic = true;
         this.currentPreset = normalized === 'reset' && !this.routeCoords.length ? 'reset' : normalized;
-        if (duration > 0) this.map.easeTo(Object.assign({}, camera, { duration: duration }));
-        else this.map.jumpTo(camera);
-        var self = this;
-        window.setTimeout(function() {
+        var settled = false;
+        function settle() {
+          if (settled || self._cameraToken !== token) return;
+          settled = true;
           self.cameraProgrammatic = false;
           self.onCameraState({ preset: self.currentPreset, pitch: self.map.getPitch(), bearing: self.map.getBearing() });
-        }, duration + 30);
+        }
+        // The move is "ours" until ITS moveend, not until a timer: under load frames run late and a
+        // timer-based reset let the preset's own moveend be read as a user move ("自訂").  The listener
+        // is attached after easeTo/jumpTo so the moveend of an interrupted previous move (fired
+        // synchronously inside easeTo) cannot settle this one early; jumpTo settles right away.
+        if (duration > 0) {
+          this.map.easeTo(Object.assign({}, camera, { duration: duration }));
+          this.map.once('moveend', settle);
+          window.setTimeout(settle, duration + 2000); // fallback if no moveend arrives
+        } else {
+          this.map.jumpTo(camera);
+          settle();
+        }
         return true;
       },
       _routeBearing: function() {
