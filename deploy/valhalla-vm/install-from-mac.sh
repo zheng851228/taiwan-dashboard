@@ -109,7 +109,7 @@ VALHALLA_KEY='$KEY' VALHALLA_MEM='$VALHALLA_MEM' BUILD_MEM='$BUILD_MEM' bash /op
 REMOTE
 fi
 
-step "4. 建立 Cloudflare Tunnel（$HOST）"
+step "4. 建立 Cloudflare Tunnel（${HOST}）"
 echo "等一下會出現一個 https://dash.cloudflare.com/... 的網址：按住 Command 點開，登入 Cloudflare，選 caotaapps.com 按 Authorize。"
 if ask "開始？"; then
   gcloud compute ssh "$VM" --zone "$ZONE" -- -t "sudo /opt/valhalla/tunnel.sh $HOST"
@@ -117,7 +117,7 @@ fi
 
 step "5. 測試"
 code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "https://$HOST/route" -H 'Content-Type: application/json' -d '{}' || true)"
-echo "沒帶密鑰：HTTP $code（應該是 403）"
+echo "沒帶密鑰：HTTP ${code}（應該是 403）"
 ok="$(curl -s -X POST "https://$HOST/route" -H 'Content-Type: application/json' -H "X-Valhalla-Key: $KEY" \
   -d '{"locations":[{"lat":25.0478,"lon":121.5170},{"lat":25.0340,"lon":121.5645}],"costing":"motor_scooter"}' \
   | grep -o '"length":[0-9.]*' | head -1 || true)"
