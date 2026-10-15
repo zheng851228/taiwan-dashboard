@@ -23,8 +23,8 @@ function walk(suite) {
       if (test.status !== 'unexpected' && test.status !== 'flaky') return;
       const result = (test.results || []).find((r) => r.status !== 'passed' && r.status !== 'skipped') || {};
       const error = strip((result.error && (result.error.message || result.error.value)) || '');
-      const first = error.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 3).join(' | ');
-      lines.push(`[${test.projectName}] ${spec.file}:${spec.line} ${spec.title} ${test.status === 'flaky' ? '(flaky)' : ''}\n    ${first.slice(0, 300)}`);
+      const first = error.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 12).join(' | ');
+      lines.push(`[${test.projectName}] ${spec.file}:${spec.line} ${spec.title} ${test.status === 'flaky' ? '(flaky)' : ''}\n    ${first.slice(0, 1500)}`);
     });
   });
 }

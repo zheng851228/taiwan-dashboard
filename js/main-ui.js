@@ -609,7 +609,7 @@
       MapMod._eventsBound = true;
       // User gestures (drag, pinch, rotate, zoom buttons, double-tap) carry an originalEvent; our
       // own easeTo / flyTo calls do not.  Scroll-zoom moves arrive without one, so a wheel or
-      // touch-move on the canvas layer marks the NEXT move as the user's (within 1.5 s; consumed by
+      // touch-move on the canvas layer marks the NEXT move as the user's (within 5 s; consumed by
       // that move, so a later locate recentre is not mistaken for it; a plain tap does not count;
       // our own buttons, e.g. locate, are outside the canvas container).  Locate "follow" listens.
       var lastInputAt = 0;
@@ -617,7 +617,7 @@
         map.getCanvasContainer().addEventListener(type, function() { lastInputAt = Date.now(); }, { passive: true, capture: true });
       });
       map.on('movestart', function(event) {
-        var gesture = (event && event.originalEvent) || Date.now() - lastInputAt < 1500;
+        var gesture = (event && event.originalEvent) || Date.now() - lastInputAt < 5000;
         lastInputAt = 0;
         if (gesture) Bus.emit('map:user-gesture');
       });

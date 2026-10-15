@@ -75,6 +75,11 @@ test('ignores an arbitrary Worker override and keeps the production origin', asy
   await expect(page.locator('#route-collapsed:visible, #route-expanded:visible')).toBeVisible();
 });
 
+// The app's service worker forwards fetches Playwright cannot intercept; once it controls the page
+// the idle cam-list.json load would bypass the stub below and read the real 2MB snapshot.
+test.describe('pages camera snapshot', () => {
+  test.use({ serviceWorkers: 'block' });
+
 test('loads the validated Pages camera snapshot without waiting for the production Worker', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Camera snapshot behavior runs once.');
   let workerCameraRequests = 0;
@@ -100,6 +105,7 @@ test('loads the validated Pages camera snapshot without waiting for the producti
     ids: Data.allCams().map(camera => camera.id)
   }))).toEqual({ state: 'ready', ids: ['pages-cam-1'] });
   expect(workerCameraRequests).toBe(0);
+});
 });
 
 // Playwright cannot see requests that the page's service worker forwards, and the app's
