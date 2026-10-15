@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Run on the owner's Mac (gcloud + wrangler already signed in):
-#   cd ~/Projects/taiwan-dashboard && git fetch -q origin feat/resilience-monitoring \
-#     && bash <(git show origin/feat/resilience-monitoring:deploy/valhalla-vm/install-from-mac.sh)
+#   cd ~/Projects/taiwan-dashboard && git switch main && git pull --ff-only \
+#     && bash deploy/valhalla-vm/install-from-mac.sh
+# It installs on the single RUNNING VM of the current gcloud project (or asks which one), so
+# point gcloud at the right account/project first when moving to a new VM.
 # It asks before every step.  The shared key is generated here and never printed.
 set -euo pipefail
 
-BRANCH="${BRANCH:-feat/resilience-monitoring}"
+BRANCH="${BRANCH:-main}"
 HOST="${VALHALLA_HOSTNAME:-valhalla.caotaapps.com}"
 REPO_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
