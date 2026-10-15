@@ -2,6 +2,8 @@
 
 給 Codex、agy、Claude 等程式 agent 的工作規則。產品說明、API 與架構看 `README.md`、`docs/ARCHITECTURE.md`；指令以 `package.json` scripts 為準。
 
+開始任務前先讀 `docs/agent-lessons.md`，裡面是過去被糾正過的錯誤和對應規則；這次被糾正時，在那裡加一條「錯在哪 → 為什麼錯 → 下次怎麼做」。
+
 ## 分工與界線
 
 - 每個任務在**自己的 git worktree 與分支**上做，只 commit 到該分支。
