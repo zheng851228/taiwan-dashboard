@@ -63,5 +63,4 @@ docker tag "valhalla-tw:$STAMP" valhalla-tw:current
 # keep the current and the previous image only
 docker images valhalla-tw --format '{{.Tag}}' | grep -E '^[0-9]{12}$' | sort -r | tail -n +3 \
   | while read -r tag; do docker rmi "valhalla-tw:$tag" >/dev/null 2>&1 || true; done
-docker image prune -f >/dev/null 2>&1 || true
 log "done"
