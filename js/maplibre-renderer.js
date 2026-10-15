@@ -204,14 +204,15 @@
           // navigation buttons) carry an originalEvent; our own fitBounds after a late route redraw,
           // map.resize() on layout changes and preset eases do not, and must not flip the label.
           // MapLibre attaches originalEvent to drag / pinch / button moves but not to scroll-zoom
-          // moves, so a wheel or touch-move on the canvas layer in the last 400 ms also counts
-          // (a plain tap does not).  The canvas container holds the canvas and markers, not our own controls.
+          // moves, so a wheel or touch-move on the canvas layer marks the NEXT move as the user's
+          // (within 1.5 s, which covers slow frames; consumed by that move; a plain tap does not).  The canvas container holds the canvas and markers, not our own controls.
           var markInput = function() { self._lastInputAt = Date.now(); };
           ['wheel', 'touchmove'].forEach(function(type) {
             self.map.getCanvasContainer().addEventListener(type, markInput, { passive: true, capture: true });
           });
           self.map.on('movestart', function(event) {
-            self._userMove = Boolean(event && event.originalEvent) || (Date.now() - (self._lastInputAt || 0) < 400);
+            self._userMove = Boolean(event && event.originalEvent) || (Date.now() - (self._lastInputAt || 0) < 1500);
+            self._lastInputAt = 0;
           });
           self.map.on('moveend', function(event) {
             var user = self._userMove || Boolean(event && event.originalEvent);

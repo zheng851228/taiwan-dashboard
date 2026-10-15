@@ -84,7 +84,15 @@ jobs:
       # engine the owner's iPhone home-screen app runs on.  Tiles and terrain are stubbed in the
       # specs, and the Worker runs in fixture mode, so the run is hermetic.
       - name: Run full e2e suite
-        run: npx playwright test --project=desktop-chromium --project=iphone
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: e2e-results.json
+        run: npx playwright test --project=desktop-chromium --project=iphone --reporter=list,json
+
+      # One annotation listing every failing test and its first error line, so failures are
+      # readable on the PR page without downloading the log.
+      - name: Summarize failures
+        if: failure()
+        run: node scripts/e2e-failure-summary.mjs e2e-results.json
 
       - name: Upload Playwright report
         if: failure()

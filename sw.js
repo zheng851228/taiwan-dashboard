@@ -1,4 +1,4 @@
-const CACHE_VERSION = "e2b6e9e";
+const CACHE_VERSION = "d82f5a3";
 const SHELL_CACHE = `twdash-shell-${CACHE_VERSION}`;
 const LEGACY_AUTO_UPDATE_CACHE = "twdash-shell-v12";
 
@@ -19,9 +19,9 @@ const SHELL_URLS = [
   "./assets/vendor/fontawesome/webfonts/fa-brands-400.woff2",
   "./css/tailwind.generated.css?v=45",
   "./css/style.css?v=45",
-  "./js/dist/app.js?v=e2b6e9e",
-  "./js/dist/app2.js?v=e2b6e9e",
-  "./js/dist/desktop.js?v=e2b6e9e",
+  "./js/dist/app.js?v=d82f5a3",
+  "./js/dist/app2.js?v=d82f5a3",
+  "./js/dist/desktop.js?v=d82f5a3",
 ];
 
 const API_PATTERNS = [
