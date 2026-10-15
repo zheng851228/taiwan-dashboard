@@ -35,7 +35,14 @@ total=$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo)
 avail=$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo)
 xmx=0; rss=0
 for pid in $(pgrep -f java || true); do
-  arg=$(tr '\0' '\n' < /proc/$pid/cmdline 2>/dev/null | grep -E '^-Xmx[0-9]+[gGmMkK]?$' | tail -1)
+  args=$(sudo tr '\0' '\n' < /proc/$pid/cmdline 2>/dev/null)
+  # NeoForge / Forge servers keep JVM flags in @argument files (user_jvm_args.txt) in their cwd
+  for f in $(printf '%s\n' "$args" | sed -n 's/^@//p'); do
+    case "$f" in /*) path="$f" ;; *) path="/proc/$pid/cwd/$f" ;; esac
+    args="$args
+$(sudo cat "$path" 2>/dev/null | tr ' ' '\n')"
+  done
+  arg=$(printf '%s\n' "$args" | grep -E '^-Xmx[0-9]+[gGmMkK]?$' | tail -1)
   if [ -n "$arg" ]; then
     v=${arg#-Xmx}; n=${v%[gGmMkK]}; u=${v#$n}
     case "$u" in g|G) n=$((n*1024));; k|K) n=$((n/1024));; m|M|'') ;; esac
@@ -49,11 +56,13 @@ if command -v docker >/dev/null 2>&1; then
   echo "Docker 容器：" >&2
   sudo docker ps --format '  {{.Names}}  {{.Image}}  {{.Status}}' 2>/dev/null >&2 || true
 fi
-echo "$total $avail $xmx $rss"
+installed=0
+sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^valhalla-valhalla-1$' && [ -s /opt/valhalla/.env ] && installed=1
+echo "$total $avail $xmx $rss $installed"
 PROBE
 }
 MEM="$(probe_memory)"
-read -r TOTAL_MB AVAIL_MB XMX_MB JAVA_RSS_MB <<<"$(printf '%s\n' "$MEM" | tail -1)"
+read -r TOTAL_MB AVAIL_MB XMX_MB JAVA_RSS_MB INSTALLED <<<"$(printf '%s\n' "$MEM" | tail -1)"
 echo "VM 記憶體：總共 ${TOTAL_MB} MB，目前可用 ${AVAIL_MB} MB"
 if [ "${XMX_MB:-0}" -gt 0 ]; then
   echo "Minecraft（java）：-Xmx ${XMX_MB} MB，目前實際使用 ${JAVA_RSS_MB} MB"
@@ -70,8 +79,16 @@ if [ "$HEADROOM" -ge 6144 ]; then
   VALHALLA_MEM=2g; BUILD_MEM=3g
 elif [ "$HEADROOM" -ge 4096 ]; then
   VALHALLA_MEM=1g; BUILD_MEM=2g
+elif [ "$HEADROOM" -ge 2048 ]; then
+  # Valhalla itself needs ~100 MB (tiles are mmapped); only the weekly rebuild is heavy.
+  # With this little room the rebuild may fail - then the current image keeps serving.
+  VALHALLA_MEM=768m; BUILD_MEM=1536m
+  echo "空間偏緊：每週重建若記憶體不夠會失敗，但舊的路網會照常服務，不會擠到 Minecraft。"
 else
   echo "空間不夠，為了不影響 Minecraft，這台 VM 不安裝。建議改用 Cloud Run（deploy/valhalla/README.md）。" >&2
+  if [ "${INSTALLED:-0}" = 1 ]; then
+    echo "VM 上已經有裝好的 Valhalla；要停用：gcloud compute ssh $VM --zone $ZONE --command 'cd /opt/valhalla && sudo docker compose down'" >&2
+  fi
   exit 1
 fi
 echo "設定：Valhalla 最多 ${VALHALLA_MEM}，每週建置最多 ${BUILD_MEM}，CPU 最多 1.5 核"
@@ -96,7 +113,11 @@ if ask "現在也把密鑰存成 Worker secret VALHALLA_PRIMARY_KEY？（需要 
 fi
 
 step "3. 在 VM 上安裝（Docker、下載程式、建置台灣路網約 10-20 分鐘）"
-if ask "開始安裝？"; then
+if [ "${INSTALLED:-0}" = 1 ]; then
+  echo "VM 上已經裝好並在運作，略過安裝（要重建路網：在 VM 執行 sudo /opt/valhalla/build-tiles.sh）"
+  echo "套用記憶體上限：Valhalla ${VALHALLA_MEM}，每週建置 ${BUILD_MEM}"
+  gcloud compute ssh "$VM" --zone "$ZONE" --command "sudo sed -i -e 's/^VALHALLA_MEM=.*/VALHALLA_MEM=${VALHALLA_MEM}/' -e 's/^BUILD_MEM=.*/BUILD_MEM=${BUILD_MEM}/' /opt/valhalla/.env && cd /opt/valhalla && sudo docker compose up -d valhalla >/dev/null 2>&1 && echo 已套用"
+elif ask "開始安裝？"; then
   gcloud compute ssh "$VM" --zone "$ZONE" --command "sudo bash -s" <<REMOTE
 set -euo pipefail
 command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git)
