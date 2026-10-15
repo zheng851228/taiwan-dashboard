@@ -1246,6 +1246,23 @@ test('does not interrupt first load and keeps a fixed iPhone install entry', asy
   await expect(sheet).toBeHidden();
 });
 
+
+// TEMP-DIAG: state dump for the CI-only install-nudge failures (removed once understood).
+async function nudgeDiag(page) {
+  return page.evaluate(() => JSON.stringify({
+    ua: navigator.userAgent,
+    standaloneMq: window.matchMedia('(display-mode: standalone)').matches,
+    navStandalone: navigator.standalone,
+    onLine: navigator.onLine,
+    controller: Boolean(navigator.serviceWorker && navigator.serviceWorker.controller),
+    sheets: [...document.styleSheets].map((sheet) => { let n = -1; try { n = sheet.cssRules.length; } catch (e) {} return [String(sheet.href || 'inline').slice(-40), n]; }),
+    nudgeDisplay: getComputedStyle(document.getElementById('pwa-install-nudge')).display,
+    banners: ['pwa-update-banner', 'pwa-network-banner', 'pwa-install-sheet'].map((id) => [id, (document.getElementById(id) || { className: 'missing' }).className]),
+    keys: ['tw_pwa_install_dismissed_v1', 'tw_pwa_install_prompted_v2'].map((k) => [k, localStorage.getItem(k)]),
+    route: window.AppState && AppState.activeRoute ? { id: AppState.activeRoute.routeId, v: AppState.activeRoute.validation && AppState.activeRoute.validation.status } : null
+  }));
+}
+
 test('shows one non-blocking install nudge after the first live safe route', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'iphone', 'iPhone Safari install guidance verification only.');
   await page.addInitScript(() => {
@@ -1272,7 +1289,7 @@ test('shows one non-blocking install nudge after the first live safe route', asy
   const nudge = page.locator('#pwa-install-nudge');
   const sheet = page.locator('#pwa-install-sheet');
   await expect(page.locator('#condition-toggle')).toHaveAttribute('aria-expanded', 'false');
-  await expect(nudge).toBeVisible();
+  try { await expect(nudge).toBeVisible(); } catch (error) { throw new Error('DIAG ' + await nudgeDiag(page)); }
   await expect(sheet).toBeHidden();
   await expect(page.locator('#pwa-install-nudge-open')).toBeVisible();
   await page.locator('#pwa-install-nudge-open').click();
@@ -1377,7 +1394,7 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
   await page.reload();
   await expectAppShell(page);
   await expect(page.locator('#pwa-network-banner')).toBeVisible();
-  await expect(page.locator('#pwa-install-nudge')).toBeHidden();
+  try { await expect(page.locator('#pwa-install-nudge')).toBeHidden(); } catch (error) { throw new Error('DIAG ' + await nudgeDiag(page)); }
   await expect(page.locator('#route-summary')).toContainText('離線快照');
   await expect(page.locator('#js-route-status')).toContainText('快照資料暫停更新');
   // The restored snapshot route is drawn on the (tile-less) map: one route line, and the three
