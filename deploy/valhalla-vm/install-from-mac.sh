@@ -138,7 +138,8 @@ fi
 step "4. 建立 Cloudflare Tunnel（${HOST}）"
 echo "等一下會出現一個 https://dash.cloudflare.com/... 的網址：按住 Command 點開，登入 Cloudflare，選 caotaapps.com 按 Authorize。"
 if ask "開始？"; then
-  gcloud compute ssh "$VM" --zone "$ZONE" -- -t "sudo /opt/valhalla/tunnel.sh $HOST"
+  # refresh the VM's copy of the scripts first (setup.sh installed them from an older commit)
+  gcloud compute ssh "$VM" --zone "$ZONE" -- -t "sudo bash -c 'git -C /opt/valhalla/repo fetch -q --depth 1 origin $BRANCH && git -C /opt/valhalla/repo checkout -q -B $BRANCH FETCH_HEAD && install -m 0755 /opt/valhalla/repo/deploy/valhalla-vm/tunnel.sh /opt/valhalla/tunnel.sh && /opt/valhalla/tunnel.sh $HOST'"
 fi
 
 step "5. 測試"

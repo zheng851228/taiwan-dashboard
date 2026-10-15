@@ -17,11 +17,11 @@ if [ ! -s "$BASE/cloudflared/cert.pem" ]; then
   $CF tunnel login
 fi
 
-ID="$($CF tunnel list --output json 2>/dev/null | python3 -c "import sys,json;print(next((t['id'] for t in json.load(sys.stdin) if t['name']=='$NAME'),''))")"
+ID="$($CF tunnel list --output json 2>/dev/null | python3 -c "import sys,json;print(next((t['id'] for t in (json.load(sys.stdin) or []) if t['name']=='$NAME'),''))")"
 if [ -z "$ID" ]; then
   echo "== 建立 tunnel $NAME"
   $CF tunnel create "$NAME" >/dev/null
-  ID="$($CF tunnel list --output json | python3 -c "import sys,json;print(next(t['id'] for t in json.load(sys.stdin) if t['name']=='$NAME'))")"
+  ID="$($CF tunnel list --output json | python3 -c "import sys,json;print(next(t['id'] for t in (json.load(sys.stdin) or []) if t['name']=='$NAME'))")"
 fi
 echo "tunnel id: $ID"
 
