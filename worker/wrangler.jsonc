@@ -24,6 +24,12 @@
       "name": "LOOKUP_RATE_LIMITER",
       "namespace_id": "85122833",
       "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      // Nominatim allows ~1 request/second for the whole app; keyed globally ("nominatim").
+      "name": "NOMINATIM_RATE_LIMITER",
+      "namespace_id": "85122834",
+      "simple": { "limit": 50, "period": 60 }
     }
   ],
   "env": {
@@ -39,6 +45,11 @@
           "name": "LOOKUP_RATE_LIMITER",
           "namespace_id": "85122833",
           "simple": { "limit": 60, "period": 60 }
+        },
+        {
+          "name": "NOMINATIM_RATE_LIMITER",
+          "namespace_id": "85122834",
+          "simple": { "limit": 50, "period": 60 }
         }
       ],
       "vars": {
@@ -66,9 +77,17 @@
           "name": "LOOKUP_RATE_LIMITER",
           "namespace_id": "85122833",
           "simple": { "limit": 60, "period": 60 }
+        },
+        {
+          "name": "NOMINATIM_RATE_LIMITER",
+          "namespace_id": "85122834",
+          "simple": { "limit": 50, "period": 60 }
         }
       ],
       "vars": {
+        // Self-hosted Valhalla (VM behind a Cloudflare Tunnel, deploy/valhalla-vm/).  Called with the
+        // VALHALLA_PRIMARY_KEY secret; without it (or when it is down) the public server answers.
+        "VALHALLA_PRIMARY_URL": "https://valhalla.caotaapps.com",
         "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
         "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",
         "PROVIDER_SNAPSHOT_MODE": "kv",

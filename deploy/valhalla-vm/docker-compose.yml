@@ -1,0 +1,40 @@
+# Valhalla (Taiwan) on a shared VM, reachable only through a Cloudflare Tunnel and only with
+# the shared key.  Resource caps keep the game server on the same VM unaffected.
+#   valhalla    - routing engine, internal network only
+#   gate        - Caddy: rejects any request without the right X-Valhalla-Key header (403)
+#   cloudflared - outbound tunnel to Cloudflare; no inbound port is opened on the VM
+name: valhalla
+
+services:
+  valhalla:
+    image: valhalla-tw:current
+    restart: unless-stopped
+    mem_limit: ${VALHALLA_MEM:-2g}
+    cpus: 1.5
+    networks: [internal]
+
+  gate:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      VALHALLA_KEY: ${VALHALLA_KEY:?set VALHALLA_KEY in /opt/valhalla/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [internal]
+    depends_on: [valhalla]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    networks: [internal]
+    depends_on: [gate]
+
+networks:
+  internal: {}
