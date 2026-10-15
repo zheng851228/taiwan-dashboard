@@ -85,6 +85,9 @@
         }
       ],
       "vars": {
+        // Self-hosted Valhalla (VM behind a Cloudflare Tunnel, deploy/valhalla-vm/).  Called with the
+        // VALHALLA_PRIMARY_KEY secret; without it (or when it is down) the public server answers.
+        "VALHALLA_PRIMARY_URL": "https://valhalla.caotaapps.com",
         "VALHALLA_BASE_URL": "https://valhalla1.openstreetmap.de",
         "CAMERA_SOURCE_URL": "https://www.twipcam.com/api/v1/cam-list.json",
         "PROVIDER_SNAPSHOT_MODE": "kv",

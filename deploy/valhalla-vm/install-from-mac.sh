@@ -143,9 +143,11 @@ if ask "開始？"; then
 fi
 
 step "5. 測試"
-code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "https://$HOST/route" -H 'Content-Type: application/json' -d '{}' || true)"
+# --doh-url: the Mac may still cache "no such host" from before the DNS record existed
+DOH=""; curl --help all 2>/dev/null | grep -q -- '--doh-url' && DOH="--doh-url https://1.1.1.1/dns-query"
+code="$(curl -s $DOH -o /dev/null -w '%{http_code}' -X POST "https://$HOST/route" -H 'Content-Type: application/json' -d '{}' || true)"
 echo "沒帶密鑰：HTTP ${code}（應該是 403）"
-ok="$(curl -s -X POST "https://$HOST/route" -H 'Content-Type: application/json' -H "X-Valhalla-Key: $KEY" \
+ok="$(curl -s $DOH -X POST "https://$HOST/route" -H 'Content-Type: application/json' -H "X-Valhalla-Key: $KEY" \
   -d '{"locations":[{"lat":25.0478,"lon":121.5170},{"lat":25.0340,"lon":121.5645}],"costing":"motor_scooter"}' \
   | grep -o '"length":[0-9.]*' | head -1 || true)"
 echo "帶密鑰：${ok:-失敗}（應該看到 \"length\":4 左右，單位公里）"
