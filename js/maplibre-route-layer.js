@@ -37,6 +37,11 @@
       renderer._setSourceData('desktop-route', { type: 'FeatureCollection', features: [line] });
     }
 
+    // Sections already drawn were cut from the previous route line: re-cut them from this one.
+    if (renderer.conditionSectionsInput && renderer.conditionSectionsInput.length && typeof renderer.drawConditionSections === 'function') {
+      renderer.drawConditionSections(renderer.conditionSectionsInput);
+    }
+
     var bounds = makeBounds(renderer.module, coords);
     if (bounds && renderer.map && typeof renderer.map.fitBounds === 'function') {
       var padding = typeof renderer._routePadding === 'function' ? renderer._routePadding() : 70;

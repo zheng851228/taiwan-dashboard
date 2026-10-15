@@ -10,13 +10,13 @@ test('desktop vehicle UI follows vehicle:changed snapshots instead of RouteMod s
       && window.RouteMod
       && window.DesktopDashboardMod
       && document.querySelector('.desktop-vehicle-tab[data-desktop-mode="car"]')
-      && document.querySelector('.desktop-vehicle-tab[data-desktop-mode="motorcycle"][data-desktop-plate="yellow"]')
+      && document.querySelector('.desktop-vehicle-tab[data-desktop-mode="motorcycle"][data-desktop-plate="red"]')
   ))).toBe(true);
 
   const result = await page.evaluate(() => {
     const original = { mode: RouteMod.mode, plate: RouteMod.plate };
     const car = document.querySelector('.desktop-vehicle-tab[data-desktop-mode="car"]');
-    const yellow = document.querySelector('.desktop-vehicle-tab[data-desktop-mode="motorcycle"][data-desktop-plate="yellow"]');
+    const red = document.querySelector('.desktop-vehicle-tab[data-desktop-mode="motorcycle"][data-desktop-plate="red"]');
 
     RouteMod.mode = 'motorcycle';
     RouteMod.plate = 'white';
@@ -29,10 +29,10 @@ test('desktop vehicle UI follows vehicle:changed snapshots instead of RouteMod s
 
     RouteMod.mode = 'car';
     RouteMod.plate = 'white';
-    Bus.emit('vehicle:changed', { mode: 'motorcycle', plate: 'yellow' });
+    Bus.emit('vehicle:changed', { mode: 'motorcycle', plate: 'red' });
     const motorcycleSnapshot = {
-      yellowActive: yellow.classList.contains('active'),
-      yellowPressed: yellow.getAttribute('aria-pressed'),
+      redActive: red.classList.contains('active'),
+      redPressed: red.getAttribute('aria-pressed'),
       legacyMode: RouteMod.mode,
       legacyPlate: RouteMod.plate
     };
@@ -50,8 +50,8 @@ test('desktop vehicle UI follows vehicle:changed snapshots instead of RouteMod s
     legacyMode: 'motorcycle'
   });
   expect(result.motorcycleSnapshot).toEqual({
-    yellowActive: true,
-    yellowPressed: 'true',
+    redActive: true,
+    redPressed: 'true',
     legacyMode: 'car',
     legacyPlate: 'white'
   });

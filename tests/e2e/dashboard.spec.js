@@ -177,11 +177,11 @@ test('plans a validated motorcycle route and renders ordered conditions', async 
   await page.locator('#js-route-end').fill('24.7570,121.7530');
   // Desktop keeps the single plate selector in the command header; mobile
   // keeps it inside the expanded route form.
-  const desktopYellow = page.locator('.desktop-vehicle-tab[data-desktop-plate="yellow"]');
-  if (await desktopYellow.isVisible()) {
-    await desktopYellow.click();
+  const desktopRed = page.locator('.desktop-vehicle-tab[data-desktop-plate="red"]');
+  if (await desktopRed.isVisible()) {
+    await desktopRed.click();
   } else {
-    await page.locator('.route-mode-btn[data-plate="yellow"]').click();
+    await page.locator('.route-mode-btn[data-plate="red"]').click();
   }
   await page.locator('#js-route-btn').click();
 

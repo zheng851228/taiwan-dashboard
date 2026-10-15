@@ -57,7 +57,7 @@
   --edge-l: calc(var(--edge) + var(--safe-left));
   --edge-r: calc(var(--edge) + var(--safe-right));
   --header-h: calc(48px + var(--safe-top));
-  --nav-h: calc(56px + var(--safe-bottom));
+  --nav-h: calc(52px + var(--safe-bottom));
   --peek-h: 112px;
   /* persistent notices (offline / update / install) push the top card down */
   --notice-nb: 0px;
@@ -1069,7 +1069,24 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     /* the clock is hidden on phones, so its display toggle has nothing to switch */
     #js-clock-setting { display: none; }
   }
-  /* Bottom navigation: 56px + safe area.  Active = ink + solid glyph, not orange. */
+  /* ---- Viewport / bottom edge (iOS standalone) --------------------------------------------
+     Known WebKit behaviour: in an iOS home-screen app with viewport-fit=cover and
+     apple-mobile-web-app-status-bar-style=black-translucent the web view is drawn from the very top
+     of the screen, but the layout viewport (100vh, 100%, -webkit-fill-available, and anything
+     `position: fixed; bottom: 0`) ends one status-bar inset short of the physical bottom, leaving a
+     band under the nav (WebKit bug 237961; innerHeight is also off, bug 210009).  Emulators do not
+     reproduce it, so the fix is defensive and self-calibrating:
+       1. #app is a fixed box whose height is --app-h (set by js/main-ui.js ViewportMod ONLY when it
+          measures that standalone gap; otherwise it falls back to 100dvh, so Safari tabs and
+          Android Chrome are untouched);
+       2. the nav is pinned to #app (position: absolute; bottom: 0), not to the viewport, so its
+          surface reaches the physical bottom edge and its content sits safe-bottom above it;
+       3. html is painted with the nav surface, so any residual sliver is the same colour as the nav. */
+  html { background: var(--c-surface); }
+  html:has(body.light) { background: #ffffff; }
+  #app { position: fixed; top: 0; left: 0; right: 0; height: var(--app-h, 100dvh); }
+  .bottom-navigation { position: absolute; }
+  /* Bottom navigation: 52px + safe area.  Active = ink + solid glyph, not orange. */
   .bottom-navigation {
     height: var(--nav-h);
     padding: 0 var(--edge-r) var(--safe-bottom) var(--edge-l);
@@ -1080,7 +1097,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   }
   .bottom-navigation-inner {
     align-items: stretch;
-    height: 56px;
+    height: calc(var(--nav-h) - var(--safe-bottom) - 1px); /* nav-h minus the 1px top border */
   }
   .nav-it {
     position: relative;
@@ -1247,10 +1264,16 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     .route-line-tag { display: none; }
   }
   /* Planner form: text on the card surface, hairlines between groups. */
+  /* Vertical rhythm: 8px between the import row, start, end and the plate control; 12px before the
+     plate control and before the CTA (8px gap + 4px).  The form was display:block, so the old
+     gap never applied and the fields touched. */
+  .route-shell-expanded:not(.hidden) { display: flex; }
+  .route-shell-expanded > .route-vehicle-shell,
+  .route-shell-expanded > .route-action-btn { margin-top: 4px; }
   .route-shell-expanded {
     flex-direction: column;
     gap: 8px;
-    max-height: calc(100dvh - var(--header-h) - var(--nav-h) - var(--notice-h) - 72px);
+    max-height: calc(var(--app-h, 100dvh) - var(--header-h) - var(--nav-h) - var(--notice-h) - 72px);
     padding: 4px 12px 12px;
     overflow-y: auto;
   }
@@ -1371,7 +1394,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   }
   .route-plate-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 2px;
       padding: 2px;
       border: 0;
@@ -1402,7 +1425,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
       border-radius: 2px;
       background: #f8fafc;
     }
-  .route-mode-btn[data-plate="yellow"]::before { background: #fbd33b; }
   .route-mode-btn[data-plate="red"]::before { background: #e5483d; }
   .route-car-btn::before {
       width: auto;
@@ -1497,7 +1519,9 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   .map-control-stack #js-theme { border-radius: 0 0 var(--r-ctl) var(--r-ctl); color: var(--c-text-2); }
   .map-btn:hover { background: var(--c-surface-2); color: var(--c-text); }
   /* locate: idle = plain, locating = spinner, active = tinted blue (matches the map dot) */
-  #js-loc.is-active { background: var(--c-info); border-color: var(--c-info); color: #0b1a2a; }
+  /* located but not following (user panned away) = outline; following = filled */
+  #js-loc.is-active { color: var(--c-info); box-shadow: inset 0 0 0 2px var(--c-info), var(--shadow-float); }
+  #js-loc.is-following { background: var(--c-info); border-color: var(--c-info); color: #0b1a2a; box-shadow: var(--shadow-float); }
   #js-loc.is-locating { color: var(--c-info); }
   #js-fullscreen { display: none; }
   /* The traffic legend lives with the route ribbon once a route exists (see the sheet).  Before
@@ -1718,10 +1742,9 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
   @media (max-height: 500px) {
     :root { --header-h: calc(44px + var(--safe-top)); --nav-h: calc(48px + var(--safe-bottom)); --peek-h: 104px; }
     .app-header-inner { height: 44px; }
-    .bottom-navigation-inner { height: 48px; }
     .nav-it { flex-direction: row; gap: 8px; }
     .nav-it i { font-size: 18px; }
-    .route-conditions-panel { max-height: calc(100dvh - var(--header-h) - var(--nav-h) - 64px); }
+    .route-conditions-panel { max-height: calc(var(--app-h, 100dvh) - var(--header-h) - var(--nav-h) - 64px); }
     .condition-grabber { padding: 4px 0 0; }
     .condition-panel-head { padding-bottom: 8px; }
   }
@@ -1740,7 +1763,7 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
     width: min(100%, 44rem);
     height: var(--sheet-h);
     /* leave room under the top card for its toast strip, so a toast never covers the sheet header */
-    max-height: calc(100dvh - var(--header-h) - var(--nav-h) - 156px);
+    max-height: calc(var(--app-h, 100dvh) - var(--header-h) - var(--nav-h) - 156px);
     margin: 0 auto;
     overflow: hidden;
     border-bottom: 0;
@@ -2868,7 +2891,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
       border-radius: 2px;
       background: #f8fafc;
     }
-  .route-mode-btn[data-plate="yellow"]::before { background: #fbd33b; }
   .route-mode-btn[data-plate="red"]::before { background: #e5483d; }
   .route-car-btn::before {
       width: auto;
@@ -2983,7 +3005,6 @@ body:has(#pwa-install-nudge:not(.hidden)) { --notice-ib: 58px; }
       border-radius: 2px;
       background: #f8fafc;
     }
-  .desktop-vehicle-tab[data-desktop-plate="yellow"]::before { background: #fbd33b; }
   .desktop-vehicle-tab[data-desktop-plate="red"]::before { background: #e5483d; }
   .desktop-vehicle-tab[data-desktop-mode="car"]::before {
       width: auto;

@@ -91,6 +91,38 @@
   };
   window.UiPrefsMod = UiPrefsMod;
 
+  // iOS standalone (viewport-fit=cover + black-translucent): the layout viewport can end one status-bar
+  // inset above the physical bottom (WebKit bug 237961).  When - and only when - that exact gap is
+  // measured, size #app to the full screen height so the nav reaches the bottom edge.  Everywhere
+  // else --app-h stays unset and CSS falls back to 100dvh.
+  var ViewportMod = {
+    init: function() {
+      var root = document.documentElement;
+      var probe = document.createElement('div');
+      probe.setAttribute('aria-hidden', 'true');
+      probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;padding-top:var(--safe-top)';
+      document.body.appendChild(probe);
+      function apply() {
+        var ua = navigator.userAgent || '';
+        var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        var standalone = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+        var h = '';
+        if (ios && standalone && window.innerHeight > window.innerWidth) {
+          var safeTop = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+          var full = Math.max(window.screen.width, window.screen.height);
+          var gap = full - window.innerHeight;
+          if (safeTop > 0 && gap >= 1 && gap <= safeTop + 4) h = full + 'px';
+        }
+        if (h) root.style.setProperty('--app-h', h);
+        else root.style.removeProperty('--app-h');
+      }
+      apply();
+      ['resize', 'orientationchange', 'pageshow', 'load'].forEach(function(name) { window.addEventListener(name, apply); });
+      document.addEventListener('visibilitychange', apply);
+    }
+  };
+  window.ViewportMod = ViewportMod;
+
   var ThemeMod = {
     dark: Storage.get(THEME_KEY, 'dark') !== 'light',
     init: function() {
@@ -481,7 +513,7 @@
       else if (action === 'nearby-overlay-upsert') MapMod._nearbyUpsert(request.center, request.radiusMeters);
       else if (action === 'nearby-overlay-radius') MapMod._nearbySetRadius(request.radiusMeters);
       else if (action === 'nearby-overlay-clear') MapMod._nearbyClear();
-      else if (action === 'user-location-upsert') MapMod._userUpsert(request.center, request.accuracyMeters, request.recenter !== false);
+      else if (action === 'user-location-upsert') MapMod._userUpsert(request.center, request.accuracyMeters, request.recenter !== false, request.follow === true);
       else if (action === 'user-location-clear') MapMod._userClear();
       else if (action === 'clear-waypoint-overlays') {
         // MapLibre draws no waypoint overlays; keep the shared state contract.
@@ -573,6 +605,11 @@
       var map = MapMod.map;
       if (!map || MapMod._eventsBound) return;
       MapMod._eventsBound = true;
+      // Any user gesture (drag, pinch, rotate, wheel, zoom buttons, double-tap) carries an
+      // originalEvent; our own easeTo / flyTo calls do not.  Locate "follow" listens for this.
+      map.on('movestart', function(event) {
+        if (event && event.originalEvent) Bus.emit('map:user-gesture');
+      });
       map.on('click', 'mobile-camera-points', function(event) {
         var feature = event.features && event.features[0];
         var properties = feature && feature.properties;
@@ -934,7 +971,7 @@
 
     // "You are here": accuracy circle + a 16px blue dot with a white ring.  Separate from the
     // nearby search-radius overlay.  recenter=true makes exactly ONE camera move.
-    _userUpsert: function(center, accuracyMeters, recenter) {
+    _userUpsert: function(center, accuracyMeters, recenter, follow) {
       var map = MapMod.map;
       if (!map || !center) return;
       var lat = Number(center[0]);
@@ -966,14 +1003,12 @@
       } catch (error) {}
       MapMod._userCenter = [lat, lng];
       if (!recenter) {
-        // Live update: only pan when the dot is about to leave the open part of the map
-        // (under the top card / behind the controls / sheet); zoom is left alone.
-        try {
-          var canvas = map.getCanvas();
-          var pt = map.project([lng, lat]);
-          var w = canvas.clientWidth; var h = canvas.clientHeight;
-          if (pt.x < 48 || pt.x > w - 72 || pt.y < 150 || pt.y > h - 230) map.easeTo({ center: [lng, lat], duration: 600 });
-        } catch (error) {}
+        // Live update.  Following: keep the dot centred (zoom untouched).  Not following (the user
+        // panned away): the dot and circle move, the camera never does.
+        // (Skipped while a move is in flight: a second easeTo would cancel the recentre's zoom.)
+        if (follow && !map.isMoving()) {
+          try { map.easeTo({ center: [lng, lat], duration: 500 }); } catch (error) {}
+        }
         return;
       }
       // One move: zoom 16, or whatever fits the accuracy circle if that is larger (never below ~12).
@@ -1835,6 +1870,7 @@
       var _tb = Dom.byId('js-theme'); if(_tb) _tb.innerHTML = THEME_ICON_LIGHT;
       MapMod.setTile(Config.TILE_LIGHT);
     }
+    ViewportMod.init();
     ThemeMod.init();
     NavMod.init();
     Dom.onId('brand-home', 'click', function() {
