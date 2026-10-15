@@ -21,9 +21,9 @@ log "download Taiwan extract"
 curl -fsSL --retry 5 --retry-delay 10 -o "$WORK/taiwan-latest.osm.pbf" \
   https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
 
-log "build tiles with $IMAGE_BASE (capped: 2 CPUs, 6 GB)"
+log "build tiles with $IMAGE_BASE (capped: 2 CPUs, 3 GB)"
 docker pull -q "$IMAGE_BASE" >/dev/null
-docker run --rm --cpus 2 --memory 6g --entrypoint bash -v "$WORK:/data" "$IMAGE_BASE" -euc '
+docker run --rm --cpus 2 --memory 3g --entrypoint bash -v "$WORK:/data" "$IMAGE_BASE" -euc '
   cd /data
   mkdir -p tiles
   valhalla_build_config \
@@ -45,7 +45,7 @@ docker build -q --build-arg VALHALLA_TAG="$VALHALLA_TAG" -f "$REPO/deploy/valhal
   -t "valhalla-tw:$STAMP" "$WORK/out" >/dev/null
 
 log "smoke test"
-docker run -d --name "valhalla-smoke-$STAMP" --cpus 1 --memory 3g -p 127.0.0.1:18080:8080 "valhalla-tw:$STAMP" >/dev/null
+docker run -d --name "valhalla-smoke-$STAMP" --cpus 1 --memory 1g -p 127.0.0.1:18080:8080 "valhalla-tw:$STAMP" >/dev/null
 ready=0
 for _ in $(seq 1 60); do
   if curl -fsS http://127.0.0.1:18080/status >/dev/null 2>&1; then ready=1; break; fi

@@ -25,7 +25,7 @@ else
   read -r -p "區域 (zone): " ZONE
 fi
 echo "使用 VM: $VM ($ZONE)"
-ask "確認要在這台 VM 上安裝 Valhalla（會與遊戲伺服器共用，限制 1.5 核 / 3GB）？" || exit 1
+ask "確認要在這台 VM 上安裝 Valhalla（會與遊戲伺服器共用，限制 1.5 核 / 2GB，建置時最多 3GB）？" || exit 1
 
 step "2. 產生密鑰並存進 Worker（production）"
 KEY="$(openssl rand -hex 32)"

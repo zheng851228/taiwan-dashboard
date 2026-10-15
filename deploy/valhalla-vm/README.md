@@ -3,11 +3,11 @@
 測試期間用現有的 GCP VM（與遊戲伺服器共用）。之後要換成 Cloud Run 時，只要把 Worker 的
 `VALHALLA_PRIMARY_URL` 改成 Cloud Run 網址、刪掉 `VALHALLA_PRIMARY_KEY`，程式不用改（見 ../valhalla/README.md）。
 
-- `valhalla`：路線引擎，最多 1.5 核、3GB 記憶體，只在內部網路。
+- `valhalla`：路線引擎，最多 1.5 核、2GB 記憶體，只在內部網路。
 - `gate`（Caddy）：沒有正確 `X-Valhalla-Key` 標頭的請求一律 403。
 - `cloudflared`：往外連到 Cloudflare 的 Tunnel，VM 不用開任何埠；網址 `valhalla.caotaapps.com`。
 - 每週二 04:30（台灣時間）自動下載最新圖資重建；新映像先在旁邊測試通過才切換，失敗就保留舊的。
-  建置時限制 2 核、6GB。紀錄在 `/var/log/valhalla-build.log`。
+  建置時限制 2 核、3GB；記憶體不夠時建置失敗、舊的照常服務，不會擠到遊戲。紀錄在 `/var/log/valhalla-build.log`。
 
 ## 安裝（在 VM 上，root）
 ```bash
