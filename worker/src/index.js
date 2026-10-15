@@ -34,6 +34,14 @@ import {
   buildSnapshotHealthRecord,
   readSnapshotHealth
 } from './snapshot-honesty.js';
+import {
+  collectObservations,
+  computeAlerts,
+  notify,
+  probeDue,
+  runProbes,
+  shouldWriteHealth
+} from './monitor.js';
 
 const ROUTE_TTL_SECONDS = 6 * 60 * 60;
 const MAX_JSON_BODY_BYTES = 32 * 1024;
@@ -156,7 +164,7 @@ export async function scheduled(event, env, ctx) {
     at: now.toISOString(),
     results: results.map((r) => `${r}`)
   };
-  // 健康／告警紀錄：每次執行都寫，讓 health check 讀得到最後失敗時間。
+  // 健康／告警紀錄：狀態有變或每 30 分鐘寫一次（見下方 shouldWriteHealth），讓 health check 讀得到最後失敗時間。
   const previous = await readSnapshotHealth(binding);
   const healthRecord = buildSnapshotHealthRecord({
     now,
@@ -173,14 +181,35 @@ export async function scheduled(event, env, ctx) {
     failures,
     previous
   });
-  try {
-    await binding.put(
-      SNAPSHOT_HEALTH_KEY,
-      JSON.stringify(healthRecord),
-      { expirationTtl: SNAPSHOT_HEALTH_TTL_SECONDS }
-    );
-  } catch (error) {
-    console.error('scheduled snapshot: 健康紀錄寫入失敗', error.message);
+  // Hourly probes of the routing / geocoding services, alerting (Telegram), and a health
+  // write only when something changed or as a 30-minute heartbeat (saves ~250 KV writes/day).
+  const probesFresh = probeDue(previous, now);
+  let probes = previous && previous.probes ? previous.probes : null;
+  if (probesFresh) {
+    try {
+      probes = await runProbes(env, now);
+    } catch (error) {
+      console.error('scheduled probes failed', error.message);
+    }
+  }
+  const observations = collectObservations({ ok, providers, probes, probesFresh: probesFresh && Boolean(probes) });
+  const { alerts: nextAlerts, events } = computeAlerts(previous && previous.alerts, observations, now.toISOString());
+  healthRecord.probes = probes;
+  healthRecord.alerts = await notify(env, nextAlerts, events, probes);
+  summary.alerts = events.map((event) => `${event.type}:${event.component}`);
+  if (shouldWriteHealth(previous, healthRecord, now)) {
+    try {
+      await binding.put(
+        SNAPSHOT_HEALTH_KEY,
+        JSON.stringify(healthRecord),
+        { expirationTtl: SNAPSHOT_HEALTH_TTL_SECONDS }
+      );
+      summary.health = 'written';
+    } catch (error) {
+      console.error('scheduled snapshot: 健康紀錄寫入失敗', error.message);
+    }
+  } else {
+    summary.health = 'unchanged';
   }
   console.log('scheduled snapshot complete', JSON.stringify(summary));
   return { ok, reason, ...summary };
@@ -403,7 +432,7 @@ async function routeRequest(request, env) {
     const query = String(url.searchParams.get('q') || '').trim();
     if (!query) throw new HttpError(400, '請提供搜尋關鍵字');
     if (query.length > 120) throw new HttpError(400, '搜尋關鍵字過長');
-    const places = await geocodePlace(query);
+    const places = await geocodePlace(query, env);
     return jsonResponse(envelope(places.length ? 'ok' : 'partial', places, places.length ? '' : '找不到相符地點'));
   }
 

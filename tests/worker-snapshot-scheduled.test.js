@@ -129,7 +129,7 @@ describe('scheduled snapshot', () => {
     expect(health.providers.TDX.status).toBe('failed');
   });
 
-  it('內容不變時跳過寫入（diff-before-write），但健康紀錄照寫', async () => {
+  it('內容不變時跳過寫入（diff-before-write），健康紀錄在狀態變化時照寫', async () => {
     stubFetchCameras(1);
     const kv = createSnapshotKv();
     const event = { scheduledTime: Date.parse(EVENT_TIME) };
@@ -147,7 +147,7 @@ describe('scheduled snapshot', () => {
     expect(result.ok).toBe(true);
     const keys = putKeys(kv);
     expect(keys).not.toContain(providerCameraSnapshotSlotKey(new Date('2026-10-03T00:07:00.000Z')));
-    // 健康紀錄每次執行都更新
+    // 健康紀錄：TDX 的連續失敗次數 1→2 是狀態變化，所以這次仍會寫（不變時則見 monitor.test.js）
     expect(keys).toEqual([SNAPSHOT_HEALTH_KEY]);
     expect(result.results.some((line) => line.endsWith(': skipped'))).toBe(true);
     expect(result.results.some((line) => line.endsWith(': skipped-empty'))).toBe(true);

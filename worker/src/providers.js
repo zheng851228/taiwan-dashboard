@@ -2,6 +2,7 @@ import { encodePolyline6, haversineKm, mergeLegShapes } from './polyline.js';
 import { classifyRoadEvent, roadEventIdentity } from './road-events.js';
 import { validateRouteEdges } from './rules.js';
 import { assertSnapshotHonestForWrite } from './snapshot-honesty.js';
+import { valhallaPost } from './valhalla.js';
 import {
   buildProviderSnapshotDocument,
   isProviderSnapshotFresh,
@@ -71,7 +72,6 @@ const TDX_ROAD_EVENT_PAGE_SIZE = 1000;
 const JSON_RESPONSE_CACHE_MAX = 256;
 
 export async function getValhallaRoute(locations, costing, env, avoidLocations = []) {
-  const baseUrl = String(env.VALHALLA_BASE_URL || 'https://valhalla1.openstreetmap.de').replace(/\/$/, '');
   const payload = {
     locations: locations.map((location) => ({
       lat: location.lat,
@@ -85,11 +85,7 @@ export async function getValhallaRoute(locations, costing, env, avoidLocations =
   };
   if (avoidLocations.length) payload.exclude_locations = avoidLocations;
 
-  const result = await requestJson(`${baseUrl}/route`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  }, 20000);
+  const { result, engine } = await valhallaPost('/route', payload, env, { timeoutMs: 20000 });
   const trip = result.trip;
   if (!trip || !Array.isArray(trip.legs) || !trip.legs.length) {
     throw new Error('Valhalla did not return route legs');
@@ -103,7 +99,8 @@ export async function getValhallaRoute(locations, costing, env, avoidLocations =
     encodedShape: encodePolyline6(geometry),
     distanceKm: round(summary.length ?? sumLegValue(trip.legs, 'length'), 1),
     durationMinutes: Math.max(1, Math.round(Number(summary.time ?? sumLegValue(trip.legs, 'time')) / 60)),
-    source: 'valhalla'
+    source: 'valhalla',
+    engine
   };
 }
 
@@ -122,34 +119,30 @@ function sumLegValue(legs, key) {
 }
 
 export async function traceRouteAttributes(route, costing, env) {
-  const baseUrl = String(env.VALHALLA_BASE_URL || 'https://valhalla1.openstreetmap.de').replace(/\/$/, '');
   const chunks = splitTraceGeometry(route.geometry);
   const shapeMatch = chunks.length > 1 ? 'walk_or_snap' : 'edge_walk';
   const edges = [];
   const tracedChunks = await mapWithConcurrency(chunks, 2, async (chunk, chunkIndex) => {
-    const result = await requestJson(`${baseUrl}/trace_attributes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        encoded_polyline: encodePolyline6(chunk.geometry),
-        costing,
-        shape_match: shapeMatch,
-        filters: {
-          action: 'include',
-          attributes: [
-            'edge.names',
-            'edge.way_id',
-            'edge.road_class',
-            'edge.use',
-            'edge.forward',
-            'edge.traversability',
-            'edge.length',
-            'edge.begin_shape_index',
-            'edge.end_shape_index'
-          ]
-        }
-      })
-    }, 20000);
+    // Same engine as the route when possible, so both read the same OSM edges.
+    const { result } = await valhallaPost('/trace_attributes', {
+      encoded_polyline: encodePolyline6(chunk.geometry),
+      costing,
+      shape_match: shapeMatch,
+      filters: {
+        action: 'include',
+        attributes: [
+          'edge.names',
+          'edge.way_id',
+          'edge.road_class',
+          'edge.use',
+          'edge.forward',
+          'edge.traversability',
+          'edge.length',
+          'edge.begin_shape_index',
+          'edge.end_shape_index'
+        ]
+      }
+    }, env, { timeoutMs: 20000, prefer: route.engine || null });
     const chunkEdges = Array.isArray(result.edges) ? result.edges : [];
     if (!chunkEdges.length) {
       throw new Error(`Valhalla trace_attributes returned no road edges for chunk ${chunk.startShapeIndex}`);
@@ -1727,9 +1720,34 @@ function geocodeRelevance(item, query) {
   return score;
 }
 
-export async function geocodePlace(query) {
-  const originalQuery = String(query || '').trim();
-  const normalizedQuery = buildNominatimPlaceQuery(originalQuery);
+const GEOCODE_EDGE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const PHOTON_URL = 'https://photon.komoot.io/api/';
+const GEOCODER_USER_AGENT = 'taiwan-dashboard-worker/2.0 (+https://zheng851228.github.io/taiwan-dashboard/)';
+
+// Cloudflare's Cache API: free, survives isolate restarts, costs no KV writes.  Per data centre,
+// which is fine for geocoding (riders in Taiwan hit the same few colos).  Absent in unit tests.
+async function edgeCachedJson(cacheUrl, ttlSeconds, loader) {
+  const cache = typeof caches !== 'undefined' && caches && caches.default ? caches.default : null;
+  if (!cache) return loader();
+  const key = new Request(cacheUrl, { method: 'GET' });
+  try {
+    const hit = await cache.match(key);
+    if (hit) return await hit.json();
+  } catch {
+    // a cache miss path; fall through to the loader
+  }
+  const value = await loader();
+  try {
+    await cache.put(key, new Response(JSON.stringify(value), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttlSeconds}` }
+    }));
+  } catch {
+    // caching is best effort
+  }
+  return value;
+}
+
+async function nominatimSearch(normalizedQuery, env) {
   const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('q', /台灣|taiwan/i.test(normalizedQuery) ? normalizedQuery : `${normalizedQuery} 台灣`);
   url.searchParams.set('format', 'jsonv2');
@@ -1739,9 +1757,73 @@ export async function geocodePlace(query) {
   url.searchParams.set('bounded', '1');
   url.searchParams.set('accept-language', 'zh-TW');
   url.searchParams.set('addressdetails', '1');
-  const payload = await requestJsonCached(url.toString(), {
-    headers: { 'User-Agent': 'taiwan-dashboard-worker/2.0 (route-assistant)' }
-  }, 10000, GEOCODE_TTL_MS);
+  return edgeCachedJson(url.toString(), GEOCODE_EDGE_TTL_SECONDS, async () => {
+    // Nominatim's policy: at most 1 request/second for the whole application.  The limiter is
+    // keyed globally (not per rider); when it says no, Photon answers instead.
+    const limiter = env && env.NOMINATIM_RATE_LIMITER;
+    if (limiter && typeof limiter.limit === 'function') {
+      const verdict = await limiter.limit({ key: 'nominatim' });
+      if (verdict && verdict.success === false) {
+        const error = new Error('Nominatim rate limit reached');
+        error.throttled = true;
+        throw error;
+      }
+    }
+    return requestJsonCached(url.toString(), {
+      headers: { 'User-Agent': GEOCODER_USER_AGENT }
+    }, 10000, GEOCODE_TTL_MS);
+  });
+}
+
+// Photon (komoot, OSM data) as the fallback.  Its features are mapped to Nominatim's jsonv2
+// shape so the ranking below treats both the same.
+async function photonSearch(normalizedQuery) {
+  const url = new URL(PHOTON_URL);
+  url.searchParams.set('q', normalizedQuery);
+  url.searchParams.set('limit', '8');
+  url.searchParams.set('bbox', '117,20,124,27');
+  const payload = await edgeCachedJson(url.toString(), GEOCODE_EDGE_TTL_SECONDS, () => requestJsonCached(url.toString(), {
+    headers: { 'User-Agent': GEOCODER_USER_AGENT }
+  }, 10000, GEOCODE_TTL_MS));
+  const features = payload && Array.isArray(payload.features) ? payload.features : [];
+  return features.filter((feature) => {
+    const props = feature && feature.properties;
+    return !props || !props.countrycode || String(props.countrycode).toUpperCase() === 'TW';
+  }).map((feature) => {
+    const props = feature.properties || {};
+    const coords = (feature.geometry && feature.geometry.coordinates) || [];
+    const parts = [props.name, props.street, props.district, props.city, props.county, props.state, props.country]
+      .filter((part, index, list) => part && list.indexOf(part) === index);
+    return {
+      name: props.name || parts[0] || '',
+      display_name: parts.join(', '),
+      lat: coords[1],
+      lon: coords[0],
+      type: props.osm_value || props.type || 'place',
+      importance: 0
+    };
+  });
+}
+
+export async function geocodePlace(query, env = {}) {
+  const originalQuery = String(query || '').trim();
+  const normalizedQuery = buildNominatimPlaceQuery(originalQuery);
+  let payload = [];
+  try {
+    payload = await nominatimSearch(normalizedQuery, env);
+  } catch (error) {
+    if (!error.throttled) console.warn(`geocode: Nominatim failed (${error.message}); trying Photon`);
+    payload = null;
+  }
+  if (!Array.isArray(payload) || !payload.length) {
+    try {
+      const fallback = await photonSearch(normalizedQuery);
+      if (fallback.length || !Array.isArray(payload)) payload = fallback;
+    } catch (error) {
+      if (!Array.isArray(payload)) throw error;
+      console.warn(`geocode: Photon failed too (${error.message})`);
+    }
+  }
   const seen = new Set();
   const adminMatch = normalizePlaceText(originalQuery).match(/^(.+?[縣市])/);
   const places = (payload || []).map((item) => ({

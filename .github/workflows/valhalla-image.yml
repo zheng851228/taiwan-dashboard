@@ -1,0 +1,194 @@
+name: Valhalla Taiwan image
+
+on:
+  schedule:
+    - cron: '23 18 * * 1' # Mondays 18:23 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'deploy/valhalla/**'
+      - '.github/workflows/valhalla-image.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valhalla-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Pinned official image tag (3.6.0 = newest stable in distro packages, Oct 2026); bump here.
+  VALHALLA_TAG: '3.6.0'
+  VALHALLA_BASE: ghcr.io/valhalla/valhalla
+  GCP_REGION: asia-east1
+  AR_REPO: valhalla
+  IMAGE_NAME: valhalla-tw
+  SERVICE_NAME: valhalla-tw
+  LOCAL_IMAGE: valhalla-tw:ci
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      date_tag: ${{ steps.meta.outputs.date_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        run: echo "date_tag=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Download Taiwan extract
+        run: |
+          mkdir -p work
+          curl -fsSL --retry 5 --retry-delay 10 -o work/taiwan-latest.osm.pbf \
+            https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
+          ls -lh work/taiwan-latest.osm.pbf
+
+      - name: Pull Valhalla base image
+        run: docker pull "$VALHALLA_BASE:$VALHALLA_TAG"
+
+      - name: Build tiles
+        run: |
+          set -euo pipefail
+          # /data inside the container == ./work on the runner
+          docker run --rm --entrypoint bash -v "$PWD/work:/data" "$VALHALLA_BASE:$VALHALLA_TAG" -euxc '
+            cd /data
+            mkdir -p tiles
+            valhalla_build_config \
+              --mjolnir-tile-dir /data/tiles \
+              --mjolnir-tile-extract /data/tiles.tar \
+              --mjolnir-admin /data/admins.sqlite \
+              --mjolnir-timezone /data/timezones.sqlite \
+              --httpd-service-listen "tcp://*:8080" \
+              > /data/valhalla.json
+            valhalla_build_timezones > /data/timezones.sqlite
+            valhalla_build_admins -c /data/valhalla.json /data/taiwan-latest.osm.pbf
+            valhalla_build_tiles -c /data/valhalla.json /data/taiwan-latest.osm.pbf
+            valhalla_build_extract -c /data/valhalla.json -v
+            ls -lh /data
+          '
+          mkdir -p out
+          cp work/valhalla.json work/tiles.tar work/admins.sqlite work/timezones.sqlite out/
+          ls -lh out
+
+      - name: Build runtime image
+        run: |
+          docker build \
+            --build-arg VALHALLA_TAG="$VALHALLA_TAG" \
+            -f deploy/valhalla/Dockerfile \
+            -t "$LOCAL_IMAGE" out/
+          docker image ls "$LOCAL_IMAGE"
+
+      - name: Smoke test (route + trace_attributes)
+        run: |
+          set -euo pipefail
+          docker run -d --name valhalla-smoke -p 8080:8080 "$LOCAL_IMAGE"
+          trap 'docker logs valhalla-smoke 2>&1 | tail -n 80; docker rm -f valhalla-smoke >/dev/null 2>&1 || true' EXIT
+
+          ok=0
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/status >/dev/null 2>&1; then ok=1; break; fi
+            sleep 2
+          done
+          [ "$ok" = 1 ] || { echo "::error::valhalla did not become ready"; exit 1; }
+
+          # Taipei Main Station -> Taipei 101
+          req=$(jq -n '{
+            locations: [{lat: 25.0478, lon: 121.5170}, {lat: 25.0340, lon: 121.5645}],
+            costing: "motor_scooter", directions_options: {units: "kilometers"}
+          }')
+          curl -fsS -H 'Content-Type: application/json' -d "$req" http://127.0.0.1:8080/route > route.json
+          jq -e '.trip.legs | length > 0' route.json >/dev/null
+          echo "route length km: $(jq '.trip.summary.length' route.json)"
+
+          for costing in motorcycle auto; do
+            r=$(echo "$req" | jq --arg c "$costing" '.costing=$c')
+            curl -fsS -H 'Content-Type: application/json' -d "$r" http://127.0.0.1:8080/route \
+              | jq -e '.trip.legs | length > 0' >/dev/null
+          done
+
+          shape=$(jq -r '.trip.legs[0].shape' route.json)
+          treq=$(jq -n --arg s "$shape" '{encoded_polyline: $s, costing: "motor_scooter", shape_match: "map_snap",
+            filters: {attributes: ["edge.names", "edge.length"], action: "include"}}')
+          curl -fsS -H 'Content-Type: application/json' -d "$treq" http://127.0.0.1:8080/trace_attributes > trace.json
+          jq -e '.edges | length > 0' trace.json >/dev/null
+          echo "trace edges: $(jq '.edges | length' trace.json)"
+
+      - name: Save image for deploy job
+        if: github.event_name != 'pull_request' && vars.GCP_PROJECT_ID != ''
+        run: docker save "$LOCAL_IMAGE" | gzip -1 > valhalla-image.tar.gz
+
+      - name: Upload image artifact
+        if: github.event_name != 'pull_request' && vars.GCP_PROJECT_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: valhalla-image
+          path: valhalla-image.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: valhalla-image
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Push image
+        run: |
+          set -euo pipefail
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          REPO="${GCP_REGION}-docker.pkg.dev/${PROJECT}/${AR_REPO}/${IMAGE_NAME}"
+          gunzip -c valhalla-image.tar.gz | docker load
+          docker tag "$LOCAL_IMAGE" "$REPO:${{ needs.build.outputs.date_tag }}"
+          docker tag "$LOCAL_IMAGE" "$REPO:latest"
+          docker push "$REPO:${{ needs.build.outputs.date_tag }}"
+          docker push "$REPO:latest"
+          echo "IMAGE=$REPO:${{ needs.build.outputs.date_tag }}" >> "$GITHUB_ENV"
+          echo "REPO=$REPO" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$SERVICE_NAME" \
+            --project "$PROJECT" \
+            --region "$GCP_REGION" \
+            --image "$IMAGE" \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 2Gi \
+            --cpu 1 \
+            --cpu-boost \
+            --min-instances 0 \
+            --max-instances 2 \
+            --concurrency 8 \
+            --service-account "valhalla-runtime@${PROJECT}.iam.gserviceaccount.com" \
+            --quiet
+
+      - name: Prune old images (keep newest 2 digests)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          gcloud artifacts docker images list "$REPO" --include-tags \
+            --sort-by=~CREATE_TIME --format='value(version)' \
+            | awk 'NF && !seen[$0]++' | tail -n +3 \
+            | while read -r digest; do
+                echo "Deleting $REPO@$digest"
+                gcloud artifacts docker images delete "$REPO@$digest" --delete-tags --quiet
+              done

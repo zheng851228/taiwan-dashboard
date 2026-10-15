@@ -1,0 +1,75 @@
+name: Health check (watchdog)
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HEALTH_URL: ${{ vars.HEALTH_URL || 'https://taiwan-dashboard-api-production.lucky851228.workers.dev/v2/health' }}
+      SITE_URL: https://zheng851228.github.io/taiwan-dashboard/
+      MAX_AGE_SEC: '3000' # 50 minutes
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Check API and site
+        shell: bash
+        run: |
+          set -uo pipefail
+          fails=()
+
+          code=$(curl -s -o health.json -w '%{http_code}' --max-time 30 --retry 2 --retry-delay 5 "$HEALTH_URL" || true)
+          if [ "$code" != "200" ]; then
+            fails+=("API 回應異常 (HTTP ${code:-000})")
+          else
+            if ! jq -e . health.json >/dev/null 2>&1; then
+              fails+=("API 回傳非 JSON")
+            else
+              # Data-source failures are reported by the Worker itself (Telegram, once per incident);
+              # this watchdog only covers the Worker being down or its cron no longer running.
+              ts=$(jq -r '
+                (.data.updatedAt // .data.runAt) as $t
+                | if $t == null then "null"
+                  elif ($t|type) == "number" then (if $t > 100000000000 then ($t/1000|floor) else $t end | tostring)
+                  else ($t | sub("\\.[0-9]+";"") | fromdateiso8601 | tostring) end' health.json 2>/dev/null || echo "null")
+              if [ -z "$ts" ] || [ "$ts" = "null" ]; then
+                fails+=("API 缺少 updatedAt/runAt")
+              else
+                age=$(( $(date +%s) - ts ))
+                echo "health record age: ${age}s"
+                if [ "$age" -gt "$MAX_AGE_SEC" ]; then
+                  fails+=("健康紀錄已過期 $((age/60)) 分鐘")
+                fi
+              fi
+            fi
+          fi
+
+          scode=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 --retry 2 --retry-delay 5 "$SITE_URL" || true)
+          if [ "$scode" != "200" ]; then
+            fails+=("網站回應異常 (HTTP ${scode:-000})")
+          fi
+
+          if [ "${#fails[@]}" -eq 0 ]; then
+            echo "All checks passed"
+            exit 0
+          fi
+
+          printf '::error::%s\n' "${fails[@]}"
+          if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+            msg="環島儀表板健康檢查失敗:
+          $(printf -- '- %s\n' "${fails[@]}")
+          $RUN_URL"
+            curl -s -o /dev/null --max-time 20 \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=${msg}" \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" || echo "telegram send failed"
+          fi
+          exit 1
