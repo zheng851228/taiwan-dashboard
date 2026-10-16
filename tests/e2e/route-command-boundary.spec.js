@@ -58,3 +58,37 @@ test('route commands flow through route:request without moving RouteMod state', 
     routeCoords: true
   });
 });
+
+test('a saved route is restored through route:request and the vehicle UI follows it', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop runtime integration only.');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => Boolean(window.Bus && window.RouteMod))).toBe(true);
+
+  const result = await page.evaluate(() => {
+    const vehicleEvents = [];
+    window.Bus.on('vehicle:changed', (event) => vehicleEvents.push([event.mode, event.plate]));
+    const coords = [[25.04, 121.51], [24.75, 121.75]];
+    const activeButtons = () => [...document.querySelectorAll('.desktop-vehicle-tab.active, .route-mode-btn.active')]
+      .map((button) => button.dataset.desktopPlate || button.dataset.plate || button.dataset.desktopMode || button.dataset.mode);
+
+    window.Bus.emit('route:request', { action: 'restore', route: { vehicle: { type: 'car' } }, coords });
+    const car = { active: window.RouteMod.active, mode: window.RouteMod.mode, coords: window.RouteMod.routeCoords, cams: window.RouteMod.filteredCams.length, buttons: activeButtons() };
+
+    // snapshots saved before the yellow plate was removed come back as red (the Worker treats them alike)
+    window.Bus.emit('route:request', { action: 'restore', route: { vehicle: { type: 'motorcycle', plate: 'yellow' } }, coords });
+    const yellow = { mode: window.RouteMod.mode, plate: window.RouteMod.plate, buttons: activeButtons() };
+
+    // incomplete input changes nothing
+    window.Bus.emit('route:request', { action: 'restore', route: null, coords });
+    window.Bus.emit('route:request', { action: 'restore', route: { vehicle: { type: 'car' } }, coords: [[25, 121]] });
+    const untouched = { mode: window.RouteMod.mode, plate: window.RouteMod.plate };
+    return { car, yellow, untouched, vehicleEvents };
+  });
+
+  expect(result.car).toEqual({ active: true, mode: 'car', coords: [[25.04, 121.51], [24.75, 121.75]], cams: 0, buttons: ['car', 'car'] });
+  expect(result.yellow).toEqual({ mode: 'motorcycle', plate: 'red', buttons: ['red', 'red'] });
+  expect(result.untouched).toEqual({ mode: 'motorcycle', plate: 'red' });
+  // car keeps the previous plate (white); then the restored motorcycle with yellow -> red
+  expect(result.vehicleEvents).toEqual([['car', 'white'], ['motorcycle', 'red']]);
+});

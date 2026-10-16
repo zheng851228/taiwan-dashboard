@@ -291,12 +291,10 @@
     AppState.routeReport = snapshot.routeReport || null;
     AppState.routeConditions = null;
 
-    RouteMod.active = true;
+    Bus.emit('route:request', { action: 'restore', route: route, coords: mapCoordinates });
     if (window.RouteUiMod) RouteUiMod.setState('ready');
-    RouteMod.mode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
-    RouteMod.routeCoords = mapCoordinates;
-    RouteMod.filteredCams = [];
-    Bus.emit('map:request', { action: 'draw-route', coords: mapCoordinates, mode: RouteMod.mode });
+    var mode = route.vehicle && route.vehicle.type === 'car' ? 'car' : 'motorcycle';
+    Bus.emit('map:request', { action: 'draw-route', coords: mapCoordinates, mode: mode });
     Bus.emit('map:request', { action: 'draw-start-end', points: AppState.routeAllPoints });
 
     var start = Dom.byId('js-route-start');

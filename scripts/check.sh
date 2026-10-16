@@ -80,6 +80,10 @@ grep -q "Bus.on('route:request'" js/main-ui.js
 grep -q "action === 'set-vehicle'" js/main-ui.js
 grep -q "action === 'analyze'" js/main-ui.js
 grep -q "action === 'clear'" js/main-ui.js
+grep -q "action === 'restore'" js/main-ui.js
+# RouteMod state is owned by js/main-ui.js; every other module talks to it through
+# route:request / vehicle:changed / route:updated / AppState (comments may still mention it).
+! grep -n 'RouteMod' $(ls js/*.js | grep -v '^js/main-ui.js$') | grep -Ev '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)'
 grep -q "Bus.emit('camera:closed'" js/main-ui.js
 ! grep -q 'NavMod' js/desktop-dashboard.js
 ! grep -q 'NavMod' js/enhancements.js
@@ -129,11 +133,11 @@ grep -Fq 'state.routeCameras = [];' js/desktop-dashboard.js
 grep -Fq 'routeCameras = [];' js/enhancements.js
 ! grep -Fq 'RouteStripMod.routeCameras' js/enhancements.js
 grep -Fq 'cams: RouteMod.filteredCams.slice()' js/main-ui.js
-grep -Fq 'RouteMod.filteredCams = [];' js/pwa.js
+grep -Fq 'RouteMod.filteredCams = [];' js/main-ui.js
+grep -Fq "Bus.emit('route:request', { action: 'restore'" js/pwa.js
 grep -q 'AppState.activeRoute' js/desktop-dashboard.js
 grep -q 'AppState.activeRoute' js/enhancements.js
 grep -q 'AppState.activeRoute' js/ride-tools.js
-grep -q 'RouteMod.active = true;' js/pwa.js
 grep -q 'RouteMod.active = true;' js/main-ui.js
 grep -q 'RouteMod.active = false;' js/main-ui.js
 ! grep -q 'MapMod' js/pwa.js
