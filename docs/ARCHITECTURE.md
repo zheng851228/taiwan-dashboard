@@ -40,7 +40,7 @@ Browser 主要負責：
 
 - 起點、終點、停靠點與牌照類型互動。
 - 路線結果與路況資訊呈現。
-- MapLibre GL JS 地圖 rendering，使用 MapTiler 底圖。
+- MapLibre GL JS 地圖 rendering，使用 MapTiler 底圖；失敗時改用內嵌的 OpenFreeMap 樣式子集（`js/openfreemap-basemap.js`，授權見 `docs/openfreemap-licenses.md`）。
 - CCTV 預覽與沿線資訊互動。
 - 收藏、最後成功路線與其他 `localStorage` 狀態。
 - PWA 安裝、更新與離線殼層。

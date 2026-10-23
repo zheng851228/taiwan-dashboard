@@ -130,7 +130,7 @@ Static HTML / CSS / JavaScript
           `-- Cloudflare KV route cache
 ```
 
-前端使用 MapLibre GL JS 與 MapTiler 底圖。正式環境設定優先使用自架 Valhalla（VM 經 Cloudflare Tunnel）；遇到連線、認證或服務錯誤時退回公共 Valhalla，正常的「找不到路線」回應不會觸發退回。路線快取與 provider snapshots 使用 Cloudflare KV。詳細邊界見 [系統架構](docs/ARCHITECTURE.md)。
+前端使用 MapLibre GL JS 與 MapTiler 底圖；MapTiler 拒絕金鑰（HTTP 401／403）或 8 秒內沒有任何圖磚載入時，自動改用免金鑰的 OpenFreeMap 備援底圖（繁中路名與地名）。正式環境設定優先使用自架 Valhalla（VM 經 Cloudflare Tunnel）；遇到連線、認證或服務錯誤時退回公共 Valhalla，正常的「找不到路線」回應不會觸發退回。路線快取與 provider snapshots 使用 Cloudflare KV。詳細邊界見 [系統架構](docs/ARCHITECTURE.md)。
 
 ### 為什麼使用 Worker？
 
@@ -399,7 +399,7 @@ Apple Map Links 官方格式只有 `saddr` / `daddr`，因此多停靠點會依�
 - Frontend：GitHub Pages
 - API：Cloudflare Worker
 - Route engine：自架 Valhalla 優先，公共 Valhalla 退回
-- Map：MapLibre GL JS + MapTiler
+- Map：MapLibre GL JS + MapTiler（OpenFreeMap 備援）
 - Cache / snapshots：Cloudflare KV
 - Test：Vitest + Playwright + Live route audit
 
@@ -429,4 +429,4 @@ Apple Map Links 官方格式只有 `saddr` / `daddr`，因此多停靠點會依�
 
 本專案以 [MIT 授權](LICENSE) 釋出。
 
-第三方資料與服務（TDX、CWA、各縣市 CCTV、OpenStreetMap／MapTiler 等）各有其使用條款；MIT 授權不取代這些條款。重用資料、影像或底圖時，請另行確認來源的授權與標示要求。
+第三方資料與服務（TDX、CWA、各縣市 CCTV、OpenStreetMap／MapTiler／OpenFreeMap 等）各有其使用條款；MIT 授權不取代這些條款。重用資料、影像或底圖時，請另行確認來源的授權與標示要求。
