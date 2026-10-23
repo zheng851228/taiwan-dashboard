@@ -14,7 +14,8 @@ async function readState(page) {
       layers: map.getStyle().layers.map(l => ({ id: l.id, type: l.type, visibility: l.layout?.visibility || 'visible' })),
       base: map.getLayoutProperty('base', 'visibility'),
       light: map.getLayer('mobile-base-light') && map.getLayoutProperty('mobile-base-light', 'visibility'),
-      source: map.getStyle().sources.ofm, glyphs: map.getStyle().glyphs, sprite: map.getStyle().sprite
+      source: map.getStyle().sources.ofm, glyphs: map.getStyle().glyphs, sprite: map.getStyle().sprite,
+      armedAt: r.baseArmedAt, fallbackAt: r.baseFallbackAt
     };
   }, isDesktopViewport(page));
 }
@@ -109,15 +110,15 @@ test('total 503 tile failure switches only after the eight-second budget', async
   await page.route('https://api.maptiler.com/**', route => route.fulfill({
     status: 503, body: 'Unavailable', headers: { 'access-control-allow-origin': '*' }
   }));
-  // The budget starts at map load, which can itself take seconds on CI, so checking
-  // "not switched yet" after waitForMapReady races the timer. Instead require that the
-  // switch never happens sooner than 8 s after navigation started; the exact timer is
-  // covered by tests/openfreemap.test.js with fake timers.
-  const started = Date.now();
+  // Measure from when the renderer armed the budget, not from navigation: map load
+  // itself can take seconds on CI. The exact timer is also covered with fake timers
+  // in tests/openfreemap.test.js.
   await page.goto('/');
   await waitForMapReady(page);
   await expect.poll(async () => Boolean((await readState(page)).source), { timeout: 20000 }).toBe(true);
-  expect(Date.now() - started).toBeGreaterThanOrEqual(8000);
+  const { armedAt, fallbackAt } = await readState(page);
+  expect(typeof armedAt).toBe('number');
+  expect(fallbackAt - armedAt).toBeGreaterThanOrEqual(8000);
   expect((await readState(page)).base).toBe('none');
 });
 
