@@ -14,7 +14,10 @@ transcriptions; motorway references retain `ref`. All text uses Noto Sans Regula
 CJK characters retain MapLibre's default local system-font rendering. Glyphs from
 `https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf` are configured only
 when fallback activates. Icon layout properties and uppercase text transforms
-were removed from retained symbols.
+were removed from retained symbols. Dark text colours were brightened for
+legibility on the near-black background (contrast ≥ 5.9:1 instead of 2.4–3.4:1):
+roads and motorway references `rgb(156,156,156)`, places `rgb(176,176,176)`, water
+names `rgb(120,142,176)` with an `rgba(0,0,0,0.8)` halo. Positron colours are unchanged.
 
 Dark text layers: `water_name`, `highway_name_other`, `highway_name_motorway`,
 `place_other`, `place_suburb`, `place_village`, `place_town`.
