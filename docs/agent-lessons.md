@@ -31,3 +31,7 @@ Codex、agy、Claude 在這個 repo 被糾正或審查抓到的錯誤。每條�
 ## 每週自查
 
 每週一由排程 agent 對照本檔與 `AGENTS.md`，檢查過去 7 天合併的 PR 有沒有違反任何一條，結果寫進 Notion「Taiwan Dashboard 進度追蹤」，每條附上證據連結，方便使用者抽查。發現新的錯誤時，提議新增一條。
+
+## E2E 狀態與幾何量測
+
+- **2026-10-24 · Codex · 手機路線面板**：面板已 visible、收合按鈕已更新就立即量 bounding box，iPhone 重複 10 次失敗 8 次。原因是 `sheetRise` 仍在位移，面板下緣暫時超過導覽列；動畫結束後正好對齊。→ 幾何斷言前等待目標元素本身的 Web Animations `finished`，不要用固定 sleep、放寬座標容差，或等待子元素的無限動畫。

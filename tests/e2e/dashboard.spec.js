@@ -727,6 +727,11 @@ test('keeps the completed mobile route map-first with compact controls', async (
   await expect(status).toBeHidden();
   await expect(page.locator('#js-route-status')).toBeHidden();
   await expect(page.locator('#js-route-banner')).toBeHidden();
+  // Visibility and collapsed state precede the sheetRise animation's final position.
+  // Wait for the panel's own animation, without waiting for looping child indicators.
+  await page.locator('#route-conditions-panel').evaluate(panel =>
+    Promise.all(panel.getAnimations().map(animation => animation.finished))
+  );
   const [routeBox, conditionsBox, navBox] = await Promise.all([
     page.locator('#route-collapsed').boundingBox(),
     page.locator('#route-conditions-panel').boundingBox(),
