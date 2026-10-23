@@ -24,7 +24,7 @@
     "@tailwindcss/cli": "4.3.3",
     "maplibre-gl": "6.0.0",
     "tailwindcss": "4.3.3",
-    "vitest": "^3.2.4",
+    "vitest": "^5.0.5",
     "wrangler": "4.113.0"
   },
   "overrides": {
