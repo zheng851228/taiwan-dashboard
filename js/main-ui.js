@@ -905,12 +905,10 @@
       var light = MapMod._themeUrl
         ? MapMod._themeUrl === Config.TILE_LIGHT
         : document.body.classList.contains('light');
-      try {
-        map.setLayoutProperty('base', 'visibility', light ? 'none' : 'visible');
-        if (map.getLayer('mobile-base-light')) {
-          map.setLayoutProperty('mobile-base-light', 'visibility', light ? 'visible' : 'none');
-        }
-      } catch (error) {}
+      if (MapMod.renderer) {
+        MapMod.renderer.setBaseTheme(light);
+        MapMod.renderer._armBaseFallback();
+      }
     },
 
     // Place labels are rendered by the shared renderer on map load.
