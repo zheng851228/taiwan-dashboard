@@ -9,7 +9,7 @@
     provider: 'maptiler',
     tileset: 'satellite-v4',
     keyName: 'taiwan-dashboard-pages',
-    key: 'y3Ul1sIMlCMVMr0nx0HG',
+    key: 'P2JnsKdjMvwQVS1WE8Xa',
     logoUrl: 'https://api.maptiler.com/resources/logo.svg',
     logoLink: 'https://www.maptiler.com/'
   });
