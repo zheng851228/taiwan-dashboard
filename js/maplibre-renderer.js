@@ -289,6 +289,8 @@
         this.baseTimer = null;
         var source = this._visibleBaseSource();
         if (this.baseFallback || !source) return;
+        // Timestamps let tests check the budget without racing map-load time.
+        this.baseArmedAt = Date.now();
         this.baseTimer = window.setTimeout(function() {
           self.baseTimer = null;
           if (self._visibleBaseSource() === source && !self.baseTileReady[source]) self._useBasemapFallback();
@@ -297,6 +299,7 @@
       _useBasemapFallback: function() {
         if (!this.map || this.baseFallback) return;
         this.baseFallback = true;
+        this.baseFallbackAt = Date.now();
         window.OpenFreeMapBasemap.active = true;
         if (this.baseTimer) window.clearTimeout(this.baseTimer);
         this.baseTimer = null;
