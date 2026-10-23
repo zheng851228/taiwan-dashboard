@@ -109,11 +109,15 @@ test('total 503 tile failure switches only after the eight-second budget', async
   await page.route('https://api.maptiler.com/**', route => route.fulfill({
     status: 503, body: 'Unavailable', headers: { 'access-control-allow-origin': '*' }
   }));
+  // The budget starts at map load, which can itself take seconds on CI, so checking
+  // "not switched yet" after waitForMapReady races the timer. Instead require that the
+  // switch never happens sooner than 8 s after navigation started; the exact timer is
+  // covered by tests/openfreemap.test.js with fake timers.
+  const started = Date.now();
   await page.goto('/');
   await waitForMapReady(page);
-  expect((await readState(page)).glyphs).toBeUndefined();
-  expect((await readState(page)).source).toBeUndefined();
-  await expect.poll(async () => Boolean((await readState(page)).source), { timeout: 12000 }).toBe(true);
+  await expect.poll(async () => Boolean((await readState(page)).source), { timeout: 20000 }).toBe(true);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(8000);
   expect((await readState(page)).base).toBe('none');
 });
 
