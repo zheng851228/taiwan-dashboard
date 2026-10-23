@@ -729,7 +729,8 @@ test('keeps the completed mobile route map-first with compact controls', async (
   // Visibility and collapsed state precede the sheetRise animation's final position.
   // Wait for the panel's own animation, without waiting for looping child indicators.
   await page.locator('#route-conditions-panel').evaluate(panel =>
-    Promise.all(panel.getAnimations().map(animation => animation.finished))
+    // A cancelled animation rejects `finished` with AbortError; it has stopped either way.
+    Promise.all(panel.getAnimations().map(animation => animation.finished.catch(() => {})))
   );
   const [routeBox, conditionsBox, navBox] = await Promise.all([
     page.locator('#route-collapsed').boundingBox(),
