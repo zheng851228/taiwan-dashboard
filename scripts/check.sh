@@ -187,9 +187,10 @@ test -s assets/icons/icon-512.png
 test -s assets/icons/maskable-512.png
 ! test -e assets/vendor/leaflet
 test -s assets/vendor/maplibre-gl/maplibre-gl.mjs
-test -s assets/vendor/maplibre-gl/maplibre-gl-shared.mjs
+test -f assets/vendor/maplibre-gl/maplibre-gl-shared.mjs
 test -s assets/vendor/maplibre-gl/maplibre-gl-worker.mjs
 test -s assets/vendor/maplibre-gl/maplibre-gl.css
+node scripts/vendor-maplibre.mjs --check
 test -s assets/vendor/fontawesome/css/all.min.css
 
 npm test
