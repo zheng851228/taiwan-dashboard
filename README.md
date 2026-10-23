@@ -354,7 +354,7 @@ UI 提供以下三種車種：
 
 這些是目前程式的路線規則，不代表對所有道路通行資格的保證。道路規則依主管機關公開資訊維護，包括：
 
-- [公路局大型重型機車開放路段](https://www.thb.gov.tw/News_ExpresswaySection.aspx?PageSize=10&n=462&page=1&sms=13790)
+- [公路局大型重型機車開放路段](https://www.thb.gov.tw/News_ExpresswaySection.aspx?PageSize=200&n=462&sms=13790)
 - [高速公路局管制道路說明](https://www.freeway.gov.tw/Publish.aspx?cnid=183&p=379)
 - [台北市快速／高架道路大型重機開放說明](https://english.dot.gov.taipei/News_Content.aspx?n=3C4F5FC3FD2929A0&s=226C194502FDC5F5&sms=DFFA119D1FD5602C)
 
