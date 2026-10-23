@@ -1,0 +1,30 @@
+# Weekly dependency update PRs. Minor/patch bumps are grouped into one PR per
+# ecosystem; major bumps arrive separately so each can be reviewed on its own.
+# maplibre-gl is also vendored in assets/vendor/maplibre-gl/, so it is kept out
+# of the group: its PR arrives alone and must re-copy the vendor files.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        patterns: ["*"]
+        exclude-patterns: ["maplibre-gl"]
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
