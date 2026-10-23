@@ -181,3 +181,21 @@ it('embeds exactly the requested text layers and prefers Traditional Chinese nam
     }
   }
 });
+
+it('re-arms the budget when the desktop switches from satellite back to the dark base', () => {
+  const window = setup();
+  const renderer = window.MapRenderer.create({});
+  const visibility = { base: 'visible', satellite: 'none' };
+  renderer.satelliteAvailable = true;
+  renderer.map = {
+    getSource: () => ({}), getLayer: () => ({}),
+    getLayoutProperty: id => visibility[id] || 'none',
+    setLayoutProperty: (id, key, value) => { visibility[id] = value; },
+    isSourceLoaded: () => false
+  };
+  renderer.setBasemap('satellite');
+  expect(window.setTimeout).not.toHaveBeenCalled();
+  renderer.setBasemap('dark');
+  expect(window.setTimeout).toHaveBeenCalledTimes(1);
+  expect(window.setTimeout.mock.calls[0][1]).toBe(8000);
+});

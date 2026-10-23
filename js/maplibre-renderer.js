@@ -568,6 +568,8 @@
         if (this.map.getLayer('satellite')) this.map.setLayoutProperty('satellite', 'visibility', next === 'satellite' ? 'visible' : 'none');
         if (this.map.getLayer('base')) this.map.setLayoutProperty('base', 'visibility', next === 'satellite' ? 'none' : 'visible');
         this.satelliteFailed = next === 'dark' && this.satelliteAvailable && Boolean(silent);
+        // Back on the MapTiler base (or leaving it): restart or cancel the fallback budget.
+        this._armBaseFallback();
         this._syncProviderLogo();
         if (this.satelliteFailed && !silent) this.onStatus('basemap-unavailable');
         return next;
