@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
 const installed = new URL('node_modules/maplibre-gl/', root);
@@ -16,6 +16,7 @@ if (!check) mkdirSync(target, { recursive: true });
 files.forEach((file, index) => {
   const destination = new URL(file, target);
   if (check) {
+    if (!existsSync(destination)) throw new Error(`MapLibre vendor missing: ${file}; run npm run vendor:maplibre`);
     if (!readFileSync(destination).equals(contents[index])) throw new Error(`MapLibre vendor mismatch: ${file}; run npm run vendor:maplibre`);
   } else {
     writeFileSync(destination, contents[index]);

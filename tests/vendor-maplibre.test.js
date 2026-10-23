@@ -46,3 +46,12 @@ test('rejects an installed version different from the pinned dependency', () => 
   expect(run(root).status).not.toBe(0);
   expect(run(root).stderr).toContain('version mismatch');
 });
+
+test('check names a missing vendor file and how to restore it', () => {
+  const root = fixture();
+  expect(run(root).status).toBe(0);
+  rmSync(join(root, 'assets/vendor/maplibre-gl/maplibre-gl.css'));
+  const result = run(root, '--check');
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('MapLibre vendor missing: maplibre-gl.css; run npm run vendor:maplibre');
+});
