@@ -1,0 +1,70 @@
+name: Bug 回報 / Bug report
+description: 回報可重現的路線、資料或介面問題。
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: 請勿貼上金鑰、Token、Cookie 或私人位置。安全漏洞請依 [SECURITY.md](https://github.com/zheng851228/taiwan-dashboard/blob/main/SECURITY.md) 私下回報。與路線無關的欄位可填「不適用」。
+  - type: input
+    id: origin
+    attributes:
+      label: 起點 / Origin
+      description: 請使用可公開的地標或路口。
+    validations:
+      required: true
+  - type: input
+    id: destination
+    attributes:
+      label: 終點與停靠點 / Destination and stops
+      description: 有停靠點請依順序列出，使用可公開的地標。
+    validations:
+      required: true
+  - type: dropdown
+    id: vehicle
+    attributes:
+      label: 車種 / Vehicle
+      options:
+        - 白牌
+        - 紅牌
+        - 汽車
+        - 不適用
+    validations:
+      required: true
+  - type: input
+    id: time
+    attributes:
+      label: 發生時間 / Time
+      description: 請包含日期、時間與時區。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟 / Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期結果 / Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際結果 / Actual behavior
+      description: 可附已遮蔽敏感資訊的錯誤訊息。
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截圖 / Screenshots
+      description: 請先遮蔽私人位置、金鑰與其他敏感資訊，再拖曳上傳。
+  - type: input
+    id: device
+    attributes:
+      label: 裝置、作業系統與瀏覽器 / Device, OS and browser
+      description: 請提供版本，並說明是否從主畫面 PWA 開啟。
+    validations:
+      required: true

@@ -1,9 +1,29 @@
+[![CI](https://github.com/zheng851228/taiwan-dashboard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zheng851228/taiwan-dashboard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Live site](https://img.shields.io/badge/Live-GitHub%20Pages-blue)](https://zheng851228.github.io/taiwan-dashboard/)
+
 # Taiwan Dashboard（台灣機車路況指揮）
 
+Taiwan Dashboard is a route intelligence tool for trips in Taiwan.
+It is designed for motorcycle riders planning a trip or checking conditions during a stop, and also offers a car mode.
+Choose a white-plate motorcycle, red-plate motorcycle, or car to plan a route with vehicle-specific routing.
+The dashboard brings together traffic conditions, road incidents, weather, and nearby public CCTV feeds.
+Missing or stale data is shown as unknown rather than assumed to mean clear roads.
+Use it on desktop or mobile at [the live site](https://zheng851228.github.io/taiwan-dashboard/).
+It does not provide real-time turn-by-turn navigation; navigation is handed off to Google Maps or Apple Maps.
+
 > 給台灣機車騎士使用的「出發前／途中停靠」路線情報工具。  
-> 依白牌、黃牌、紅牌檢查路線可行性，並把沿途交通、天氣、道路事件與 CCTV 現場畫面整理在同一個介面。
+> 依白牌、紅牌、汽車建立路線、檢查機車路線可行性，並把沿途交通、天氣、道路事件與 CCTV 現場畫面整理在同一個介面。
 
 **線上使用：** <https://zheng851228.github.io/taiwan-dashboard/>
+
+## 畫面預覽
+
+台北車站 → 台北 101，白牌路線；截圖為拍攝當時的資訊，並非目前即時路況。
+
+| 桌面 | 手機 |
+| --- | --- |
+| ![桌面版：台北車站至台北 101 的白牌路線、CCTV、天氣與沿途時間軸](docs/images/desktop-route.png) | <img src="docs/images/mobile-route.png" width="260" alt="手機版：台北車站至台北 101 的白牌路線與沿途資訊"> |
 
 ## 這個專案在做什麼？
 
@@ -15,7 +35,7 @@ Taiwan Dashboard 想解決一個很實際的問題：
 
 使用者輸入起點、終點與停靠點後，系統會：
 
-1. 依車牌級別建立候選路線。
+1. 依車種與牌照建立候選路線。
 2. 檢查道路類型與機車通行限制。
 3. 將整條路線拆成可閱讀的分析區段。
 4. 對照官方交通、道路事件與氣象資料。
@@ -25,7 +45,8 @@ Taiwan Dashboard 想解決一個很實際的問題：
 ## 適合誰？
 
 - 白牌機車騎士：希望避開快速道路、高架道路或其他不確定路段。
-- 黃牌／紅牌重機騎士：希望依大型重型機車可通行規則規劃路線。
+- 紅牌重機騎士：希望依大型重型機車可通行規則規劃路線。
+- 汽車駕駛：希望規劃汽車路線並查看沿途交通、天氣與 CCTV。
 - 長途騎乘者：出發前想一次確認交通、天氣、施工、事故與 CCTV。
 - 多停靠點行程：希望保留停靠順序並掌握整段路線狀態。
 
@@ -33,8 +54,8 @@ Taiwan Dashboard 想解決一個很實際的問題：
 
 | 功能 | 說明 |
 | --- | --- |
-| 機車路線驗證 | 白牌使用 Valhalla `motor_scooter`；黃牌、紅牌使用 `motorcycle`，並額外檢查道路名稱、road class、way ID、shape index 等資訊。 |
-| 禁行路段處理 | 遇到禁止或無法確認的路段會嘗試避開並重算；仍無法確認安全時不回傳可騎乘 geometry。 |
+| 車種路線與機車驗證 | 白牌使用 Valhalla `motor_scooter`；紅牌使用 `motorcycle`；汽車使用 `auto`。機車另依道路屬性驗證通行限制，汽車不套用機車限制。 |
+| 禁行路段處理 | 機車遇到禁止或無法確認的路段會嘗試避開並重算；仍無法確認安全時不回傳可騎乘 geometry。 |
 | 多停靠點 | 支援起點、終點與多個停靠點，並計算完整行程距離與時間。 |
 | 沿途路況 | 最多整理 12 個分析區段，以綠、黃、紅、灰表示順暢、車多、壅塞、資料不足。 |
 | 道路事件 | 顯示事故、施工、交通管制、天候、災害、活動與其他官方事件。 |
@@ -61,10 +82,10 @@ Taiwan Dashboard **不是騎乘中的持續導航系統**，也不取代道路�
 輸入起點 / 終點 / 停靠點
           |
           v
-選擇白牌 / 黃牌 / 紅牌
+選擇白牌 / 紅牌 / 汽車
           |
           v
-建立並驗證機車可行路線
+建立車種路線並驗證機車通行資格
           |
           v
 取得沿途交通 / 天氣 / 事件 / CCTV
@@ -108,6 +129,8 @@ Static HTML / CSS / JavaScript
           |-- Nominatim geocoding proxy
           `-- Cloudflare KV route cache
 ```
+
+前端使用 MapLibre GL JS 與 MapTiler 底圖。正式環境設定優先使用自架 Valhalla（VM 經 Cloudflare Tunnel）；遇到連線、認證或服務錯誤時退回公共 Valhalla，正常的「找不到路線」回應不會觸發退回。路線快取與 provider snapshots 使用 Cloudflare KV。詳細邊界見 [系統架構](docs/ARCHITECTURE.md)。
 
 ### 為什麼使用 Worker？
 
@@ -202,7 +225,7 @@ GET  /v2/expand?url=...
 
 ### `/v2/routes`
 
-建立並驗證機車路線。若路線仍包含無法安全確認的道路，可回 HTTP `422`，且不提供可被誤用的 geometry。
+依車種建立路線，並驗證機車通行資格。若機車路線仍包含無法安全確認的道路，可回 HTTP `422`，且不提供可被誤用的 geometry。
 
 ### `/v2/routes/{routeId}/conditions`
 
@@ -230,7 +253,7 @@ npm run test:e2e
 
 測試範圍包含：
 
-- 白牌 / 黃牌 / 紅牌道路規則。
+- 白牌 / 紅牌道路規則與汽車模式；另保留舊黃牌 API 相容性測試（UI 不提供黃牌選項）。
 - 國道、快速道路與大型重機例外。
 - 方向性限制。
 - 資料時效。
@@ -256,7 +279,7 @@ Live audit 涵蓋 22 縣市及多種代表性路線，例如北宜、蘇花、�
 
 ## Provider Snapshot 與快取
 
-Staging 可使用預先處理的 provider snapshot，避免每次路線查詢都即時解析大量上游資料。
+Staging 與 production 設定使用預先處理的 provider snapshot，避免每次路線查詢都即時解析大量上游資料。
 
 ```bash
 npm run worker:snapshot:build
@@ -290,7 +313,9 @@ TDX_CLIENT_SECRET="..."
 
 可覆寫的主要上游端點包含：
 
-- `VALHALLA_BASE_URL`
+- `VALHALLA_PRIMARY_URL`（自架優先引擎）
+- `VALHALLA_BASE_URL`（公共退回引擎）
+- `VALHALLA_FALLBACK_URLS`（額外公共引擎，以逗號分隔）
 - `CAMERA_SOURCE_URL`
 - `CWA_OBSERVATION_ENDPOINT`
 - `CWA_FORECAST_ENDPOINT`
@@ -321,7 +346,13 @@ npm run worker:deploy -- --env production --strict --secrets-file worker/.dev.va
 
 ### 機車通行規則
 
-道路規則依主管機關公開資訊維護，包括：
+UI 提供以下三種車種：
+
+- **白牌**：`motor_scooter`；拒絕國道、程式辨識的快速／高架道路及方向性禁行路段，無法確認的封閉式道路也不放行。
+- **紅牌**：`motorcycle`；國道原則拒絕，程式保留國道 3 甲例外；快速／高架道路仍須通過特定禁行路段與方向性限制檢查。
+- **汽車**：`auto`；使用 Valhalla 汽車路由，不套用本專案的機車道路限制驗證。
+
+這些是目前程式的路線規則，不代表對所有道路通行資格的保證。道路規則依主管機關公開資訊維護，包括：
 
 - [公路局大型重型機車開放路段](https://www.thb.gov.tw/News_ExpresswaySection.aspx?PageSize=10&n=462&page=1&sms=13790)
 - [高速公路局管制道路說明](https://www.freeway.gov.tw/Publish.aspx?cnid=183&p=379)
@@ -367,7 +398,8 @@ Apple Map Links 官方格式只有 `saddr` / `daddr`，因此多停靠點會依�
 
 - Frontend：GitHub Pages
 - API：Cloudflare Worker
-- Route engine：Valhalla
+- Route engine：自架 Valhalla 優先，公共 Valhalla 退回
+- Map：MapLibre GL JS + MapTiler
 - Cache / snapshots：Cloudflare KV
 - Test：Vitest + Playwright + Live route audit
 
@@ -383,16 +415,18 @@ Apple Map Links 官方格式只有 `saddr` / `daddr`，因此多停靠點會依�
 - 手機／桌面版 UI 有問題。
 - 某個官方資料來源已變更。
 
-可以透過 GitHub Issue 提供：
+請先閱讀 [貢獻指南](CONTRIBUTING.md)，並使用 [Bug 回報](https://github.com/zheng851228/taiwan-dashboard/issues/new?template=bug_report.yml) 或 [功能提案](https://github.com/zheng851228/taiwan-dashboard/issues/new?template=feature_request.yml) 範本。回報問題時請提供：
 
 1. 起點與終點。
-2. 車牌級別（白牌／黃牌／紅牌）。
+2. 車種（白牌／紅牌／汽車）。
 3. 發生時間。
 4. 預期結果與實際結果。
 5. 可重現的畫面或錯誤訊息。
 
-請不要在 Issue 或 PR 中貼出 API Key、Token、Cookie 或其他敏感資訊。
+請不要在 Issue 或 PR 中貼出 API Key、Token、Cookie 或其他敏感資訊。安全漏洞請依 [安全政策](SECURITY.md) 私下回報。
 
 ## License
 
-目前 repository 尚未提供正式的開源授權條款。若要重用、修改或重新發布本專案程式碼，請先確認授權狀態或聯絡專案維護者。
+本專案以 [MIT 授權](LICENSE) 釋出。
+
+第三方資料與服務（TDX、CWA、各縣市 CCTV、OpenStreetMap／MapTiler 等）各有其使用條款；MIT 授權不取代這些條款。重用資料、影像或底圖時，請另行確認來源的授權與標示要求。
