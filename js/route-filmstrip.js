@@ -157,6 +157,12 @@
     var src = img.getAttribute('src');
     if (!src) return; // 尚未 lazy-load 的圖，滑入可視區時自然會載最新
     var orig = img.getAttribute('data-fs-orig');
+    try {
+      var parsed = new URL(orig || img.getAttribute('data-src') || src);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    } catch (err) {
+      return;
+    }
     if (!orig) {
       orig = stripTParam(img.getAttribute('data-src') || src);
       img.setAttribute('data-fs-orig', orig);
