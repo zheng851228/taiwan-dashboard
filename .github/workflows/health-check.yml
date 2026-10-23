@@ -20,7 +20,8 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Check API and site
+      - uses: actions/checkout@v4
+      - name: Check API, site and map tiles
         shell: bash
         run: |
           set -uo pipefail
@@ -55,6 +56,14 @@ jobs:
           scode=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 --retry 2 --retry-delay 5 "$SITE_URL" || true)
           if [ "$scode" != "200" ]; then
             fails+=("網站回應異常 (HTTP ${scode:-000})")
+          fi
+
+          if tile_output=$(bash scripts/check-map-tiles.sh 2>&1); then
+            printf '%s\n' "$tile_output"
+          else
+            printf '%s\n' "$tile_output"
+            tile_code=$(printf '%s\n' "$tile_output" | sed -nE 's/.*\(HTTP ([0-9]{3})\).*/\1/p' | head -n 1)
+            fails+=("地圖圖磚異常 (HTTP ${tile_code:-000})")
           fi
 
           if [ "${#fails[@]}" -eq 0 ]; then

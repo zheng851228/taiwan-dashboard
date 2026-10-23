@@ -1,7 +1,7 @@
 // Desktop-only public map provider configuration.
 // MapTiler browser keys are visible by design; use a dedicated key restricted
-// to the GitHub Pages origin. Local source-restricted requests may fall back
-// to CARTO. No Worker or private provider token belongs here.
+// to the production GitHub Pages origin. MapTiler rejects localhost requests
+// with HTTP 403. No Worker or private provider token belongs here.
 (function() {
   'use strict';
 
