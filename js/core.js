@@ -481,7 +481,7 @@
   window.parseAppleMapsRoute = function(url) {
     try {
       var parsed = new URL(url);
-      if (parsed.hostname.indexOf('apple.com') === -1) return null;
+      if (parsed.hostname !== 'apple.com' && !parsed.hostname.endsWith('.apple.com')) return null;
       var params = parsed.searchParams;
       var start = (params.get('saddr') || '').trim();
       var end = (params.get('daddr') || '').trim();

@@ -24,6 +24,10 @@ Codex、agy、Claude 在這個 repo 被糾正或審查抓到的錯誤。每條�
 
 - **2026-10-23 · Codex · OpenFreeMap 備援**：僅用 sourceId 將單次底圖錯誤永久升級為 provider 故障，並用主題旗標與 `isSourceLoaded()` 判斷底圖是否可用；新增 e2e 的 `page.route` 也在 iPhone 被控制頁面的 Service Worker 繞過。原因是未區分授權拒絕、個別圖磚失敗與成功載入，而且把測試攔截當成一定生效。→ 只有 HTTP 401／403 立即切換；其餘在 8 秒後依實際可見底圖的成功圖磚證據判斷，不檢查隱藏圖層。provider fixture 測試要停用 Service Worker，SW 行為另由 PWA 測試驗證；初始化失敗先讀 trace 的請求及例外，不能只從 ready 逾時猜原因。
 
+## 安全修正的範圍與相容性
+
+- **2026-10-23 · Codex · CodeQL #4**：修 Apple hostname 比對時，也替 autoFillRoute 新增 Google host 白名單，造成 google.com.tw／google.co.jp 與「說明文字＋網址」無法匯入。原因是把前端參數解析的快速路徑當成網址信任邊界，未保留 Worker 展開與分享文字的既有入口。→ 安全修正先辨識實際的請求／導向邊界；相鄰字串判斷只有解析用途時，不擴大成白名單。更動匯入入口前，先測國家網域與含說明文字的分享輸入。
+
 ## 每週自查
 
 每週一由排程 agent 對照本檔與 `AGENTS.md`，檢查過去 7 天合併的 PR 有沒有違反任何一條，結果寫進 Notion「Taiwan Dashboard 進度追蹤」，每條附上證據連結，方便使用者抽查。發現新的錯誤時，提議新增一條。
