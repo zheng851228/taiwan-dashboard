@@ -83,7 +83,10 @@ jobs:
       # downloads per Playwright version, so only a Playwright bump pays that cost.
       - name: Read Playwright version
         id: playwright
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          # ImageOS (e.g. ubuntu24) keeps .deb caches from crossing Ubuntu releases.
+          echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
 
       # Restore and save separately: a plain actions/cache only saves when the whole job
       # succeeds, so a slow first download that times out would never be cached.
@@ -92,18 +95,22 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-browsers-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
 
       - name: Restore WebKit system packages
         id: apt-cache
         uses: actions/cache/restore@v6
         with:
           path: ~/apt-archives
-          key: playwright-apt-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-apt-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
+          # After a Playwright bump most WebKit packages are unchanged; reuse them.
+          restore-keys: playwright-apt-${{ steps.playwright.outputs.image }}-
 
       - name: Install WebKit system dependencies
         run: |
           mkdir -p ~/apt-archives/partial
+          # apt downloads as the _apt user; let it write the partial directory.
+          sudo chown _apt:root ~/apt-archives/partial
           # Keep downloaded .deb files in the cached directory instead of deleting them.
           sudo rm -f /etc/apt/apt.conf.d/docker-clean
           printf 'Dir::Cache::Archives "%s/apt-archives";\nAPT::Keep-Downloaded-Packages "true";\n' "$HOME" | sudo tee /etc/apt/apt.conf.d/99playwright-cache
