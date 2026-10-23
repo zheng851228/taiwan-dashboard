@@ -836,32 +836,38 @@ test('turns a hanging conditions request into an actionable timeout', async ({ p
   await expect(page.locator('#condition-source-badge')).not.toHaveText('更新失敗');
 });
 
-test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
-  test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
-  // Phone map: a dark basemap layer ('base') and a light one ('mobile-base-light', MapTiler
-  // dataviz-light); the theme decides which of the two is shown.
-  const basemap = () => page.evaluate(() => {
-    const map = window.MapMod && window.MapMod.map;
-    if (!map || !map.getLayer('mobile-base-light')) return null;
-    const tiles = map.getStyle().sources['mobile-base-light'].tiles || [];
-    return {
-      dark: map.getLayoutProperty('base', 'visibility'),
-      light: map.getLayoutProperty('mobile-base-light', 'visibility'),
-      lightTiles: tiles[0] && decodeURIComponent(new URL(tiles[0]).pathname)
-    };
+// This case asserts the healthy provider path. A controlling Service Worker can
+// bypass Playwright's MapTiler fixture after reload and produce real 403s, which
+// now correctly select the OpenFreeMap fallback instead of showing MapTiler.
+test.describe('healthy basemap theme persistence', () => {
+  test.use({ serviceWorkers: 'block' });
+  test('keeps the light theme and map tiles consistent after reload', async ({ page }) => {
+    test.skip((page.viewportSize()?.width || 0) >= 1200, 'Desktop MapLibre uses its own raster style.');
+    // Phone map: a dark basemap layer ('base') and a light one ('mobile-base-light', MapTiler
+    // dataviz-light); the theme decides which of the two is shown.
+    const basemap = () => page.evaluate(() => {
+      const map = window.MapMod && window.MapMod.map;
+      if (!map || !map.getLayer('mobile-base-light')) return null;
+      const tiles = map.getStyle().sources['mobile-base-light'].tiles || [];
+      return {
+        dark: map.getLayoutProperty('base', 'visibility'),
+        light: map.getLayoutProperty('mobile-base-light', 'visibility'),
+        lightTiles: tiles[0] && decodeURIComponent(new URL(tiles[0]).pathname)
+      };
+    });
+    await page.goto(WORKER);
+    await expect.poll(basemap).toMatchObject({ dark: 'visible', light: 'none' });
+    await page.locator('#js-theme').click();
+    await expect(page.locator('body')).toHaveClass(/light/);
+    await expect.poll(basemap).toEqual({
+      dark: 'none',
+      light: 'visible',
+      lightTiles: '/maps/dataviz-light/{z}/{x}/{y}.png'
+    });
+    await page.reload();
+    await expect(page.locator('body')).toHaveClass(/light/);
+    await expect.poll(basemap).toMatchObject({ dark: 'none', light: 'visible' });
   });
-  await page.goto(WORKER);
-  await expect.poll(basemap).toMatchObject({ dark: 'visible', light: 'none' });
-  await page.locator('#js-theme').click();
-  await expect(page.locator('body')).toHaveClass(/light/);
-  await expect.poll(basemap).toEqual({
-    dark: 'none',
-    light: 'visible',
-    lightTiles: '/maps/dataviz-light/{z}/{x}/{y}.png'
-  });
-  await page.reload();
-  await expect(page.locator('body')).toHaveClass(/light/);
-  await expect.poll(basemap).toMatchObject({ dark: 'none', light: 'visible' });
 });
 
 test('shows useful route suggestions from the first character without remote autocomplete', async ({ page }) => {

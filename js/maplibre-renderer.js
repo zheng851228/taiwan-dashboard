@@ -119,6 +119,10 @@
       satelliteAvailable: false,
       satelliteFailed: false,
       satelliteTimer: null,
+      baseTimer: null,
+      baseFallback: false,
+      baseLight: false,
+      baseTileReady: {},
       routeFitApplied: false,
       eventMarkerCount: 0,
       onReady: options.onReady || function() {},
@@ -222,7 +226,10 @@
               self.onCameraState({ preset: 'custom', pitch: self.map.getPitch(), bearing: self.map.getBearing() });
             }
           });
+          self.map.on('sourcedata', function(event) { self._recordBaseTile(event); });
           self.map.on('load', function() {
+            if (window.OpenFreeMapBasemap.active) self._useBasemapFallback();
+            self._armBaseFallback();
             self._addDataLayers();
             self._addPlaceLabels();
             if (self.mode === '3d') self._armTerrainFallback();
@@ -239,6 +246,10 @@
             }
           });
           self.map.on('error', function(event) {
+            if (window.OpenFreeMapBasemap.isBaseError(event)) {
+              self._useBasemapFallback();
+              return;
+            }
             var message = String(event && event.error && event.error.message || '');
             if (self.basemap === 'satellite' && (/maptiler|satellite/i.test(message) || event && event.sourceId === 'satellite')) {
               self.setBasemap('dark', true);
@@ -254,6 +265,85 @@
         }).catch(function(error) {
           options.onFallback(error);
           throw error;
+        });
+      },
+      _recordBaseTile: function(event) {
+        // MapLibre counts errored tiles as source-loaded too. Only a successful
+        // raster tile proves that this provider/theme has supplied a usable base.
+        if (event && (event.sourceId === 'base' || event.sourceId === 'mobile-base-light') &&
+            event.tile && event.tile.state === 'loaded') this.baseTileReady[event.sourceId] = true;
+      },
+      _visibleBaseSource: function() {
+        if (!this.map) return null;
+        var self = this;
+        function visible(id) {
+          return self.map.getLayer(id) && self.map.getLayoutProperty(id, 'visibility') !== 'none';
+        }
+        if (visible('satellite')) return null;
+        if (visible('mobile-base-light')) return 'mobile-base-light';
+        return visible('base') ? 'base' : null;
+      },
+      _armBaseFallback: function() {
+        var self = this;
+        if (this.baseTimer) window.clearTimeout(this.baseTimer);
+        this.baseTimer = null;
+        var source = this._visibleBaseSource();
+        if (this.baseFallback || !source) return;
+        this.baseTimer = window.setTimeout(function() {
+          self.baseTimer = null;
+          if (self._visibleBaseSource() === source && !self.baseTileReady[source]) self._useBasemapFallback();
+        }, 8000);
+      },
+      _useBasemapFallback: function() {
+        if (!this.map || this.baseFallback) return;
+        this.baseFallback = true;
+        window.OpenFreeMapBasemap.active = true;
+        if (this.baseTimer) window.clearTimeout(this.baseTimer);
+        this.baseTimer = null;
+        if (this.satelliteTimer) window.clearTimeout(this.satelliteTimer);
+        this.satelliteTimer = null;
+        this.satelliteAvailable = false;
+        this.basemap = 'dark';
+        // setGlyphs preserves the style and reloads only glyph dependencies (MapLibre 6).
+        // The default localIdeographFontFamily remains enabled for system CJK fonts.
+        this.map.setGlyphs(window.OpenFreeMapBasemap.glyphs);
+        this.map.addSource('ofm', {
+          type: 'vector', url: 'https://tiles.openfreemap.org/planet',
+          attribution: '<a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> © <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
+        });
+        var self = this;
+        var basemapLayers = [];
+        ['dark', 'positron'].forEach(function(theme) {
+          window.OpenFreeMapBasemap.layers[theme].forEach(function(original) {
+            var layer = JSON.parse(JSON.stringify(original));
+            layer.id = 'ofm-' + theme + '-' + layer.id;
+            if (layer.source) layer.source = 'ofm';
+            layer.layout = Object.assign({}, layer.layout, { visibility: 'none' });
+            basemapLayers.push(layer);
+          });
+        });
+        // Stable sort: both themes' geometry below text; all remain below app overlays.
+        basemapLayers.sort(function(a, b) { return Number(a.type === 'symbol') - Number(b.type === 'symbol'); });
+        basemapLayers.forEach(function(layer) { self.map.addLayer(layer, 'base'); });
+        this.setBaseTheme(this.baseLight);
+        this._syncProviderLogo();
+        this.onStatus('basemap-fallback');
+      },
+      setBaseTheme: function(light) {
+        this.baseLight = Boolean(light);
+        if (!this.map) return;
+        var self = this;
+        ['base', 'mobile-base-light'].forEach(function(id) {
+          if (self.map.getLayer(id)) self.map.setLayoutProperty(id, 'visibility',
+            !self.baseFallback && (id === 'mobile-base-light' ? self.baseLight : !self.baseLight) ? 'visible' : 'none');
+        });
+        if (!this.baseFallback) return;
+        if (this.map.getLayer('satellite')) this.map.setLayoutProperty('satellite', 'visibility', 'none');
+        ['dark', 'positron'].forEach(function(theme) {
+          window.OpenFreeMapBasemap.layers[theme].forEach(function(layer) {
+            self.map.setLayoutProperty('ofm-' + theme + '-' + layer.id, 'visibility',
+              theme === (self.baseLight ? 'positron' : 'dark') ? 'visible' : 'none');
+          });
         });
       },
       _syncProviderLogo: function() {
@@ -468,12 +558,18 @@
         return Math.max(56, Math.min(118, Math.round(Math.min(width * 0.12, 118))));
       },
       setBasemap: function(basemap, silent) {
+        if (this.baseFallback) {
+          this.setBaseTheme(this.baseLight);
+          return 'dark';
+        }
         var next = basemap === 'satellite' && this.satelliteAvailable ? 'satellite' : 'dark';
         this.basemap = next;
         if (!this.map) return next;
         if (this.map.getLayer('satellite')) this.map.setLayoutProperty('satellite', 'visibility', next === 'satellite' ? 'visible' : 'none');
         if (this.map.getLayer('base')) this.map.setLayoutProperty('base', 'visibility', next === 'satellite' ? 'none' : 'visible');
         this.satelliteFailed = next === 'dark' && this.satelliteAvailable && Boolean(silent);
+        // Back on the MapTiler base (or leaving it): restart or cancel the fallback budget.
+        this._armBaseFallback();
         this._syncProviderLogo();
         if (this.satelliteFailed && !silent) this.onStatus('basemap-unavailable');
         return next;
@@ -517,6 +613,7 @@
       },
       resize: function() { if (this.map) this.map.resize(); },
       destroy: function() {
+        if (this.baseTimer) window.clearTimeout(this.baseTimer);
         if (this.terrainTimer) window.clearTimeout(this.terrainTimer);
         if (this.satelliteTimer) window.clearTimeout(this.satelliteTimer);
         this.markers.forEach(function(marker) { marker.remove(); });

@@ -20,6 +20,10 @@ Codex、agy、Claude 在這個 repo 被糾正或審查抓到的錯誤。每條�
 
 - **2026-10-16 · Claude · PR #96**：VM 安裝腳本 `deploy/valhalla-vm/install-from-mac.sh` 預設 clone `feat/resilience-monitoring`，PR #91 合併後這個分支被刪掉，腳本就不能用了。原因是腳本在功能分支上邊寫邊測，直接用了當時的分支名稱，合併前也沒檢查有沒有留下這種暫時的參照。→ 會在遠端 clone 或 pull repo 的腳本，分支一律預設 `main`；測試時要用別的分支，就用參數或環境變數（例如 `BRANCH=...`）傳進去。合併前跑 `git grep -n "$(git branch --show-current)"`，確認沒留下目前的分支名稱。
 
+## 地圖備援與瀏覽器驗證
+
+- **2026-10-23 · Codex · OpenFreeMap 備援**：僅用 sourceId 將單次底圖錯誤永久升級為 provider 故障，並用主題旗標與 `isSourceLoaded()` 判斷底圖是否可用；新增 e2e 的 `page.route` 也在 iPhone 被控制頁面的 Service Worker 繞過。原因是未區分授權拒絕、個別圖磚失敗與成功載入，而且把測試攔截當成一定生效。→ 只有 HTTP 401／403 立即切換；其餘在 8 秒後依實際可見底圖的成功圖磚證據判斷，不檢查隱藏圖層。provider fixture 測試要停用 Service Worker，SW 行為另由 PWA 測試驗證；初始化失敗先讀 trace 的請求及例外，不能只從 ready 逾時猜原因。
+
 ## 每週自查
 
 每週一由排程 agent 對照本檔與 `AGENTS.md`，檢查過去 7 天合併的 PR 有沒有違反任何一條，結果寫進 Notion「Taiwan Dashboard 進度追蹤」，每條附上證據連結，方便使用者抽查。發現新的錯誤時，提議新增一條。

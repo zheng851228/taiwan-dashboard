@@ -59,6 +59,7 @@ const APP_FILES_B = [
   'js/ride-tools.js',
   'js/desktop-bootstrap.js',
   'js/map-geo-utils.js',
+  'js/openfreemap-basemap.js',
   'js/maplibre-renderer.js',
   'js/maplibre-camera-layer.js',
   'js/maplibre-route-layer.js',
