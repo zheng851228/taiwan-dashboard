@@ -167,11 +167,9 @@
             };
           }
           var layers = [
-            // Start on the local CARTO base so MapLibre can finish its initial
-            // style load even when a source-restricted MapTiler key rejects
-            // local requests. The requested satellite basemap is enabled
-            // after `load`, where the existing fallback can handle 403s or
-            // timeouts without blocking labels, route data, or controls.
+            // Start on the MapTiler dataviz-dark base. Enable the requested
+            // satellite basemap after `load`; satellite errors or timeouts
+            // switch back to this base, which uses the same restricted key.
             self.satelliteAvailable ? { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } } : null,
             { id: 'base', type: 'raster', source: 'base', layout: { visibility: 'visible' } },
             simpleMode ? null : {
