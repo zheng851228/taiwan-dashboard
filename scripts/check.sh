@@ -49,6 +49,10 @@ node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8')); console
 grep -q 'css/style.css' index.html
 grep -q 'css/tailwind.generated.css' index.html
 ! grep -q 'cdn.tailwindcss.com' index.html
+# Link previews (LINE/Facebook/Telegram) need an absolute og:image that exists in the repo.
+grep -q 'property="og:image" content="https://zheng851228.github.io/taiwan-dashboard/assets/og-image.jpg"' index.html
+grep -q 'name="description"' index.html
+test -s assets/og-image.jpg
 # #76 起前端已打包為 js/dist 產物：index.html 只載入 bundle，不再逐檔引用源碼
 ! grep -q 'src="js/core.js' index.html
 ! grep -q 'src="js/services.js' index.html
