@@ -20,12 +20,12 @@
     "worker:snapshot:upload:staging": "wrangler kv bulk put /tmp/taiwan-dashboard-provider-snapshot.json --config worker/wrangler.jsonc --env staging --binding ROUTE_CACHE --remote"
   },
   "devDependencies": {
-    "@playwright/test": "^1.53.0",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/cli": "4.3.3",
     "maplibre-gl": "6.0.0",
     "tailwindcss": "4.3.3",
     "vitest": "^3.2.4",
-    "wrangler": "4.113.0"
+    "wrangler": "4.151.3"
   },
   "overrides": {
     "sharp": "^0.35.0"
