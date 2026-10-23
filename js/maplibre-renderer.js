@@ -304,21 +304,27 @@
         this.satelliteTimer = null;
         this.satelliteAvailable = false;
         this.basemap = 'dark';
+        // setGlyphs preserves the style and reloads only glyph dependencies (MapLibre 6).
+        // The default localIdeographFontFamily remains enabled for system CJK fonts.
+        this.map.setGlyphs(window.OpenFreeMapBasemap.glyphs);
         this.map.addSource('ofm', {
           type: 'vector', url: 'https://tiles.openfreemap.org/planet',
           attribution: '<a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> © <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
         });
         var self = this;
+        var basemapLayers = [];
         ['dark', 'positron'].forEach(function(theme) {
           window.OpenFreeMapBasemap.layers[theme].forEach(function(original) {
             var layer = JSON.parse(JSON.stringify(original));
             layer.id = 'ofm-' + theme + '-' + layer.id;
             if (layer.source) layer.source = 'ofm';
             layer.layout = Object.assign({}, layer.layout, { visibility: 'none' });
-            // Keep both themes exactly where the old base was, below every app overlay.
-            self.map.addLayer(layer, 'base');
+            basemapLayers.push(layer);
           });
         });
+        // Stable sort: both themes' geometry below text; all remain below app overlays.
+        basemapLayers.sort(function(a, b) { return Number(a.type === 'symbol') - Number(b.type === 'symbol'); });
+        basemapLayers.forEach(function(layer) { self.map.addLayer(layer, 'base'); });
         this.setBaseTheme(this.baseLight);
         this._syncProviderLogo();
         this.onStatus('basemap-fallback');

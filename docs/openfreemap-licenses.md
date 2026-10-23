@@ -6,9 +6,24 @@ Retrieved 2026-10-23 from:
 - https://tiles.openfreemap.org/styles/positron
 
 `js/openfreemap-basemap.js` contains a reduced subset of these styles: background,
-water, land use, buildings, waterways, roads and boundaries. Symbols, fonts,
-sprites, raster sources, railways and aeroways were removed. Runtime code prefixes
-layer IDs and replaces the vector source ID; the retained paint/filter values
+water, land use, buildings, waterways, roads and boundaries, plus text-only water
+names, road names/references and hamlet/neighbourhood/suburb/village/town labels.
+Icons, sprites, raster sources, railways, aeroways and city/state/country symbols
+were removed. Text uses `coalesce(name:zh-Hant, name)` instead of bilingual Latin
+transcriptions; motorway references retain `ref`. All text uses Noto Sans Regular;
+CJK characters retain MapLibre's default local system-font rendering. Glyphs from
+`https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf` are configured only
+when fallback activates. Icon layout properties and uppercase text transforms
+were removed from retained symbols.
+
+Dark text layers: `water_name`, `highway_name_other`, `highway_name_motorway`,
+`place_other`, `place_suburb`, `place_village`, `place_town`.
+Positron equivalents: `water_name_point_label`, `water_name_line_label`,
+`highway-name-path`, `highway-name-minor`, `highway-name-major`,
+`highway-shield-non-us`, `label_other`, `label_village`, `label_town`.
+The Positron ref layer is restricted to motorway class, and `label_other` to
+hamlet/isolated_dwelling/neighbourhood/suburb, matching the selected Dark classes. Runtime code prefixes
+layer IDs and replaces the vector source ID; the geometry paint/filter values
 are unchanged except that the dark woodland sprite pattern was removed. No upstream style JSON is fetched at runtime.
 
 OpenFreeMap styles: https://github.com/hyperknot/openfreemap-styles
