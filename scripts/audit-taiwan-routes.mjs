@@ -336,7 +336,7 @@ function positiveNumber(value, fallback) {
 }
 
 function escapeCell(value) {
-  return String(value).replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
+  return String(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
 }
 
 function sleep(milliseconds) {

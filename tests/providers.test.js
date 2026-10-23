@@ -1015,3 +1015,18 @@ describe('THB 168 open-data parsing', () => {
     expect(congestion.CongestionLevels[0].Levels[0]).toMatchObject({ Level: 1, LowValue: 60 });
   });
 });
+
+
+describe('THB XML entity decoding', () => {
+  it.each([
+    ['&amp;lt;', '&lt;'],
+    ['&lt;b&gt;', '<b>'],
+    ['A &amp;lt; &lt;b&gt; &amp;gt; &quot;x&quot; &#39;y&#39; &apos;z&apos; &amp;amp;', 'A &lt; <b> &gt; "x" \'y\' \'z\' &amp;']
+  ])('decodes each entity once: %s', (encoded, decoded) => {
+    const sections = parseThbSectionsXml(`<Section><SectionID>1</SectionID><RoadName>${encoded}</RoadName></Section>`);
+    expect(sections.Sections[0].RoadName).toBe(decoded);
+    const congestion = parseThbCongestionXml(`<CongestionLevel><CongestionLevelID>${encoded}</CongestionLevelID><MeasureIndex>${encoded}</MeasureIndex><Levels></Levels></CongestionLevel>`);
+    expect(congestion.CongestionLevels[0].CongestionLevelID).toBe(decoded);
+    expect(congestion.CongestionLevels[0].MeasureIndex).toBe(decoded);
+  });
+});

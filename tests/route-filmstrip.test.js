@@ -109,3 +109,51 @@ describe('RouteFilmstrip.geoErrorMessage', () => {
     expect(m.geoErrorMessage(null)).toContain('再試一次');
   });
 });
+
+async function autoRefreshImage(attributes) {
+  const attrs = { ...attributes };
+  const img = {
+    getAttribute(name) { return attrs[name] || null; },
+    setAttribute(name, value) { attrs[name] = value; },
+    set src(value) { attrs.src = value; }
+  };
+  const timers = [];
+  const scroll = { querySelectorAll(selector) { return selector === '.strip-cam img' ? [img] : []; } };
+  const sandbox = {
+    window: {}, URL,
+    document: {
+      readyState: 'complete', hidden: false,
+      getElementById(id) {
+        if (id === 'route-camera-strip') return { classList: { contains() { return true; } } };
+        if (id === 'route-camera-strip-scroll') return scroll;
+        return null;
+      }
+    },
+    navigator: { onLine: true },
+    setInterval(callback) { timers.push(callback); }
+  };
+  vm.runInNewContext(await readFile(path.join(root, 'js/route-filmstrip.js'), 'utf8'), sandbox);
+  timers[1]();
+  return attrs;
+}
+
+describe('RouteFilmstrip automatic image refresh', () => {
+  it.each(['http://camera.test/image.jpg', 'https://camera.test/image.jpg?x=1&t=123'])('refreshes absolute HTTP(S) URL %s', async (url) => {
+    for (const source of ['src', 'data-src', 'data-fs-orig']) {
+      const attrs = await autoRefreshImage({ src: 'https://camera.test/old.jpg', [source]: url });
+      expect(attrs.src).toMatch(/^https?:\/\/camera\.test\/image\.jpg\?(?:x=1&)?t=\d+$/);
+      expect(attrs.src).not.toContain('t=123');
+    }
+  });
+  it.each(['javascript:alert(1)', 'data:image/png;base64,AAAA', 'not a URL', '/relative.jpg', '//camera.test/image.jpg'])('does not update invalid URL %s', async (url) => {
+    for (const source of ['src', 'data-src', 'data-fs-orig']) {
+      const input = { src: 'https://camera.test/old.jpg', [source]: url };
+      const attrs = await autoRefreshImage(input);
+      expect(attrs).toEqual(input);
+    }
+  });
+  it('leaves an image waiting for lazy loading unchanged', async () => {
+    const input = { 'data-src': 'https://camera.test/image.jpg' };
+    expect(await autoRefreshImage(input)).toEqual(input);
+  });
+});
