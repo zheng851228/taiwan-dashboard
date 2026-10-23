@@ -1,4 +1,3 @@
-import http from 'node:http';
 import { expect, test } from './helpers/hermetic-map.js';
 import { startStaticOrigin } from './helpers/static-origin.js';
 import { isDesktopViewport, mapRoot, readEventMarkerPositions, readMapFeatures, waitForMapReady } from './helpers/map-probe.js';
@@ -727,6 +726,12 @@ test('keeps the completed mobile route map-first with compact controls', async (
   await expect(status).toBeHidden();
   await expect(page.locator('#js-route-status')).toBeHidden();
   await expect(page.locator('#js-route-banner')).toBeHidden();
+  // Visibility and collapsed state precede the sheetRise animation's final position.
+  // Wait for the panel's own animation, without waiting for looping child indicators.
+  await page.locator('#route-conditions-panel').evaluate(panel =>
+    // A cancelled animation rejects `finished` with AbortError; it has stopped either way.
+    Promise.all(panel.getAnimations().map(animation => animation.finished.catch(() => {})))
+  );
   const [routeBox, conditionsBox, navBox] = await Promise.all([
     page.locator('#route-collapsed').boundingBox(),
     page.locator('#route-conditions-panel').boundingBox(),
@@ -1386,7 +1391,11 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
   // server its styles and scripts only "worked offline" in browsers whose offline emulation missed
   // the worker's own fetches (older Chromium; Chrome 149 does not - CSS and JS failed to load).
   // (The Worker's CORS list does not include a random port, hence the route is built in step 1.)
-  const site = await startStaticOrigin();
+  const site = await startStaticOrigin({ overrides: {
+    '/v2/weather': JSON.stringify({
+      status: 'ok', updatedAt: new Date().toISOString(), data: { 台北市: { temp: 27 } }
+    })
+  } });
   page.on('close', () => site.stop());
   await page.goto(`${site.origin}/?worker=${workerOrigin}`);
   await page.evaluate((entries) => {
@@ -1396,6 +1405,16 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 15000 }).toBe(true);
   await page.reload();
   await expectAppShell(page);
+
+  // Reuse the throwaway origin for the API probe: CSP allows 'self', and /v2/ is
+  // network-only in the service worker. No extra listener competes with either Worker port.
+  const readWeather = () => page.evaluate(async () => {
+    const response = await fetch('/v2/weather');
+    return { status: response.status, body: await response.json() };
+  });
+  const live = await readWeather();
+  expect(live.status).toBe(200);
+  expect(live.body.data['台北市'].temp).toBe(27);
 
   // Offline for real: the app's origin is gone too, so the shell can only come from the cache.
   await site.stop();
@@ -1414,36 +1433,15 @@ test('keeps the PWA shell offline without serving stale API data', async ({ page
     const map = (isDesktop ? DesktopDashboardMod.getRenderer() : MapMod.renderer).map;
     return ['desktop-route-casing', 'desktop-route-glow', 'desktop-route-core'].map((id) => Boolean(map.getLayer(id)));
   }, isDesktopViewport(page))).toEqual([true, true, true]);
-  // API contract while offline: a refused request is a 503 offline notice, never stale data.
-  // Playwright's offline emulation does not reach requests the service worker itself makes
-  // (the worker's fetch to loopback still succeeded while the context was offline), so the API
-  // going away is modelled directly: a throwaway API on the one extra loopback port the CSP
-  // allows answers once, then is shut down, and the very same URL must now be refused.
-  if (testInfo.project.name === 'desktop-chromium') {
-    await context.setOffline(false);
-    const api = http.createServer((request, response) => {
-      response.writeHead(200, {
-        'content-type': 'application/json',
-        'access-control-allow-origin': '*',
-        'cache-control': 'no-store'
-      });
-      response.end(JSON.stringify({ status: 'ok', updatedAt: new Date().toISOString(), data: { 台北市: { temp: 27 } } }));
-    });
-    await new Promise((resolve) => api.listen(8790, '127.0.0.1', resolve));
-    const readWeather = () => page.evaluate(async () => {
-      const response = await fetch('http://127.0.0.1:8790/v2/weather');
-      return { status: response.status, body: await response.json() };
-    });
-    const live = await readWeather();
-    expect(live.status).toBe(200);
-    expect(live.body.data['台北市'].temp).toBe(27);
-    await new Promise((resolve) => { api.close(resolve); api.closeAllConnections(); });
-    const offline = await readWeather();
-    expect(offline.status).toBe(503);
-    expect(offline.body.status).toBe('error');
-    expect(offline.body.data).toBeNull();
-    expect(offline.body.message).toContain('離線');
-  }
+  // API contract while offline: the same URL that answered above must now return
+  // the service worker's 503, never cached data. Keep browser networking enabled here:
+  // the stopped origin proves real network failure even for the worker's own fetches.
+  await context.setOffline(false);
+  const offline = await readWeather();
+  expect(offline.status).toBe(503);
+  expect(offline.body.status).toBe('error');
+  expect(offline.body.data).toBeNull();
+  expect(offline.body.message).toContain('離線');
 });
 
 test('serves the cached app shell when its own origin stops answering', async ({ page }, testInfo) => {

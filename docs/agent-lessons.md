@@ -31,3 +31,12 @@ Codex、agy、Claude 在這個 repo 被糾正或審查抓到的錯誤。每條�
 ## 每週自查
 
 每週一由排程 agent 對照本檔與 `AGENTS.md`，檢查過去 7 天合併的 PR 有沒有違反任何一條，結果寫進 Notion「Taiwan Dashboard 進度追蹤」，每條附上證據連結，方便使用者抽查。發現新的錯誤時，提議新增一條。
+
+## E2E 狀態與幾何量測
+
+- **2026-10-24 · Codex · 手機路線面板**：面板已 visible、收合按鈕已更新就立即量 bounding box，iPhone 重複 10 次失敗 8 次。原因是 `sheetRise` 仍在位移，面板下緣暫時超過導覽列；動畫結束後正好對齊。→ 幾何斷言前等待目標元素本身的 Web Animations `finished`，不要用固定 sleep、放寬座標容差，或等待子元素的無限動畫。
+
+- **2026-10-24 · Codex · PWA 假 API 撞埠**：離線測試另開固定 8790 假 API，當 Worker 改用 8790 時桌面 10 次全部 `EADDRINUSE`。原因是測試重複占用受 CSP 限制的埠，換到 8787 也可能撞到常駐服務。→ 優先重用現成臨時同源站台的 `/v2/` override（CSP 允許 self，SW 明確走 network-only）；先讀成功回應，再關站台驗證同一 URL 回 503，不依賴 `page.route` 或僅靠瀏覽器離線模擬。
+
+
+- **2026-10-24 · Claude · 本機 dev server 連線被重設**：PWA 測試修好撞埠後，兩個 worker 並行時仍約 1/20 逾時：`#app-style-recovery` 一直蓋住頁面。原因是 `python3 -m http.server` 的 listen backlog 只有 5，並行載入時連線被重設；而 service worker 把 `127.0.0.1` 一律當 API（network only），丟失的 `style.css` 不會重試，樣式救援畫面就留著。→ dev server 改用 `scripts/dev-server.py`（backlog 128、雙堆疊）。e2e 只在並行時失敗，先用 `--workers=1` 對照；看 trace 裡是哪個元素攔截點擊，不要先怪測試。
