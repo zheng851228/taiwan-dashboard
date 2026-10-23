@@ -59,7 +59,7 @@
       showMapDegradedNotice();
       return;
     }
-    loading = loadScript('./js/map-provider-config.js?v=45')
+    loading = loadScript('./js/map-provider-config.js?v=44')
       .then(function() { return loadScript('./js/maplibre-renderer.js?v=44'); })
       .then(function() { return loadScript('./js/maplibre-camera-layer.js?v=44'); })
       .then(function() { return loadScript('./js/maplibre-route-layer.js?v=44'); })
